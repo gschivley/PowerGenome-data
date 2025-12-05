@@ -117,7 +117,7 @@ regional_capacity_reserves:
   CapRes_7:
     ISONE: 0.129
 
-# cap_res_network_derate_default: 0.95
+cap_res_network_derate_default: 0.95
 
 ######################################################################################
 # MODEL OUTPUTS
