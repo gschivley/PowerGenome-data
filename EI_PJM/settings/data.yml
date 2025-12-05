@@ -17,3 +17,4 @@ distributed_capacity_table: distributed_capacity.parquet
 distributed_profile_table: distributed_profiles.parquet
 
 enable_timing: true
+weather_year: 2007

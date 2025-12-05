@@ -71,28 +71,9 @@ tech_groups:
 regional_no_grouping: ~
 
 # Add code to ensure region names here are included above
-alt_num_clusters: ~
-
-
-# Derate the capacity of technologies that will be set as MUST_RUN in GenX by their
-# historical capacity factor.
-derate_techs:
-  - Small Hydroelectric
-  - Biomass
-
-# Default value to limit the years used to calculate capacity factors.
-# PUDL currently has generation data from 2011 through the most recent final release of 923/860.
-capacity_factor_default_year_filter: [2016, 2017, 2018, 2019, 2020, 2021]
-
-
-# LABEL SMALL HYDRO
-small_hydro: true
-small_hydro_mw: 30
-small_hydro_regions:
-  - p1_2
-  - p3
-  - p4
-
+alt_num_clusters:
+  OH1:
+    Natural Gas Fired Combustion Turbine: 2
 
 
 # Factors for calculating hydro energy to power ratio in GenX. The default factors is
@@ -116,10 +97,6 @@ energy_storage_duration:
   Hydroelectric Pumped Storage: 15.5
   Batteries: 2
 
-
-# The year of NREL ATB data to use for matching existing generators (O&M costs)
-atb_existing_year: 2020
-
 resource_attr_modifiers:
   conventional steam coal:
     - attribute: fom_per_mwyr
@@ -134,7 +111,7 @@ resource_attr_modifiers:
 # Generator cost data from NREL ATB
 resource_data_year: 2024
 resource_financial_case: Market
-resource_cap_recovery_years: 20
+resource_cap_recovery_years: 30
 
 # Alternate capital recovery periods for specific technologies, which are used to calculate
 # the annual investment costs. The names are matched using str.contains rather than
@@ -143,18 +120,8 @@ alt_resource_cap_recovery_years:
   Battery: 15
   Nuclear: 40
 
-# Use Class3 onshore wind, Class 3 for fixed offshore wind, and Class 12 for floating offshore wind
-# Format for each list item is <technology>, <tech_detail>, <cost_case>, <size>
-# atb_new_gen:
-#   - [NaturalGas, 1-on-1 Combined Cycle (H-Frame), Moderate, 500]
-#   # - [NaturalGas, Combustion Turbine (F-Frame), Moderate, 100]
-#   - [LandbasedWind, Class3, Moderate, 1]
-#   # - [OffShoreWind, Class12, Moderate, 1]
-#   # - [OffShoreWind, Class3, Moderate, 1]
-#   # - [UtilityPV, Class1, Moderate, 1]
-#   - [Utility-Scale Battery Storage, Lithium Ion, Moderate, 1]
-#   - [Nuclear, Nuclear - Large, Moderate, 1000]
 
+# Format for each list item is <technology>, <tech_detail>, <cost_case>, <size>
 new_resources:
   - [NaturalGas, 2-on-1 Combined Cycle (F-Frame), Moderate, 500]
   # - [NaturalGas, 2-on-1 Combined Cycle (F-Frame) 95% CCS, Moderate, 500]
