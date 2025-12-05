@@ -1,0 +1,213 @@
+# REGIONS
+# Select the regions and any regional aggregations that should be performed.
+# This currenly only works for IPM regions, either as the regions used in GenX or as
+# aggregations.
+
+
+model_regions:
+        - MISC
+        - MI
+        - SERC
+        - IL1 # Begin PJM
+        - KY3 
+        - KY4
+        - OH1
+        - OH2
+        - OH3
+        - OH4
+        - WV1
+        - WV2
+        - VA1
+        - VA2
+        - VA3
+        - VA4
+        - PA1
+        - PA2
+        - PA3
+        - PA4
+        - MD1
+        - MD2
+        - DE1
+        - NJ1
+        - NY1 # Begin NYISO
+        - NY2
+        - ISONE # Begin ISONE
+
+# The list of all aggregations
+region_aggregations:
+  'MISC': ['p46','p74','p75','p76','p77','p78','p79','p71','p72','p73','p45','p69','p70','p81','p82','p83','p105','p106','p107','p108']
+  'MI' : ['p103','p104']
+  'SERC' : ['p88','p92','p93','p97','p98','p95','p96','p94','p89','p90'] # Begin SERC
+  'IL1' : ['p80'] # Begin PJM
+  'KY3': ['p109'] 
+  'KY4': ['p110']   
+  'OH1': ['p111']
+  'OH2': ['p112']
+  'OH3': ['p113']
+  'OH4' : ['p114']
+  'WV1': ['p116']
+  'WV2': ['p117']
+  'VA1': ['p118']
+  'VA2': ['p99']
+  'VA3': ['p100']
+  'VA4' : ['p124']
+  'PA1': ['p115']
+  'PA2': ['p119']
+  'PA3': ['p120']
+  'PA4' : ['p122']
+  'MD1': ['p121']
+  'MD2': ['p123']
+  'DE1': ['p125']
+  'NJ1' : ['p126']
+  'NY1': ['p127'] # Begin NYISO
+  'NY2': ['p128']
+  'ISONE': ['p132','p133','p131','p129','p130','p134'] # Begin ISONE
+
+
+# Dollar year that all outputs will be converted to
+target_usd_year: 2024
+
+# Model year(s) and first planning year(s)
+# Each of these parameters should be a list.
+# - "model_year": The final year in each planning period, used to calculate load
+# profiles, etc
+# - "model_first_planning_year": The first year of each planning period. Capex for
+# new-build generators from ATB are an average of costs from first to last (inclusive).
+model_year: [2030, 2035, 2040, 2045, 2050]
+model_first_planning_year: [2025, 2031, 2036, 2041, 2046]
+
+# HOURS OFFSET FROM UTC
+# All time profile data are stored in UTC. Provide an offset for the model timezone.
+# US East cost is UTC-5, Pacific is UTC-8
+utc_offset: -5
+
+regional_capacity_reserves:
+  CapRes_1: 
+    MISC: 0.177
+    MI: 0.177
+  CapRes_2:
+    SERC: 0.15
+  CapRes_3:
+    IL1: 0.177
+    KY3: 0.177
+    KY4: 0.177
+    OH1: 0.177
+    OH2: 0.177
+    OH3: 0.177
+    OH4: 0.177
+    WV1: 0.177
+    WV2: 0.177
+    VA1: 0.177
+    PA1: 0.177
+    PA2: 0.177
+    MD1: 0.177
+  CapRes_4:
+    VA2: 0.177
+    VA3: 0.177
+    VA4: 0.177
+    MD2: 0.177
+  CapRes_5:
+    PA3: 0.177
+    PA4: 0.177
+    DE1: 0.177
+    NJ1: 0.177
+  CapRes_6:
+    NY1: 0.15
+    NY2: 0.15
+  CapRes_7:
+    ISONE: 0.129
+
+# cap_res_network_derate_default: 0.95
+
+######################################################################################
+# MODEL OUTPUTS
+
+# This is a list of all column names included in the final generators file.
+# Remove any columns that you don't want/need.
+generator_columns: [
+            "region",
+            "Resource",
+            "technology",
+            "cluster",
+            "R_ID",
+            "Zone",
+            "Num_VRE_Bins",
+            "CapRes_1",
+            "CapRes_2",
+            "THERM",
+            "VRE",
+            "MUST_RUN",
+            "STOR",
+            "FLEX",
+            "LDS",
+            "HYDRO",
+            "ESR_1",
+            "ESR_2",
+            "MinCapTag_1",
+            "MinCapTag_2",
+            "Min_Share",
+            "Max_Share",
+            "Existing_Cap_MWh",
+            "Existing_Cap_MW",
+            "Existing_Charge_Cap_MW",
+            "num_units",
+            "unmodified_existing_cap_mw",
+            "New_Build",
+            "Cap_Size",
+            "Min_Cap_MW",
+            "Max_Cap_MW",
+            "Max_Cap_MWh",
+            "Min_Cap_MWh",
+            "Max_Charge_Cap_MW",
+            "Min_Charge_Cap_MW",
+            "Min_Share_percent",
+            "Max_Share_percent",
+            "capex_mw",
+            "Inv_Cost_per_MWyr",
+            "Fixed_OM_Cost_per_MWyr",
+            "capex_mwh",
+            "Inv_Cost_per_MWhyr",
+            "Fixed_OM_Cost_per_MWhyr",
+            "Var_OM_Cost_per_MWh",
+            "Var_OM_Cost_per_MWh_In",
+            "Inv_Cost_Charge_per_MWyr",
+            "Fixed_OM_Cost_Charge_per_MWyr",
+            # "Externality_cost_MWh",
+            "Start_Cost_per_MW",
+            "Start_Fuel_MMBTU_per_MW",
+            "Heat_Rate_MMBTU_per_MWh",
+            "heat_rate_mmbtu_mwh_iqr",
+            "heat_rate_mmbtu_mwh_std",
+            "Fuel",
+            "Min_Power",
+            "Self_Disch",
+            "Eff_Up",
+            "Eff_Down",
+            "Hydro_Energy_to_Power_Ratio",
+            "Ratio_power_to_energy",
+            "Min_Duration",
+            "Max_Duration",
+            "Max_Flexible_Demand_Delay",
+            "Max_Flexible_Demand_Advance",
+            "Flexible_Demand_Energy_Eff",
+            "Ramp_Up_Percentage",
+            "Ramp_Dn_Percentage",
+            "Up_Time",
+            "Down_Time",
+            "NACC_Eff",
+            "NACC_Peak_to_Base",
+            "Reg_Max",
+            "Rsv_Max",
+            "Reg_Cost",
+            "Rsv_Cost",
+            "spur_miles",
+            "spur_capex",
+            "offshore_spur_miles",
+            "offshore_spur_capex",
+            "tx_miles",
+            "tx_capex",
+            "interconnect_annuity",
+            "Min_Retired_Cap_MW",
+            "Min_Retired_Energy_Cap_MW",
+            "Min_Retired_Charge_Cap_MW"
+        ]
