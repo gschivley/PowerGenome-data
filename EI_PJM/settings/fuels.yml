@@ -24,7 +24,7 @@ fuel_data_year: 2025
 # Assign scenario names to base fuels. These names should match the 'scenario'
 # column values in your fuel price table.
 fuel_scenarios:
-  coal: no_111d
+  coal: no_111d # The reference coal scenario has most plants retiring
   naturalgas: reference
   distillate: reference
   uranium: reference
@@ -69,6 +69,10 @@ fuel_emission_factors:
   coal: 0.09552 # EIA value for electric power sector
   distillate: 0.07315
   hydrogen: 0.0
+
+regional_fuel_adjustments:
+  ISONE:
+    coal: 5.0 # Set a non-zero coal price in ISONE (AEO has no coal prices there)
 
 # User-defined fuel prices for fuels not in the fuel price table
 # user_fuel_price:
