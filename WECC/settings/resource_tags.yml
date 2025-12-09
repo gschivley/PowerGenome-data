@@ -127,10 +127,7 @@ model_tag_values:
     Onshore Wind: 1
   New_Build:
     Battery: 1
-    Biomass: -1
     Biopower: 1
-    Conventional Hydroelectric: -1
-    Geothermal: -1
     LandbasedWind: 1
     NaturalGas: 1
     OffshoreWind: 1
