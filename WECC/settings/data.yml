@@ -1,0 +1,19 @@
+RESOURCE_GROUPS: resource_groups
+RESOURCE_GROUP_PROFILES: ../resource_profiles
+
+data_location: ../data
+generation_table: reeds_generators_transformed.csv
+plant_region_table: plant_region_map.csv
+resource_heat_rate_table: technology_heat_rates_nrelatb.csv
+resource_cost_table: technology_costs_atb.parquet
+operational_constraints_table: operational_constraints_reeds.csv
+transmission_constraints_table: transmission_capacity_reeds.csv
+fuel_price_table: fuel_prices.csv
+dollar_year_table: cpi_data.csv
+transmission_cost_table: network_costs_ReEDS.csv
+demand_table: reeds_load_transformed.parquet
+regional_cost_factor_table: regional_cost_multipliers.csv
+distributed_capacity_table: distributed_capacity.parquet
+distributed_profile_table: distributed_profiles.parquet
+
+enable_timing: true
