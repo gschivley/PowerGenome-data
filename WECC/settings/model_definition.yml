@@ -63,7 +63,45 @@ model_first_planning_year: [2025, 2031, 2036, 2041, 2046]
 # US East cost is UTC-5, Pacific is UTC-8
 utc_offset: -5
 
-regional_capacity_reserves: ~
+# Taken from NERC 2024 Long-Term Reliability Assessment (2030 reference margin level values)
+regional_capacity_reserves:
+  CapRes_1:
+    p8: 0.164
+    p9: 0.164
+    p10: 0.164
+    p11: 0.164
+  CapRes_2:
+    p1: 0.145
+    p2: 0.145
+    p3: 0.145
+    p4: 0.145
+    p5: 0.145
+    p6: 0.145
+    p7: 0.145
+    p12: 0.145
+    p13: 0.145
+    p14: 0.145
+    p15: 0.145
+    p16: 0.145
+    p17: 0.145
+    p18: 0.145
+    p19: 0.145
+    p20: 0.145
+    p21: 0.145
+    p22: 0.145
+    p23: 0.145
+    p24: 0.145
+    p25: 0.145
+    p26: 0.145
+    p33: 0.145
+    p34: 0.145
+  CapRes_3:
+    p27: 0.101
+    p28: 0.101
+    p29: 0.101
+    p30: 0.101
+    p31: 0.101
+    p59: 0.101
 
 # cap_res_network_derate_default: 0.95
 

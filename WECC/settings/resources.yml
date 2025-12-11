@@ -74,38 +74,21 @@ regional_no_grouping: ~
 alt_num_clusters: ~
 
 
-# Derate the capacity of technologies that will be set as MUST_RUN in GenX by their
-# historical capacity factor.
-derate_techs:
-  - Small Hydroelectric
-  - Biomass
-
-# Default value to limit the years used to calculate capacity factors.
-# PUDL currently has generation data from 2011 through the most recent final release of 923/860.
-capacity_factor_default_year_filter: [2016, 2017, 2018, 2019, 2020, 2021]
-
-
-# LABEL SMALL HYDRO
-small_hydro: true
-small_hydro_mw: 30
-small_hydro_regions:
-  - p1_2
-  - p3
-  - p4
-
-
-
 # Factors for calculating hydro energy to power ratio in GenX. The default factors is
 # numeric and will be applied to all regions. The regional factors are a dictionary mapping
 # model region names to specific regional factors. The factors are multiplied by average
 # annual inflow rates to determine the rated number of hours of reservoir hydro
 # storage at peak discharge power output.
-hydro_factor: 4
+hydro_factor: 2
 
 regional_hydro_factor:
-  p1_2: 4
+  p1: 4
+  p2: 4
   p3: 4
   p4: 4
+  p5: 4
+  p6: 4
+  p7: 4
 
 # Energy storge duration. Provide a default value for existing resources of a given type.
 # The value of 15.5 for pumped hydro comes from https://sandia.gov/ess-ssl/gesdb/public/statistics.html
@@ -224,7 +207,7 @@ renewables_clusters:
     technology: landbasedwind
     filter:
       - feature: lcoe
-        max: 70
+        max: 60
     bin:
       - feature: lcoe
         weights: capacity_mw
@@ -237,20 +220,49 @@ renewables_clusters:
       - feature: cf
         n_clusters: 5
         method: agg
-  
+  - region: p9
+    technology: landbasedwind
+    filter:
+      - feature: lcoe
+        max: 100
+    bin:
+      - feature: lcoe
+        weights: capacity_mw
+        # q: 3
+        mw_per_bin: 10000
+        # bins: [0, 40, 55, 76]
+      # - feature: cf
+      #   q: 2
+    cluster:
+      - feature: cf
+        n_clusters: 2
+        method: agg
+  - region: p10
+    technology: landbasedwind
+    filter:
+      - feature: lcoe
+        max: 100
+    bin:
+      - feature: lcoe
+        weights: capacity_mw
+        # q: 3
+        mw_per_bin: 10000
+        # bins: [0, 40, 55, 76]
+      # - feature: cf
+      #   q: 2
+    cluster:
+      - feature: cf
+        n_clusters: 2
+        method: agg
   - region: all
     technology: utilitypv
     filter:
       - feature: lcoe
-        max: 40
+        max: 35
     bin:
       - feature: lcoe
         weights: capacity_mw
         mw_per_bin: 50000
-    cluster:
-      - feature: lcoe
-        n_clusters: 5
-        method: agg
 
 
 # The atb_modifers parameter is used here to add a VOM cost to battery technologies. PNNL
