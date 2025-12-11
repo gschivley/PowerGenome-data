@@ -1,0 +1,13 @@
+site_name: PowerGenome Data
+site_description: Documentation for generating PowerGenome data inputs
+site_url: https://gschivley.github.io/PowerGenome-data
+repo_url: https://github.com/gschivley/PowerGenome-data
+nav:
+  - Home: index.md
+theme:
+  name: material
+markdown_extensions:
+  - admonition
+  - tables
+extra:
+  generator: false
