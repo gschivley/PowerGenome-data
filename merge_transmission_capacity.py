@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Merge AC and non-AC transmission capacity files into a single CSV.
+"""Merge AC and non-AC transmission capacity files into a single CSV. Add the average of
+MW_f0 and MW_r0 for AC lines to MW for non-AC lines when they share the same region pair.
 
 Downloads transmission files from ReEDS GitHub repo and merges them.
 
@@ -8,11 +9,9 @@ Output columns: region_from,region_to,firm_ttc_mw,notes
 Usage:
   python merge_transmission_capacity.py
 """
-import csv
-import sys
-from io import StringIO
 from pathlib import Path
 
+import pandas as pd
 import requests
 
 # GitHub URLs for transmission files
@@ -43,62 +42,39 @@ def download_file(url, cache_path):
 
 
 def parse_ac(csv_text):
-    rows = []
-    reader = csv.DictReader(StringIO(csv_text))
-    for r in reader:
-        try:
-            mw_f0 = float(r.get("MW_f0", "") or 0.0)
-        except ValueError:
-            mw_f0 = 0.0
-        try:
-            mw_r0 = float(r.get("MW_r0", "") or 0.0)
-        except ValueError:
-            mw_r0 = 0.0
-        avg = (mw_f0 + mw_r0) / 2.0
-        rows.append(
-            {
-                "region_from": r.get("r", "").strip(),
-                "region_to": r.get("rr", "").strip(),
-                "firm_ttc_mw": f"{avg:.6f}",
-                "notes": "",
-            }
-        )
-    return rows
+    """Parse AC transmission CSV and return DataFrame."""
+    df = pd.read_csv(pd.io.common.StringIO(csv_text))
+
+    # Convert MW columns to float, handling missing/invalid values
+    df["MW_f0"] = pd.to_numeric(df.get("MW_f0", 0), errors="coerce").fillna(0)
+    df["MW_r0"] = pd.to_numeric(df.get("MW_r0", 0), errors="coerce").fillna(0)
+
+    # Calculate average
+    df["firm_ttc_mw"] = (df["MW_f0"] + df["MW_r0"]) / 2.0
+
+    # Rename and select columns
+    df = df.rename(columns={"r": "region_from", "rr": "region_to"})
+    df["notes"] = ""
+
+    return df[["region_from", "region_to", "firm_ttc_mw", "notes"]]
 
 
 def parse_nonac(csv_text):
-    rows = []
-    reader = csv.DictReader(StringIO(csv_text))
-    for r in reader:
-        mw_raw = r.get("MW", "")
-        try:
-            mw = float(mw_raw) if mw_raw not in (None, "") else 0.0
-        except ValueError:
-            mw = 0.0
-        notes = (r.get("Notes") or "").strip()
-        if not notes:
-            # fallback to Project(s) if Notes empty
-            notes = (r.get("Project(s)") or "").strip()
-        rows.append(
-            {
-                "region_from": r.get("r", "").strip(),
-                "region_to": r.get("rr", "").strip(),
-                "firm_ttc_mw": f"{mw:.6f}",
-                "notes": notes,
-            }
-        )
-    return rows
+    """Parse non-AC transmission CSV and return DataFrame."""
+    df = pd.read_csv(pd.io.common.StringIO(csv_text))
 
+    # Convert MW to float
+    df["firm_ttc_mw"] = pd.to_numeric(df.get("MW", 0), errors="coerce").fillna(0)
 
-def write_output(out_path, rows):
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", newline="") as fh:
-        fieldnames = ["region_from", "region_to", "firm_ttc_mw", "notes"]
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in rows:
-            writer.writerow(r)
+    # Get notes, fallback to Project(s) if empty
+    df["notes"] = df.get("Notes", "").fillna("")
+    mask = df["notes"] == ""
+    df.loc[mask, "notes"] = df.get("Project(s)", "").fillna("")
+
+    # Rename and select columns
+    df = df.rename(columns={"r": "region_from", "rr": "region_to"})
+
+    return df[["region_from", "region_to", "firm_ttc_mw", "notes"]]
 
 
 def main():
@@ -117,21 +93,34 @@ def main():
 
     # Parse data
     print("\nParsing AC transmission data...")
-    ac_rows = parse_ac(ac_text)
-    print(f"  Loaded {len(ac_rows):,} AC transmission rows")
+    ac_df = parse_ac(ac_text)
+    print(f"  Loaded {len(ac_df):,} AC transmission rows")
 
     print("Parsing non-AC transmission data...")
-    nonac_rows = parse_nonac(nonac_text)
-    print(f"  Loaded {len(nonac_rows):,} non-AC transmission rows")
+    nonac_df = parse_nonac(nonac_text)
+    print(f"  Loaded {len(nonac_df):,} non-AC transmission rows")
 
-    # Combine
-    combined = ac_rows + nonac_rows
+    # Combine dataframes
+    print("\nAggregating capacities by region pair...")
+    combined_df = pd.concat([ac_df, nonac_df], ignore_index=True)
+
+    # Aggregate by region pair
+    agg_df = combined_df.groupby(["region_from", "region_to"], as_index=False).agg(
+        {
+            "firm_ttc_mw": "sum",
+            "notes": lambda x: "; ".join(filter(None, x.unique())),
+        }
+    )
+
+    print(f"  Aggregated to {len(agg_df):,} unique region pairs")
 
     # Write output
-    out_file = "data/transmission_capacity_merged.csv"
-    write_output(out_file, combined)
+    out_file = "data/transmission_capacity_reeds.csv"
+    out_path = Path(out_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    agg_df.to_csv(out_path, index=False)
 
-    print(f"\n✓ Wrote {len(combined):,} total rows to {out_file}")
+    print(f"\n✓ Wrote {len(agg_df):,} total rows to {out_file}")
     print("=" * 60)
 
 
