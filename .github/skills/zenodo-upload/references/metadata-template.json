@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "title": "Replace with a concise, descriptive title",
+    "upload_type": "dataset",
+    "description": "<p>Replace with an HTML or plain-text description of the uploaded material.</p>",
+    "creators": [
+      {
+        "name": "Lastname, Firstname",
+        "affiliation": "Optional affiliation",
+        "orcid": "0000-0000-0000-0000"
+      }
+    ],
+    "access_right": "open",
+    "license": "cc-by-4.0",
+    "keywords": [
+      "keyword-one",
+      "keyword-two"
+    ],
+    "version": "1.0.0",
+    "language": "eng",
+    "communities": [
+      {
+        "identifier": "community-slug"
+      }
+    ],
+    "grants": [
+      {
+        "id": "grant-id"
+      }
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "10.1234/example",
+        "relation": "isSupplementTo",
+        "scheme": "doi"
+      }
+    ]
+  }
+}
