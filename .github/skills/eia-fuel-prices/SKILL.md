@@ -83,6 +83,8 @@ To add a new override, edit `SCENARIO_OVERRIDES` in the script.
 | Natural Gas | `naturalgas` |
 | Distillate Fuel Oil | `distillate` |
 | Uranium | `uranium` |
+| Nuclear Fuel | `uranium` |
+| Hydrogen | `hydrogen` (AEO2026+; absent in earlier years) |
 
 Unrecognized fuels are logged as INFO and skipped. To add one, edit `FUEL_MAP` in the script.
 

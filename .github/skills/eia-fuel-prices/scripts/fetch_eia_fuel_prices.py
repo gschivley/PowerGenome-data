@@ -22,12 +22,14 @@ SERIES_FILTER = "Energy Prices : Electric Power"
 
 # EIA series name fuel component → PowerGenome fuel name
 # AEO2025 uses "Uranium"; AEO2026 uses "Nuclear Fuel"
+# Hydrogen first appeared in AEO2026; included when present, absent otherwise
 FUEL_MAP = {
     "Steam Coal": "coal",
     "Natural Gas": "naturalgas",
     "Distillate Fuel Oil": "distillate",
     "Nuclear Fuel": "uranium",
     "Uranium": "uranium",
+    "Hydrogen": "hydrogen",
 }
 
 # EIA census division name (as it appears in series names) → hierarchy.csv cendiv value
