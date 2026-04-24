@@ -1,1 +1,2 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
+data/fuel_prices.parquet -filter -diff -merge -text
