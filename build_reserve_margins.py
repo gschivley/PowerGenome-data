@@ -30,6 +30,29 @@ def fetch_prm_annual(url: str) -> pd.DataFrame:
     return df
 
 
+def validate_reserve_margins(df: pd.DataFrame) -> None:
+    """Validate that the reserve margins DataFrame is complete and well-formed.
+
+    Raises:
+        ValueError: If any reserve_margin values are missing or if (ba,
+            planning_year) pairs are not unique.
+    """
+    missing = df["reserve_margin"].isna().sum()
+    if missing > 0:
+        missing_bas = df.loc[df["reserve_margin"].isna(), "ba"].unique().tolist()
+        raise ValueError(
+            f"{missing} missing reserve_margin value(s) found for BAs: {missing_bas}. "
+            "Check that all nercr values in hierarchy.csv are present in prm_annual.csv."
+        )
+
+    duplicates = df.duplicated(subset=["ba", "planning_year"])
+    if duplicates.any():
+        dup_rows = df[duplicates][["ba", "planning_year"]].head(10)
+        raise ValueError(
+            f"{duplicates.sum()} duplicate (ba, planning_year) pair(s) found:\n{dup_rows}"
+        )
+
+
 def build_reserve_margins() -> pd.DataFrame:
     """Build the reserve margins DataFrame mapping BAs to annual PRM values."""
     prm = fetch_prm_annual(PRM_ANNUAL_URL)
@@ -42,6 +65,7 @@ def build_reserve_margins() -> pd.DataFrame:
     merged = merged[["ba", "planning_year", "reserve_margin"]].sort_values(
         ["ba", "planning_year"]
     )
+    validate_reserve_margins(merged)
     return merged
 
 
