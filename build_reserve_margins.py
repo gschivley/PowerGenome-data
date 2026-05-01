@@ -18,11 +18,12 @@ import requests
 PRM_ANNUAL_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv"
 HIERARCHY_PATH = "cache_data/hierarchy.csv"
 OUTPUT_PATH = "data/reserve_margins.csv"
+REQUEST_TIMEOUT_SECONDS = 30
 
 
 def fetch_prm_annual(url: str) -> pd.DataFrame:
     """Fetch the ReEDS planning reserve margin file from GitHub."""
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     df = pd.read_csv(StringIO(response.text))
     df = df.rename(columns={"*nercr": "nercr"})
