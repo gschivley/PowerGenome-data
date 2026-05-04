@@ -11,6 +11,7 @@ This script:
 """
 
 from io import StringIO
+import warnings
 
 import pandas as pd
 import requests
@@ -35,14 +36,38 @@ def validate_reserve_margins(df: pd.DataFrame) -> None:
 
     Raises:
         ValueError: If any reserve_margin values are missing or if (region,
-            planning_year) pairs are not unique.
+            planning_year) pairs are not unique, or if reserve_margin values
+            fall outside the inclusive range [0, 1].
     """
     missing = df["reserve_margin"].isna().sum()
     if missing > 0:
-        missing_regions = df.loc[df["reserve_margin"].isna(), "region"].unique().tolist()
+        missing_regions = (
+            df.loc[df["reserve_margin"].isna(), "region"].unique().tolist()
+        )
         raise ValueError(
             f"{missing} missing reserve_margin value(s) found for regions: {missing_regions}. "
             "Check that all nercr values in hierarchy.csv are present in prm_annual.csv."
+        )
+
+    out_of_range = ~df["reserve_margin"].between(0, 1, inclusive="both")
+    if out_of_range.any():
+        bad_rows = df.loc[
+            out_of_range, ["region", "planning_year", "reserve_margin"]
+        ].head(10)
+        raise ValueError(
+            "reserve_margin values must be between 0 and 1 inclusive. "
+            f"Found {out_of_range.sum()} out-of-range row(s):\n{bad_rows}"
+        )
+
+    high_values = df["reserve_margin"] > 0.5
+    if high_values.any():
+        high_rows = df.loc[
+            high_values, ["region", "planning_year", "reserve_margin"]
+        ].head(10)
+        warnings.warn(
+            "Some reserve_margin values are greater than 0.5. "
+            f"Review the source data if that is unexpected. Sample rows:\n{high_rows}",
+            stacklevel=2,
         )
 
     duplicates = df.duplicated(subset=["region", "planning_year"])
@@ -58,10 +83,10 @@ def build_reserve_margins() -> pd.DataFrame:
     prm = fetch_prm_annual(PRM_ANNUAL_URL)
     hierarchy = pd.read_csv(HIERARCHY_PATH, usecols=["ba", "nercr"])
 
-    merged = hierarchy.merge(
-        prm[["nercr", "t", "nerc"]], on="nercr", how="left"
+    merged = hierarchy.merge(prm[["nercr", "t", "nerc"]], on="nercr", how="left")
+    merged = merged.rename(
+        columns={"ba": "region", "t": "planning_year", "nerc": "reserve_margin"}
     )
-    merged = merged.rename(columns={"ba": "region", "t": "planning_year", "nerc": "reserve_margin"})
     merged = merged[["region", "planning_year", "reserve_margin"]].sort_values(
         ["region", "planning_year"]
     )
