@@ -194,12 +194,17 @@ def update_gdp_ipd_data(
         try:
             new_data = _fetch_from_bea(start_year=start_year, end_year=end_year)
         except Exception as bea_err:
-            if new_data is None:
+            if new_data is None or new_data.empty:
                 raise RuntimeError(
                     "Both FRED and BEA fetches failed. "
                     f"FRED error: {fred_err}. BEA error: {bea_err}."
                 ) from bea_err
             logger.warning("BEA fallback also failed: %s", bea_err)
+
+    if new_data is None or new_data.empty:
+        raise RuntimeError(
+            "No GDP-IPD rows were fetched; refusing to write empty output."
+        )
 
     if existing is not None and not force:
         combined = (

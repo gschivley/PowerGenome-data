@@ -25,6 +25,8 @@ jobs:
           pip install pandas requests
 
       - name: Fetch GDP-IPD data
+        env:
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
         run: python fetch_gdp_ipd_data.py --verbose
 
       - name: Commit and push if data changed
