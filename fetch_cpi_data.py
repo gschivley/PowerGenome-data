@@ -2,7 +2,7 @@
 """Fetch US CPI-U data and create/update data/cpi_data.csv.
 
 Uses FRED (Federal Reserve Bank of St. Louis) as the primary data source,
-with the BLS public API as a fallback. Stores December monthly CPI-U values
+with the BLS public API as a fallback. Stores annual average CPI-U values
 for each year, matching the format expected by PowerGenome.
 
 Usage
