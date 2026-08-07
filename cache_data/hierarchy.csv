@@ -1,4 +1,4 @@
-ba,nercr,transreg,transgrp,cendiv,st,interconnect,st_interconnect,country,usda_region,h2ptcreg,hurdlereg,aggreg,nercr-2026
+ba,nercr,transreg,transgrp,cendiv,st,interconnect,st_interconnect,country,usda_region,h2ptcreg,hurdlereg,aggreg,nercr-latest
 p1,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Puget_Sound_Energy_Inc,p1,WECC_NW
 p2,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Bonneville_Power_Administration,p2,WECC_NW
 p3,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Avista_Corp,p3,WECC_NW
