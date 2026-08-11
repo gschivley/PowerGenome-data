@@ -22,3 +22,7 @@ resource_profiles/*.parquet
 
 # Cached downloads from reproducible ATB builders
 cache_data/atb/
+
+# ReEDS load transform downloads / outputs
+cache/
+reeds_load_transformed.parquet

@@ -101,47 +101,35 @@ def load_reeds_load_data(url, weather_years=None):
     try:
         print("Loading HDF5 data...")
 
-        # First, inspect the HDF5 file structure
+        # Inspect the HDF5 file structure and read per-model-year groups
         import h5py
 
         with h5py.File(h5_path, "r") as f:
-            print(f"  HDF5 keys: {list(f.keys())}")
+            year_groups = sorted(f.keys())
+            print(f"  HDF5 groups (model years): {year_groups}")
 
-            # Read the arrays directly
-            data = f["data"][:]
-            columns = f["columns"][:]
-            index_0 = f["index_0"][:]  # year
-            index_1 = f["index_1"][:]  # datetime
+            frames = []
+            for yr in year_groups:
+                g = f[yr]
+                state_names = [
+                    c.decode("utf-8") if isinstance(c, bytes) else str(c)
+                    for c in g["columns"][:]
+                ]
+                dt = [
+                    d.decode("utf-8") if isinstance(d, bytes) else str(d)
+                    for d in g["datetime"][:]
+                ]
+                print(f"  {yr}: {len(state_names)} states, {len(dt)} timesteps")
 
-            print(f"  Data shape: {data.shape}")
-            print(f"  Columns shape: {columns.shape}")
-            print(f"  Index_0 (year) shape: {index_0.shape}")
-            print(f"  Index_1 (datetime) shape: {index_1.shape}")
+                df_yr = pd.DataFrame({c: g[c][:] for c in state_names})
+                df_yr["year"] = int(yr)
+                df_yr["datetime"] = pd.to_datetime(dt)
+                df_yr["weather_year"] = df_yr["datetime"].dt.year
+                frames.append(df_yr)
 
-        # Decode bytes to strings if needed
-        if columns.dtype.kind in ["S", "O"]:
-            columns = [
-                c.decode("utf-8") if isinstance(c, bytes) else str(c) for c in columns
-            ]
+            df = pd.concat(frames, ignore_index=True)
 
-        # Decode datetime if stored as bytes
-        if index_1.dtype.kind in ["S", "O"]:
-            index_1 = [
-                d.decode("utf-8") if isinstance(d, bytes) else str(d) for d in index_1
-            ]
-
-        print(f"  Years: {sorted(set(index_0))}")
-        print(f"  Regions (columns): {columns}")
-
-        # Convert to DataFrame with proper index
-        df = pd.DataFrame(data, columns=columns)
-        df["year"] = index_0
-
-        # Add datetime - convert to pandas datetime
-        df["datetime"] = pd.to_datetime(index_1)
-
-        # Extract weather year from datetime
-        df["weather_year"] = df["datetime"].dt.year
+        print(f"  Regions (columns): {[c for c in df.columns if c not in ['year', 'datetime', 'weather_year']]}")
 
         # Filter to desired weather years
         print(f"  Filtering to weather years: {weather_years}")
@@ -227,7 +215,7 @@ def main():
     print("=" * 60)
 
     # Configuration
-    url = "https://github.com/NREL/ReEDS-2.0/blob/main/inputs/load/EER_IRAlow_load_hourly.h5"
+    url = "https://zenodo.org/records/18423998/files/demand_EER2023_IRAlow.h5"
     weather_years = [2007, 2008, 2009, 2010, 2011, 2012, 2013]
     scenario = "IRA_low"
     output_file = "reeds_load_transformed.parquet"
