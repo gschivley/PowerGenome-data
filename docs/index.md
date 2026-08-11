@@ -42,3 +42,64 @@ uv run python fetch_gdp_ipd_data.py
 ## Data files not regenerated here
 
 Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above.
+
+## Versioned data-source manifest (`data/manifest.json`)
+
+`data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
+updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
+This is the provenance + change-detection layer that will eventually drive scheduled update workflows
+and automatic Zenodo publishing.
+
+### Read it
+
+```json
+{
+  "manifest_version": 1,
+  "data_version": "2026.08.11",
+  "generated_at_utc": "2026-08-11T19:55:29.157504+00:00",
+  "files": {
+    "fuel_prices.parquet": {
+      "source": "EIA Annual Energy Outlook ...",
+      "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip",
+      "last_updated": "2026-08-11",
+      "version": "2026-08-11",
+      "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "history": []
+    }
+  }
+}
+```
+
+- `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
+- `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
+  advances to the current date whenever any file is added or its contents change, and is otherwise
+  preserved from the previous run. Use this to tag a dataset release (e.g. on Zenodo).
+- Per file — `source` / `source_url` describe the upstream origin (human-maintained), `version` /
+  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash, and
+  `history` holds prior `{version, last_updated, md5}` entries for every change that has been seen.
+
+### Update it
+
+Run `update_data_manifest.py` from the repo root after any data file changes:
+
+```bash
+uv run python update_data_manifest.py            # rescan data/ and bump versions on change
+uv run python update_data_manifest.py --dry-run  # preview changes without writing
+uv run python update_data_manifest.py --date 2026-08-11  # override the change date (reproducible runs)
+```
+
+Behavior:
+
+- Unchanged files keep their existing version, date, and source.
+- Changed or newly added files get `version`/`last_updated` set to the current date, the previous entry
+  moves onto `history`, and `data_version` advances (CalVer `YYYY.MM.DD`).
+- Hand-edited `source` / `source_url` fields are preserved across runs; the script only fills them in
+  for files it has never seen (from a built-in seed map — genuinely unknown origins are marked
+  `"Unknown - document me"` so they can be filled in).
+- Files that are no longer present in `data/` are dropped from the manifest (with a warning).
+
+Run the tests with:
+
+```bash
+python -m unittest discover -s tests
+```
