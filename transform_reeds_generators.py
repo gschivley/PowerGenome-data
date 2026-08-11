@@ -18,8 +18,8 @@ import pandas as pd
 import requests
 
 # URLs
-REEDS_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-COUNTY2ZONE_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv"
+REEDS_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+COUNTY2ZONE_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/zones/z134/county2zone.csv"
 EIA_URL = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
 
 
@@ -128,7 +128,8 @@ def fetch_county_to_zone_mapping():
     df = pd.read_csv(StringIO(response.text))
     print(f"  Loaded {len(df):,} county mappings")
 
-    # Keep only FIPS and ba columns
+    # New ReEDS county2zone.csv uses column name "r" for the BA
+    df = df.rename(columns={"r": "ba"})
     df = df[["FIPS", "ba"]].copy()
 
     # Convert FIPS to string with leading zeros (5 digits)
