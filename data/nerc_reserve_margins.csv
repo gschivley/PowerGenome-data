@@ -1,0 +1,576 @@
+region,planning_year,value
+MISO,2026,0.081
+MISO,2027,0.083
+MISO,2028,0.085
+MISO,2029,0.085
+MISO,2030,0.085
+MISO,2031,0.086
+MISO,2032,0.087
+MISO,2033,0.088
+MISO,2034,0.089
+MISO,2035,0.089
+MISO,2036,0.089
+MISO,2037,0.089
+MISO,2038,0.089
+MISO,2039,0.089
+MISO,2040,0.089
+MISO,2041,0.089
+MISO,2042,0.089
+MISO,2043,0.089
+MISO,2044,0.089
+MISO,2045,0.089
+MISO,2046,0.089
+MISO,2047,0.089
+MISO,2048,0.089
+MISO,2049,0.089
+MISO,2050,0.089
+MRO-Manitoba Hydro,2026,0.12
+MRO-Manitoba Hydro,2027,0.12
+MRO-Manitoba Hydro,2028,0.12
+MRO-Manitoba Hydro,2029,0.12
+MRO-Manitoba Hydro,2030,0.12
+MRO-Manitoba Hydro,2031,0.12
+MRO-Manitoba Hydro,2032,0.12
+MRO-Manitoba Hydro,2033,0.12
+MRO-Manitoba Hydro,2034,0.12
+MRO-Manitoba Hydro,2035,0.12
+MRO-Manitoba Hydro,2036,0.12
+MRO-Manitoba Hydro,2037,0.12
+MRO-Manitoba Hydro,2038,0.12
+MRO-Manitoba Hydro,2039,0.12
+MRO-Manitoba Hydro,2040,0.12
+MRO-Manitoba Hydro,2041,0.12
+MRO-Manitoba Hydro,2042,0.12
+MRO-Manitoba Hydro,2043,0.12
+MRO-Manitoba Hydro,2044,0.12
+MRO-Manitoba Hydro,2045,0.12
+MRO-Manitoba Hydro,2046,0.12
+MRO-Manitoba Hydro,2047,0.12
+MRO-Manitoba Hydro,2048,0.12
+MRO-Manitoba Hydro,2049,0.12
+MRO-Manitoba Hydro,2050,0.12
+MRO-SPP,2026,0.19
+MRO-SPP,2027,0.19
+MRO-SPP,2028,0.19
+MRO-SPP,2029,0.19
+MRO-SPP,2030,0.19
+MRO-SPP,2031,0.19
+MRO-SPP,2032,0.19
+MRO-SPP,2033,0.19
+MRO-SPP,2034,0.19
+MRO-SPP,2035,0.19
+MRO-SPP,2036,0.19
+MRO-SPP,2037,0.19
+MRO-SPP,2038,0.19
+MRO-SPP,2039,0.19
+MRO-SPP,2040,0.19
+MRO-SPP,2041,0.19
+MRO-SPP,2042,0.19
+MRO-SPP,2043,0.19
+MRO-SPP,2044,0.19
+MRO-SPP,2045,0.19
+MRO-SPP,2046,0.19
+MRO-SPP,2047,0.19
+MRO-SPP,2048,0.19
+MRO-SPP,2049,0.19
+MRO-SPP,2050,0.19
+MRO-SaskPower,2026,0.15
+MRO-SaskPower,2027,0.15
+MRO-SaskPower,2028,0.15
+MRO-SaskPower,2029,0.15
+MRO-SaskPower,2030,0.15
+MRO-SaskPower,2031,0.15
+MRO-SaskPower,2032,0.15
+MRO-SaskPower,2033,0.15
+MRO-SaskPower,2034,0.15
+MRO-SaskPower,2035,0.15
+MRO-SaskPower,2036,0.15
+MRO-SaskPower,2037,0.15
+MRO-SaskPower,2038,0.15
+MRO-SaskPower,2039,0.15
+MRO-SaskPower,2040,0.15
+MRO-SaskPower,2041,0.15
+MRO-SaskPower,2042,0.15
+MRO-SaskPower,2043,0.15
+MRO-SaskPower,2044,0.15
+MRO-SaskPower,2045,0.15
+MRO-SaskPower,2046,0.15
+MRO-SaskPower,2047,0.15
+MRO-SaskPower,2048,0.15
+MRO-SaskPower,2049,0.15
+MRO-SaskPower,2050,0.15
+NPCC-Maritimes,2026,0.2
+NPCC-Maritimes,2027,0.2
+NPCC-Maritimes,2028,0.2
+NPCC-Maritimes,2029,0.2
+NPCC-Maritimes,2030,0.2
+NPCC-Maritimes,2031,0.2
+NPCC-Maritimes,2032,0.2
+NPCC-Maritimes,2033,0.2
+NPCC-Maritimes,2034,0.2
+NPCC-Maritimes,2035,0.2
+NPCC-Maritimes,2036,0.2
+NPCC-Maritimes,2037,0.2
+NPCC-Maritimes,2038,0.2
+NPCC-Maritimes,2039,0.2
+NPCC-Maritimes,2040,0.2
+NPCC-Maritimes,2041,0.2
+NPCC-Maritimes,2042,0.2
+NPCC-Maritimes,2043,0.2
+NPCC-Maritimes,2044,0.2
+NPCC-Maritimes,2045,0.2
+NPCC-Maritimes,2046,0.2
+NPCC-Maritimes,2047,0.2
+NPCC-Maritimes,2048,0.2
+NPCC-Maritimes,2049,0.2
+NPCC-Maritimes,2050,0.2
+NPCC-New England,2026,0.134
+NPCC-New England,2027,0.13
+NPCC-New England,2028,0.13
+NPCC-New England,2029,0.13
+NPCC-New England,2030,0.13
+NPCC-New England,2031,0.13
+NPCC-New England,2032,0.13
+NPCC-New England,2033,0.13
+NPCC-New England,2034,0.13
+NPCC-New England,2035,0.13
+NPCC-New England,2036,0.13
+NPCC-New England,2037,0.13
+NPCC-New England,2038,0.13
+NPCC-New England,2039,0.13
+NPCC-New England,2040,0.13
+NPCC-New England,2041,0.13
+NPCC-New England,2042,0.13
+NPCC-New England,2043,0.13
+NPCC-New England,2044,0.13
+NPCC-New England,2045,0.13
+NPCC-New England,2046,0.13
+NPCC-New England,2047,0.13
+NPCC-New England,2048,0.13
+NPCC-New England,2049,0.13
+NPCC-New England,2050,0.13
+NPCC-New York,2026,0.15
+NPCC-New York,2027,0.15
+NPCC-New York,2028,0.15
+NPCC-New York,2029,0.15
+NPCC-New York,2030,0.15
+NPCC-New York,2031,0.15
+NPCC-New York,2032,0.15
+NPCC-New York,2033,0.15
+NPCC-New York,2034,0.15
+NPCC-New York,2035,0.15
+NPCC-New York,2036,0.15
+NPCC-New York,2037,0.15
+NPCC-New York,2038,0.15
+NPCC-New York,2039,0.15
+NPCC-New York,2040,0.15
+NPCC-New York,2041,0.15
+NPCC-New York,2042,0.15
+NPCC-New York,2043,0.15
+NPCC-New York,2044,0.15
+NPCC-New York,2045,0.15
+NPCC-New York,2046,0.15
+NPCC-New York,2047,0.15
+NPCC-New York,2048,0.15
+NPCC-New York,2049,0.15
+NPCC-New York,2050,0.15
+NPCC-Ontario,2026,0.161
+NPCC-Ontario,2027,0.19
+NPCC-Ontario,2028,0.226
+NPCC-Ontario,2029,0.158
+NPCC-Ontario,2030,0.195
+NPCC-Ontario,2031,0.139
+NPCC-Ontario,2032,0.147
+NPCC-Ontario,2033,0.096
+NPCC-Ontario,2034,0.143
+NPCC-Ontario,2035,0.132
+NPCC-Ontario,2036,0.132
+NPCC-Ontario,2037,0.132
+NPCC-Ontario,2038,0.132
+NPCC-Ontario,2039,0.132
+NPCC-Ontario,2040,0.132
+NPCC-Ontario,2041,0.132
+NPCC-Ontario,2042,0.132
+NPCC-Ontario,2043,0.132
+NPCC-Ontario,2044,0.132
+NPCC-Ontario,2045,0.132
+NPCC-Ontario,2046,0.132
+NPCC-Ontario,2047,0.132
+NPCC-Ontario,2048,0.132
+NPCC-Ontario,2049,0.132
+NPCC-Ontario,2050,0.132
+NPCC-Québec,2026,0.119
+NPCC-Québec,2027,0.122
+NPCC-Québec,2028,0.122
+NPCC-Québec,2029,0.122
+NPCC-Québec,2030,0.122
+NPCC-Québec,2031,0.122
+NPCC-Québec,2032,0.122
+NPCC-Québec,2033,0.122
+NPCC-Québec,2034,0.122
+NPCC-Québec,2035,0.122
+NPCC-Québec,2036,0.122
+NPCC-Québec,2037,0.122
+NPCC-Québec,2038,0.122
+NPCC-Québec,2039,0.122
+NPCC-Québec,2040,0.122
+NPCC-Québec,2041,0.122
+NPCC-Québec,2042,0.122
+NPCC-Québec,2043,0.122
+NPCC-Québec,2044,0.122
+NPCC-Québec,2045,0.122
+NPCC-Québec,2046,0.122
+NPCC-Québec,2047,0.122
+NPCC-Québec,2048,0.122
+NPCC-Québec,2049,0.122
+NPCC-Québec,2050,0.122
+PJM,2026,0.186
+PJM,2027,0.201
+PJM,2028,0.219
+PJM,2029,0.239
+PJM,2030,0.263
+PJM,2031,0.289
+PJM,2032,0.308
+PJM,2033,0.33
+PJM,2034,0.351
+PJM,2035,0.351
+PJM,2036,0.351
+PJM,2037,0.351
+PJM,2038,0.351
+PJM,2039,0.351
+PJM,2040,0.351
+PJM,2041,0.351
+PJM,2042,0.351
+PJM,2043,0.351
+PJM,2044,0.351
+PJM,2045,0.351
+PJM,2046,0.351
+PJM,2047,0.351
+PJM,2048,0.351
+PJM,2049,0.351
+PJM,2050,0.351
+SERC-Central,2026,0.15
+SERC-Central,2027,0.15
+SERC-Central,2028,0.15
+SERC-Central,2029,0.15
+SERC-Central,2030,0.15
+SERC-Central,2031,0.15
+SERC-Central,2032,0.15
+SERC-Central,2033,0.15
+SERC-Central,2034,0.15
+SERC-Central,2035,0.15
+SERC-Central,2036,0.15
+SERC-Central,2037,0.15
+SERC-Central,2038,0.15
+SERC-Central,2039,0.15
+SERC-Central,2040,0.15
+SERC-Central,2041,0.15
+SERC-Central,2042,0.15
+SERC-Central,2043,0.15
+SERC-Central,2044,0.15
+SERC-Central,2045,0.15
+SERC-Central,2046,0.15
+SERC-Central,2047,0.15
+SERC-Central,2048,0.15
+SERC-Central,2049,0.15
+SERC-Central,2050,0.15
+SERC-East,2026,0.15
+SERC-East,2027,0.15
+SERC-East,2028,0.15
+SERC-East,2029,0.15
+SERC-East,2030,0.15
+SERC-East,2031,0.15
+SERC-East,2032,0.15
+SERC-East,2033,0.15
+SERC-East,2034,0.15
+SERC-East,2035,0.15
+SERC-East,2036,0.15
+SERC-East,2037,0.15
+SERC-East,2038,0.15
+SERC-East,2039,0.15
+SERC-East,2040,0.15
+SERC-East,2041,0.15
+SERC-East,2042,0.15
+SERC-East,2043,0.15
+SERC-East,2044,0.15
+SERC-East,2045,0.15
+SERC-East,2046,0.15
+SERC-East,2047,0.15
+SERC-East,2048,0.15
+SERC-East,2049,0.15
+SERC-East,2050,0.15
+SERC-Florida Peninsula,2026,0.15
+SERC-Florida Peninsula,2027,0.15
+SERC-Florida Peninsula,2028,0.15
+SERC-Florida Peninsula,2029,0.15
+SERC-Florida Peninsula,2030,0.15
+SERC-Florida Peninsula,2031,0.15
+SERC-Florida Peninsula,2032,0.15
+SERC-Florida Peninsula,2033,0.15
+SERC-Florida Peninsula,2034,0.15
+SERC-Florida Peninsula,2035,0.15
+SERC-Florida Peninsula,2036,0.15
+SERC-Florida Peninsula,2037,0.15
+SERC-Florida Peninsula,2038,0.15
+SERC-Florida Peninsula,2039,0.15
+SERC-Florida Peninsula,2040,0.15
+SERC-Florida Peninsula,2041,0.15
+SERC-Florida Peninsula,2042,0.15
+SERC-Florida Peninsula,2043,0.15
+SERC-Florida Peninsula,2044,0.15
+SERC-Florida Peninsula,2045,0.15
+SERC-Florida Peninsula,2046,0.15
+SERC-Florida Peninsula,2047,0.15
+SERC-Florida Peninsula,2048,0.15
+SERC-Florida Peninsula,2049,0.15
+SERC-Florida Peninsula,2050,0.15
+SERC-Southeast,2026,0.15
+SERC-Southeast,2027,0.15
+SERC-Southeast,2028,0.15
+SERC-Southeast,2029,0.15
+SERC-Southeast,2030,0.15
+SERC-Southeast,2031,0.15
+SERC-Southeast,2032,0.15
+SERC-Southeast,2033,0.15
+SERC-Southeast,2034,0.15
+SERC-Southeast,2035,0.15
+SERC-Southeast,2036,0.15
+SERC-Southeast,2037,0.15
+SERC-Southeast,2038,0.15
+SERC-Southeast,2039,0.15
+SERC-Southeast,2040,0.15
+SERC-Southeast,2041,0.15
+SERC-Southeast,2042,0.15
+SERC-Southeast,2043,0.15
+SERC-Southeast,2044,0.15
+SERC-Southeast,2045,0.15
+SERC-Southeast,2046,0.15
+SERC-Southeast,2047,0.15
+SERC-Southeast,2048,0.15
+SERC-Southeast,2049,0.15
+SERC-Southeast,2050,0.15
+Texas RE-ERCOT,2026,0.138
+Texas RE-ERCOT,2027,0.138
+Texas RE-ERCOT,2028,0.138
+Texas RE-ERCOT,2029,0.138
+Texas RE-ERCOT,2030,0.138
+Texas RE-ERCOT,2031,0.138
+Texas RE-ERCOT,2032,0.138
+Texas RE-ERCOT,2033,0.138
+Texas RE-ERCOT,2034,0.138
+Texas RE-ERCOT,2035,0.138
+Texas RE-ERCOT,2036,0.138
+Texas RE-ERCOT,2037,0.138
+Texas RE-ERCOT,2038,0.138
+Texas RE-ERCOT,2039,0.138
+Texas RE-ERCOT,2040,0.138
+Texas RE-ERCOT,2041,0.138
+Texas RE-ERCOT,2042,0.138
+Texas RE-ERCOT,2043,0.138
+Texas RE-ERCOT,2044,0.138
+Texas RE-ERCOT,2045,0.138
+Texas RE-ERCOT,2046,0.138
+Texas RE-ERCOT,2047,0.138
+Texas RE-ERCOT,2048,0.138
+Texas RE-ERCOT,2049,0.138
+Texas RE-ERCOT,2050,0.138
+WECC-Alberta,2026,0.118
+WECC-Alberta,2027,0.176
+WECC-Alberta,2028,0.143
+WECC-Alberta,2029,0.156
+WECC-Alberta,2030,0.116
+WECC-Alberta,2031,0.152
+WECC-Alberta,2032,0.122
+WECC-Alberta,2033,0.143
+WECC-Alberta,2034,0.139
+WECC-Alberta,2035,0.135
+WECC-Alberta,2036,0.135
+WECC-Alberta,2037,0.135
+WECC-Alberta,2038,0.135
+WECC-Alberta,2039,0.135
+WECC-Alberta,2040,0.135
+WECC-Alberta,2041,0.135
+WECC-Alberta,2042,0.135
+WECC-Alberta,2043,0.135
+WECC-Alberta,2044,0.135
+WECC-Alberta,2045,0.135
+WECC-Alberta,2046,0.135
+WECC-Alberta,2047,0.135
+WECC-Alberta,2048,0.135
+WECC-Alberta,2049,0.135
+WECC-Alberta,2050,0.135
+WECC-Basin,2026,0.135
+WECC-Basin,2027,0.14
+WECC-Basin,2028,0.136
+WECC-Basin,2029,0.124
+WECC-Basin,2030,0.123
+WECC-Basin,2031,0.121
+WECC-Basin,2032,0.121
+WECC-Basin,2033,0.125
+WECC-Basin,2034,0.118
+WECC-Basin,2035,0.118
+WECC-Basin,2036,0.118
+WECC-Basin,2037,0.118
+WECC-Basin,2038,0.118
+WECC-Basin,2039,0.118
+WECC-Basin,2040,0.118
+WECC-Basin,2041,0.118
+WECC-Basin,2042,0.118
+WECC-Basin,2043,0.118
+WECC-Basin,2044,0.118
+WECC-Basin,2045,0.118
+WECC-Basin,2046,0.118
+WECC-Basin,2047,0.118
+WECC-Basin,2048,0.118
+WECC-Basin,2049,0.118
+WECC-Basin,2050,0.118
+WECC-British Columbia,2026,0.117
+WECC-British Columbia,2027,0.121
+WECC-British Columbia,2028,0.121
+WECC-British Columbia,2029,0.116
+WECC-British Columbia,2030,0.116
+WECC-British Columbia,2031,0.116
+WECC-British Columbia,2032,0.115
+WECC-British Columbia,2033,0.119
+WECC-British Columbia,2034,0.115
+WECC-British Columbia,2035,0.114
+WECC-British Columbia,2036,0.114
+WECC-British Columbia,2037,0.114
+WECC-British Columbia,2038,0.114
+WECC-British Columbia,2039,0.114
+WECC-British Columbia,2040,0.114
+WECC-British Columbia,2041,0.114
+WECC-British Columbia,2042,0.114
+WECC-British Columbia,2043,0.114
+WECC-British Columbia,2044,0.114
+WECC-British Columbia,2045,0.114
+WECC-British Columbia,2046,0.114
+WECC-British Columbia,2047,0.114
+WECC-British Columbia,2048,0.114
+WECC-British Columbia,2049,0.114
+WECC-British Columbia,2050,0.114
+WECC-California,2026,0.203
+WECC-California,2027,0.192
+WECC-California,2028,0.193
+WECC-California,2029,0.197
+WECC-California,2030,0.193
+WECC-California,2031,0.191
+WECC-California,2032,0.189
+WECC-California,2033,0.178
+WECC-California,2034,0.183
+WECC-California,2035,0.18
+WECC-California,2036,0.18
+WECC-California,2037,0.18
+WECC-California,2038,0.18
+WECC-California,2039,0.18
+WECC-California,2040,0.18
+WECC-California,2041,0.18
+WECC-California,2042,0.18
+WECC-California,2043,0.18
+WECC-California,2044,0.18
+WECC-California,2045,0.18
+WECC-California,2046,0.18
+WECC-California,2047,0.18
+WECC-California,2048,0.18
+WECC-California,2049,0.18
+WECC-California,2050,0.18
+WECC-Mexico,2026,0.078
+WECC-Mexico,2027,0.08
+WECC-Mexico,2028,0.091
+WECC-Mexico,2029,0.072
+WECC-Mexico,2030,0.07
+WECC-Mexico,2031,0.068
+WECC-Mexico,2032,0.067
+WECC-Mexico,2033,0.074
+WECC-Mexico,2034,0.064
+WECC-Mexico,2035,0.063
+WECC-Mexico,2036,0.063
+WECC-Mexico,2037,0.063
+WECC-Mexico,2038,0.063
+WECC-Mexico,2039,0.063
+WECC-Mexico,2040,0.063
+WECC-Mexico,2041,0.063
+WECC-Mexico,2042,0.063
+WECC-Mexico,2043,0.063
+WECC-Mexico,2044,0.063
+WECC-Mexico,2045,0.063
+WECC-Mexico,2046,0.063
+WECC-Mexico,2047,0.063
+WECC-Mexico,2048,0.063
+WECC-Mexico,2049,0.063
+WECC-Mexico,2050,0.063
+WECC-Northwest,2026,0.178
+WECC-Northwest,2027,0.174
+WECC-Northwest,2028,0.161
+WECC-Northwest,2029,0.158
+WECC-Northwest,2030,0.155
+WECC-Northwest,2031,0.153
+WECC-Northwest,2032,0.159
+WECC-Northwest,2033,0.15
+WECC-Northwest,2034,0.149
+WECC-Northwest,2035,0.148
+WECC-Northwest,2036,0.148
+WECC-Northwest,2037,0.148
+WECC-Northwest,2038,0.148
+WECC-Northwest,2039,0.148
+WECC-Northwest,2040,0.148
+WECC-Northwest,2041,0.148
+WECC-Northwest,2042,0.148
+WECC-Northwest,2043,0.148
+WECC-Northwest,2044,0.148
+WECC-Northwest,2045,0.148
+WECC-Northwest,2046,0.148
+WECC-Northwest,2047,0.148
+WECC-Northwest,2048,0.148
+WECC-Northwest,2049,0.148
+WECC-Northwest,2050,0.148
+WECC-Rocky Mountain,2026,0.178
+WECC-Rocky Mountain,2027,0.17
+WECC-Rocky Mountain,2028,0.162
+WECC-Rocky Mountain,2029,0.161
+WECC-Rocky Mountain,2030,0.157
+WECC-Rocky Mountain,2031,0.152
+WECC-Rocky Mountain,2032,0.135
+WECC-Rocky Mountain,2033,0.119
+WECC-Rocky Mountain,2034,0.141
+WECC-Rocky Mountain,2035,0.139
+WECC-Rocky Mountain,2036,0.139
+WECC-Rocky Mountain,2037,0.139
+WECC-Rocky Mountain,2038,0.139
+WECC-Rocky Mountain,2039,0.139
+WECC-Rocky Mountain,2040,0.139
+WECC-Rocky Mountain,2041,0.139
+WECC-Rocky Mountain,2042,0.139
+WECC-Rocky Mountain,2043,0.139
+WECC-Rocky Mountain,2044,0.139
+WECC-Rocky Mountain,2045,0.139
+WECC-Rocky Mountain,2046,0.139
+WECC-Rocky Mountain,2047,0.139
+WECC-Rocky Mountain,2048,0.139
+WECC-Rocky Mountain,2049,0.139
+WECC-Rocky Mountain,2050,0.139
+WECC-Southwest,2026,0.133
+WECC-Southwest,2027,0.137
+WECC-Southwest,2028,0.136
+WECC-Southwest,2029,0.126
+WECC-Southwest,2030,0.122
+WECC-Southwest,2031,0.12
+WECC-Southwest,2032,0.117
+WECC-Southwest,2033,0.123
+WECC-Southwest,2034,0.113
+WECC-Southwest,2035,0.111
+WECC-Southwest,2036,0.111
+WECC-Southwest,2037,0.111
+WECC-Southwest,2038,0.111
+WECC-Southwest,2039,0.111
+WECC-Southwest,2040,0.111
+WECC-Southwest,2041,0.111
+WECC-Southwest,2042,0.111
+WECC-Southwest,2043,0.111
+WECC-Southwest,2044,0.111
+WECC-Southwest,2045,0.111
+WECC-Southwest,2046,0.111
+WECC-Southwest,2047,0.111
+WECC-Southwest,2048,0.111
+WECC-Southwest,2049,0.111
+WECC-Southwest,2050,0.111
