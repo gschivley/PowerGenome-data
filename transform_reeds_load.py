@@ -1,14 +1,40 @@
 """
 Transform ReEDS hourly load data to PowerGenome format.
 
-Reads hourly load data from ReEDS HDF5 file and transforms to tidy format
-matching the PowerGenome test data structure.
+Reads hourly load data from the ReEDS demand HDF5 (on Zenodo), distributes the
+state-level demand to ReEDS balancing areas using ReEDS county load profile
+factors, and transforms to tidy format matching the PowerGenome data structure.
 """
 
 import os
+from io import StringIO
 
 import pandas as pd
 import requests
+
+# URLs for ReEDS demand data and county-level mapping files (ReEDS-Model/ReEDS)
+DEMAND_H5_URL = "https://zenodo.org/records/18423998/files/demand_EER2023_IRAlow.h5"
+COUNTY_STATE_LPF_URL = (
+    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
+    "inputs/disaggregation/county_state_lpf.csv"
+)
+COUNTY2ZONE_URL = (
+    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
+    "inputs/zones/z134/county2zone.csv"
+)
+
+# US state FIPS code -> abbreviation (used to join county FIPS to state demand)
+FIPS_TO_ABBREV = {
+    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO",
+    "09": "CT", "10": "DE", "11": "DC", "12": "FL", "13": "GA", "15": "HI",
+    "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY",
+    "22": "LA", "23": "ME", "24": "MD", "25": "MA", "26": "MI", "27": "MN",
+    "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
+    "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
+    "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
+    "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA",
+    "54": "WV", "55": "WI", "56": "WY",
+}
 
 
 def download_h5_file(url, cache_dir="cache"):
@@ -81,6 +107,101 @@ def download_h5_file(url, cache_dir="cache"):
     return cache_path
 
 
+def load_county_to_ba_mapping(
+    lpf_url=COUNTY_STATE_LPF_URL, county2zone_url=COUNTY2ZONE_URL
+):
+    """
+    Download county load profile factors and the county-to-BA map.
+
+    ReEDS disaggregates state-level load to counties with a load profile factor
+    (``county_state_lpf.csv``) and maps counties to ReEDS balancing areas via
+    ``county2zone.csv``.
+
+    Returns:
+        DataFrame with columns [FIPS, value, ba, state]
+    """
+    print("Loading county load profile factors and county-to-BA mapping...")
+
+    lpf = pd.read_csv(StringIO(requests.get(lpf_url).text), dtype={"FIPS": str})
+    # FIPS in county_state_lpf.csv is 'p' + 5-digit county FIPS
+    lpf["FIPS"] = lpf["FIPS"].str[1:]
+
+    county2zone = pd.read_csv(
+        StringIO(requests.get(county2zone_url).text), dtype={"FIPS": str}
+    )
+    county2zone = county2zone.rename(columns={"r": "ba"})
+
+    mapping = lpf.merge(county2zone[["FIPS", "ba"]], on="FIPS", how="left")
+    unmatched = int(mapping["ba"].isna().sum())
+    if unmatched:
+        print(f"  WARNING: {unmatched} counties without a BA will be skipped")
+
+    mapping["state"] = mapping["FIPS"].str[:2].map(FIPS_TO_ABBREV)
+    mapping = mapping.dropna(subset=["state", "ba"])
+
+    # Verify county factors sum to 1 within each state
+    state_sums = mapping.groupby("state")["value"].sum()
+    if (state_sums - 1.0).abs().max() > 1e-3:
+        raise ValueError("County load profile factors do not sum to 1 per state")
+    print(
+        f"  Loaded {len(mapping):,} county factors across "
+        f"{state_sums.shape[0]} states"
+    )
+    return mapping[["FIPS", "value", "ba", "state"]]
+
+
+def aggregate_state_load_to_ba(df, mapping):
+    """
+    Distribute state-level hourly load to ReEDS balancing areas (BAs).
+
+    Each state's load is split across its counties using the county load profile
+    factor (``value``, which sums to ~1 per state) and the counties are then
+    aggregated to their BA. States that appear in the mapping but not in the
+    demand data (e.g. DC, absent from the HDF5) are skipped.
+
+    Args:
+        df: Wide DataFrame with state columns plus year/weather_year/datetime
+        mapping: DataFrame from load_county_to_ba_mapping()
+
+    Returns:
+        Wide DataFrame with one column per BA plus year/weather_year/datetime
+    """
+    region_cols = [c for c in df.columns if c not in ["year", "datetime", "weather_year"]]
+
+    # Fraction of each state's hourly load in each BA (sums to ~1 per state)
+    ba_share = (
+        mapping.groupby(["state", "ba"], observed=True)["value"]
+        .sum()
+        .rename("share")
+        .reset_index()
+    )
+
+    # Long form: one row per (timestep, state)
+    long = df.melt(
+        id_vars=["year", "weather_year", "datetime"],
+        value_vars=region_cols,
+        var_name="state",
+        value_name="load",
+    )
+    long = long.merge(ba_share, on="state", how="inner")
+    long["load"] = long["load"] * long["share"]
+
+    # Aggregate to BA and pivot back to wide (one column per BA)
+    ba_long = (
+        long.groupby(["year", "weather_year", "datetime", "ba"])["load"]
+        .sum()
+        .reset_index()
+    )
+    wide = ba_long.pivot_table(
+        index=["year", "weather_year", "datetime"], columns="ba", values="load"
+    ).reset_index()
+    wide = wide.fillna(0.0)
+
+    ba_cols = [c for c in wide.columns if c not in ["year", "weather_year", "datetime"]]
+    print(f"  Distributed state load across {len(ba_cols)} BAs")
+    return wide
+
+
 def load_reeds_load_data(url, weather_years=None):
     """
     Load ReEDS hourly load data from HDF5 file.
@@ -139,6 +260,11 @@ def load_reeds_load_data(url, weather_years=None):
         print(f"  Filtering to years 2020-2050")
         df = df[(df["year"] >= 2020) & (df["year"] <= 2050)].copy()
         print(f"  Filtered data shape: {df.shape}")
+
+        # Distribute state-level demand to ReEDS BAs via county load profile
+        # factors (county_state_lpf.csv) and the county-to-BA map (county2zone.csv)
+        mapping = load_county_to_ba_mapping()
+        df = aggregate_state_load_to_ba(df, mapping)
 
         return df
 
@@ -215,7 +341,7 @@ def main():
     print("=" * 60)
 
     # Configuration
-    url = "https://zenodo.org/records/18423998/files/demand_EER2023_IRAlow.h5"
+    url = DEMAND_H5_URL
     weather_years = [2007, 2008, 2009, 2010, 2011, 2012, 2013]
     scenario = "IRA_low"
     output_file = "reeds_load_transformed.parquet"
