@@ -12,8 +12,14 @@ from io import StringIO
 import pandas as pd
 import requests
 
-# URLs for ReEDS demand data and county-level mapping files (ReEDS-Model/ReEDS)
-DEMAND_H5_URL = "https://zenodo.org/records/18423998/files/demand_EER2023_IRAlow.h5"
+# Sources for ReEDS files (ReEDS-Model/ReEDS). Zenodo record IDs are not
+# hard-coded: they are resolved at runtime from remote_files.csv because the
+# record can change over time. Only the file index and the target filename are
+# fixed here.
+REMOTE_FILES_URL = (
+    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
+    "inputs/remote_files.csv"
+)
 COUNTY_STATE_LPF_URL = (
     "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
     "inputs/disaggregation/county_state_lpf.csv"
@@ -105,6 +111,41 @@ def download_h5_file(url, cache_dir="cache"):
     print(f"  Cached to: {cache_path}")
 
     return cache_path
+
+
+def resolve_demand_h5_url(remote_files_url=REMOTE_FILES_URL):
+    """
+    Resolve the demand HDF5 download URL from ReEDS remote_files.csv.
+
+    The Zenodo record for the demand file is not hard-coded; it is read from
+    ReEDS's ``inputs/remote_files.csv`` at runtime (the ``url_base`` column is a
+    template with ``{record_id}``/``{filename}`` placeholders).
+
+    Args:
+        remote_files_url: URL of ReEDS remote_files.csv
+
+    Returns:
+        str: URL of demand_EER2023_IRAlow.h5 on Zenodo
+
+    Raises:
+        ValueError: if the demand file is not listed in remote_files.csv
+    """
+    print("Fetching ReEDS remote_files.csv...")
+    remote = pd.read_csv(
+        StringIO(requests.get(remote_files_url).text), dtype={"record_id": str}
+    )
+    matches = remote[remote["filename"] == "demand_EER2023_IRAlow.h5"]
+    if matches.empty:
+        raise ValueError(
+            "demand_EER2023_IRAlow.h5 not found in "
+            f"ReEDS remote_files.csv at {remote_files_url}"
+        )
+    row = matches.iloc[0]
+    url = row["url_base"].format(
+        record_id=row["record_id"], filename=row["filename"]
+    )
+    print(f"  Resolved demand_EER2023_IRAlow.h5: record {row['record_id']}")
+    return url
 
 
 def load_county_to_ba_mapping(
@@ -341,7 +382,7 @@ def main():
     print("=" * 60)
 
     # Configuration
-    url = DEMAND_H5_URL
+    url = resolve_demand_h5_url()
     weather_years = [2007, 2008, 2009, 2010, 2011, 2012, 2013]
     scenario = "IRA_low"
     output_file = "reeds_load_transformed.parquet"
