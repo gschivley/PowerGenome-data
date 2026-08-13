@@ -5,148 +5,236 @@
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "0dcf40c82a204b361f9da0fdc7070550",
-      "source": "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv).",
-      "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS",
+      "sources": [
+        {
+          "source": "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv).",
+          "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS"
+        }
+      ],
       "version": "2026-08-11"
     },
     "distributed_capacity.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "d8c206063044ea93edb80e8cae100357",
-      "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
-      "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv",
+      "sources": [
+        {
+          "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+        },
+        {
+          "source": "ReEDS county-to-zone mapping used to aggregate capacity to balancing areas.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv"
+        }
+      ],
       "version": "2026-08-11"
     },
     "distributed_profiles.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "39a54bb4fc2bf42287d66ceadb90714f",
-      "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
-      "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5",
+      "sources": [
+        {
+          "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
+          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
+        }
+      ],
       "version": "2026-08-11"
     },
     "dollar_year_adjustment.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "2e819d4d7f465d8d273b2da57f0a2fd1",
-      "source": "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index 2017=100), annual, from FRED with BEA NIPA API fallback.",
-      "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA",
+      "sources": [
+        {
+          "source": "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index 2017=100), annual, from FRED with BEA NIPA API fallback.",
+          "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA"
+        }
+      ],
       "version": "2026-08-11"
     },
     "fuel_prices.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
-      "source": "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.",
-      "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip",
+      "sources": [
+        {
+          "source": "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.",
+          "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
+        }
+      ],
       "version": "2026-08-11"
     },
     "nerc_reserve_margins.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "b8ac4f0a59127c9e483d9b59aaad78b4",
-      "source": "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.",
-      "source_url": "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf",
+      "sources": [
+        {
+          "source": "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.",
+          "source_url": "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf"
+        }
+      ],
       "version": "2026-08-11"
     },
     "nerc_reserve_margins_vintage.json": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "f10aef2af51faa5d227ec513262077c2",
-      "source": "Sidecar vintage metadata (report year, source URL, retrieval timestamp) written alongside nerc_reserve_margins.csv by the NERC reserve margins extractor.",
+      "sources": [
+        {
+          "source": "Sidecar vintage metadata (report year, source URL, retrieval timestamp) written alongside nerc_reserve_margins.csv by the NERC reserve margins extractor."
+        }
+      ],
       "version": "2026-08-11"
     },
     "network_costs_EI_PJM.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "471fb998e2a3826cf6d21b6a04ef45fc",
-      "source": "Network / transmission cost assumptions for the EI_PJM model region. Unknown - document me.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "network_costs_ReEDS.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "72a91ff83f1ef9f70fc9cbb1074d21ad",
-      "source": "Network / transmission cost assumptions per ReEDS region used for WECC. Unknown - document me.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "operational_constraints_reeds.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "d25c411a3bb2a146612afb1232da84f7",
-      "source": "ReEDS operational constraints (incl. pumped hydro duration ranges). Unknown - document me.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "plant_region_map.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "0d8a6f43695c230a418827820f071dd8",
-      "source": "Plant -> region mapping built from the ReEDS generator database and PUDL/EIA yearly generators by transform_reeds_generators.py.",
-      "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv",
+      "sources": [
+        {
+          "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) as the plant list, joined to ReEDS zones by transform_reeds_generators.py.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+        },
+        {
+          "source": "ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant to a model region.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv"
+        }
+      ],
       "version": "2026-08-11"
     },
     "reeds_generators_transformed.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "1dfff9c035410c487687ee9da9c85395",
-      "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py (with PUDL/EIA yearly generators for retirement info).",
-      "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv",
+      "sources": [
+        {
+          "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+        },
+        {
+          "source": "PUDL/EIA yearly generators parquet, used for retirement info on existing units.",
+          "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
+        }
+      ],
       "version": "2026-08-11"
     },
     "reeds_load_transformed.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "2a6c49b1cd3ea175b776ce853f06485e",
-      "source": "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.",
-      "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5",
+      "sources": [
+        {
+          "source": "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.",
+          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5"
+        }
+      ],
       "version": "2026-08-11"
     },
     "regional_cost_multipliers.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "6c46df3480cbecd82ac1d724f4255658",
-      "source": "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.",
-      "source_url": "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf",
+      "sources": [
+        {
+          "source": "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.",
+          "source_url": "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf"
+        }
+      ],
       "version": "2026-08-11"
     },
     "reserve_margins.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "597fc25a77553b29217ea35037258d73",
-      "source": "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.",
-      "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv",
+      "sources": [
+        {
+          "source": "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv"
+        }
+      ],
       "version": "2026-08-11"
     },
     "technology_costs_atb.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "4c65c88129c4db3d0df180c3eb28a3ec",
-      "source": "NREL Annual Technology Baseline (ATB) technology cost table. Unknown - document me.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "technology_heat_rates_nrelatb.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "356c16b73d98fd6ac2dcf95510701630",
-      "source": "NREL Annual Technology Baseline (ATB) heat rate table. Unknown - document me.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "transmission_capacity_merged.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "997c77e87202c9e96b852b154dd13d78",
-      "source": "Merged AC + non-AC transmission capacity per region pair (average of forward/reverse MW). Unknown - document me for exact upstream files.",
+      "sources": [
+        {
+          "source": "Unknown - document me"
+        }
+      ],
       "version": "2026-08-11"
     },
     "transmission_capacity_reeds.csv": {
       "history": [],
       "last_updated": "2026-08-11",
       "md5": "afed76f028868aae1d68c095bca01f24",
-      "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
-      "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
+      "sources": [
+        {
+          "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
+          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+        }
+      ],
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-08-11T19:57:20.093856+00:00",
+  "generated_at_utc": "2026-08-13T20:28:04.006658+00:00",
   "manifest_version": 1
 }

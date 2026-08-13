@@ -10,7 +10,10 @@ MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
 
-SEEDED_FILE = "cpi_data.csv"
+# A filename with a single seeded source.
+SINGLE_SOURCE_FILE = "fuel_prices.parquet"
+# A filename with multiple seeded sources.
+MULTI_SOURCE_FILE = "plant_region_map.csv"
 
 
 class ManifestTests(unittest.TestCase):
@@ -28,72 +31,112 @@ class ManifestTests(unittest.TestCase):
         MODULE.update_manifest(data_dir, manifest_path, date_str)
         return json.loads(manifest_path.read_text())
 
-    def test_initial_run_seeds_source_and_sets_version(self):
-        data_dir = self._make_data_dir({SEEDED_FILE: "a", "unknown.csv": "b"})
+    def test_initial_run_seeds_sources_and_sets_version(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "unknown.csv": "b"})
         manifest = self._run(data_dir, "2026-08-11")
         self.assertEqual(manifest["manifest_version"], 1)
         self.assertEqual(manifest["data_version"], "2026.08.11")
 
-        seeded = manifest["files"][SEEDED_FILE]
+        seeded = manifest["files"][SINGLE_SOURCE_FILE]
         self.assertEqual(seeded["version"], "2026-08-11")
-        self.assertEqual(seeded["md5"], MODULE.md5_of(data_dir / SEEDED_FILE))
-        self.assertNotEqual(seeded["source"], "Unknown - document me")
+        self.assertEqual(seeded["md5"], MODULE.md5_of(data_dir / SINGLE_SOURCE_FILE))
         self.assertEqual(seeded["history"], [])
+        self.assertEqual(len(seeded["sources"]), 1)
+        self.assertEqual(seeded["sources"][0]["source"], MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"])
+        self.assertIn("source_url", seeded["sources"][0])
 
         unknown = manifest["files"]["unknown.csv"]
-        self.assertEqual(unknown["source"], "Unknown - document me")
+        self.assertEqual(unknown["sources"], [{"source": "Unknown - document me"}])
+
+    def test_multi_source_file_seeds_all_sources(self):
+        data_dir = self._make_data_dir({MULTI_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        sources = manifest["files"][MULTI_SOURCE_FILE]["sources"]
+        expected = MODULE.SOURCES[MULTI_SOURCE_FILE]
+        self.assertEqual(len(sources), len(expected))
+        for i, src in enumerate(sources):
+            self.assertEqual(src["source"], expected[i]["source"])
+            self.assertEqual(src.get("source_url"), expected[i].get("source_url"))
 
     def test_change_bumps_version_appends_history_and_advances_data_version(self):
-        data_dir = self._make_data_dir({SEEDED_FILE: "a"})
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         first = self._run(data_dir, "2026-08-11")
-        (data_dir / SEEDED_FILE).write_text("aa")
+        (data_dir / SINGLE_SOURCE_FILE).write_text("aa")
         second = self._run(data_dir, "2026-09-03")
 
         self.assertEqual(second["data_version"], "2026.09.03")
-        entry = second["files"][SEEDED_FILE]
+        entry = second["files"][SINGLE_SOURCE_FILE]
         self.assertEqual(entry["version"], "2026-09-03")
         self.assertEqual(entry["last_updated"], "2026-09-03")
         self.assertEqual(len(entry["history"]), 1)
         self.assertEqual(entry["history"][0]["version"], "2026-08-11")
-        self.assertEqual(entry["history"][0]["md5"], first["files"][SEEDED_FILE]["md5"])
+        self.assertEqual(entry["history"][0]["md5"], first["files"][SINGLE_SOURCE_FILE]["md5"])
 
     def test_source_edits_are_preserved_on_change(self):
-        data_dir = self._make_data_dir({SEEDED_FILE: "a"})
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         manifest = self._run(data_dir, "2026-08-11")
-        manifest["files"][SEEDED_FILE]["source"] = "My custom upstream"
-        manifest["files"][SEEDED_FILE]["source_url"] = "https://example.com/source"
+        manifest["files"][SINGLE_SOURCE_FILE]["sources"].append(
+            {"source": "A hand-added second source", "source_url": "https://example.com/x"}
+        )
+        manifest["files"][SINGLE_SOURCE_FILE]["sources"][0]["source"] = "Custom edited text"
         (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
-        (data_dir / SEEDED_FILE).write_text("different")
+        (data_dir / SINGLE_SOURCE_FILE).write_text("different")
         result = self._run(data_dir, "2026-10-01")
-        entry = result["files"][SEEDED_FILE]
-        self.assertEqual(entry["source"], "My custom upstream")
-        self.assertEqual(entry["source_url"], "https://example.com/source")
+        sources = result["files"][SINGLE_SOURCE_FILE]["sources"]
+        self.assertEqual(len(sources), 2)
+        self.assertEqual(sources[0]["source"], "Custom edited text")
+        self.assertEqual(sources[1]["source"], "A hand-added second source")
+        self.assertEqual(sources[1]["source_url"], "https://example.com/x")
 
     def test_no_change_preserves_data_version_and_versions(self):
-        data_dir = self._make_data_dir({SEEDED_FILE: "a"})
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         self._run(data_dir, "2026-08-11")
         second = self._run(data_dir, "2026-12-31")
 
         self.assertEqual(second["data_version"], "2026.08.11")
-        self.assertEqual(second["files"][SEEDED_FILE]["version"], "2026-08-11")
-        self.assertEqual(second["files"][SEEDED_FILE]["history"], [])
+        self.assertEqual(second["files"][SINGLE_SOURCE_FILE]["version"], "2026-08-11")
+        self.assertEqual(second["files"][SINGLE_SOURCE_FILE]["history"], [])
 
     def test_manifest_excludes_itself_and_output_is_deterministic(self):
-        data_dir = self._make_data_dir({SEEDED_FILE: "a"})
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         self._run(data_dir, "2026-08-11")
         manifest = self._run(data_dir, "2026-08-11")
 
-        # manifest.json must not appear as its own entry
         self.assertNotIn("manifest.json", manifest["files"])
 
-        # deterministic output: ignoring the timestamp, two no-change runs are identical
         def stable_body(m):
             body = {k: v for k, v in m.items() if k != "generated_at_utc"}
             return json.dumps(body, indent=2, sort_keys=True)
 
         first = stable_body(json.loads((data_dir / "manifest.json").read_text()))
         self.assertEqual(first, stable_body(manifest))
+
+    def test_old_single_field_format_is_migrated(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        # Rewrite the manifest in the old (single source/source_url) format.
+        old = {"manifest_version": 1, "data_version": "2026.08.11", "files": {}}
+        for name, ent in manifest["files"].items():
+            s0 = ent["sources"][0]
+            old["files"][name] = {
+                "source": s0["source"],
+                "source_url": s0.get("source_url", ""),
+                "last_updated": ent["last_updated"],
+                "version": ent["version"],
+                "md5": ent["md5"],
+                "history": ent["history"],
+            }
+        (data_dir / "manifest.json").write_text(json.dumps(old, indent=2))
+
+        result = self._run(data_dir, "2026-08-11")
+        entry = result["files"][SINGLE_SOURCE_FILE]
+        self.assertNotIn("source", entry)
+        self.assertNotIn("source_url", entry)
+        self.assertEqual(len(entry["sources"]), 1)
+        self.assertEqual(entry["sources"][0]["source"], manifest["files"][SINGLE_SOURCE_FILE]["sources"][0]["source"])
+        # data_version preserved (no content changed)
+        self.assertEqual(result["data_version"], "2026.08.11")
 
     def test_md5_change_regardless_of_history_metadata(self):
         data_dir = self._make_data_dir({"stable.csv": "x"})

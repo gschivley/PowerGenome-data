@@ -3,8 +3,10 @@
 
 The manifest (``data/manifest.json``) records, for every file in ``data/``:
 
-* ``source`` / ``source_url`` -- where the data came from (human-maintained; the tool
-  preserves edits made here across runs).
+* ``sources`` -- a list of ``{source, source_url}`` objects describing where the data
+  came from. A file may rely on one or many upstream sources (e.g. the ReEDS generator
+  database *and* ``county2zone.csv``). Human-maintained; the tool preserves edits made
+  here across runs.
 * ``md5`` -- content hash of the file.
 * ``version`` and ``last_updated`` -- ISO date (``YYYY-MM-DD``) of the last change.
 * ``history`` -- append-only record of prior ``{version, last_updated, md5}`` entries.
@@ -32,155 +34,208 @@ from pathlib import Path
 
 MANIFEST_VERSION = 1
 
-# Seed provenance for files that have never been seen before. The tool preserves
-# any edits made to these fields in data/manifest.json on later runs. Values marked
-# "Unknown - document me" are placeholders the maintainer should fill in.
-SOURCES: dict[str, dict[str, str]] = {
-    "cpi_data.csv": {
-        "source": (
-            "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via "
-            "FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv)."
-        ),
-        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS",
-    },
-    "dollar_year_adjustment.csv": {
-        "source": (
-            "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index "
-            "2017=100), annual, from FRED with BEA NIPA API fallback."
-        ),
-        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA",
-    },
-    "distributed_capacity.parquet": {
-        "source": (
-            "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), "
-            "aggregated county -> BA and converted DC to AC (ILR 1.1) by "
-            "build_new_pg_dg_inputs.py."
-        ),
-        "source_url": (
-            "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
-            "dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
-        ),
-    },
-    "distributed_profiles.parquet": {
-        "source": (
-            "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), "
-            "processed by build_new_pg_dg_inputs.py."
-        ),
-        "source_url": (
-            "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/"
-            "distpv-reference_ba.h5"
-        ),
-    },
-    "fuel_prices.parquet": {
-        "source": (
-            "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' "
-            "series by census division / scenario / fuel, mapped to ReEDS Balancing Areas "
-            "by .github/skills/eia-fuel-prices."
-        ),
-        "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip",
-    },
-    "nerc_reserve_margins.csv": {
-        "source": (
-            "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by "
-            "assessment area, extracted by .github/skills/nerc-reserve-margins and carried "
-            "forward through 2050."
-        ),
-        "source_url": "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf",
-    },
-    "nerc_reserve_margins_vintage.json": {
-        "source": (
-            "Sidecar vintage metadata (report year, source URL, retrieval timestamp) written "
-            "alongside nerc_reserve_margins.csv by the NERC reserve margins extractor."
-        ),
-        "source_url": "",
-    },
-    "network_costs_EI_PJM.csv": {
-        "source": "Network / transmission cost assumptions for the EI_PJM model region. Unknown - document me.",
-        "source_url": "",
-    },
-    "network_costs_ReEDS.csv": {
-        "source": "Network / transmission cost assumptions per ReEDS region used for WECC. Unknown - document me.",
-        "source_url": "",
-    },
-    "operational_constraints_reeds.csv": {
-        "source": "ReEDS operational constraints (incl. pumped hydro duration ranges). Unknown - document me.",
-        "source_url": "",
-    },
-    "plant_region_map.csv": {
-        "source": (
-            "Plant -> region mapping built from the ReEDS generator database and PUDL/EIA "
-            "yearly generators by transform_reeds_generators.py."
-        ),
-        "source_url": (
-            "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
-            "county2zone.csv"
-        ),
-    },
-    "reeds_generators_transformed.csv": {
-        "source": (
-            "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned "
-            "and transformed by transform_reeds_generators.py (with PUDL/EIA yearly "
-            "generators for retirement info)."
-        ),
-        "source_url": (
-            "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
-            "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-        ),
-    },
-    "reeds_load_transformed.parquet": {
-        "source": (
-            "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to "
-            "weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py."
-        ),
-        "source_url": (
-            "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5"
-        ),
-    },
-    "regional_cost_multipliers.csv": {
-        "source": (
-            "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions "
-            "by extract_location_variation.py."
-        ),
-        "source_url": (
-            "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/"
-            "capital_cost_AEO2025.pdf"
-        ),
-    },
-    "reserve_margins.csv": {
-        "source": (
-            "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the "
-            "ReEDS hierarchy by build_reserve_margins.py."
-        ),
-        "source_url": (
-            "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/"
-            "prm_annual.csv"
-        ),
-    },
-    "technology_costs_atb.parquet": {
-        "source": "NREL Annual Technology Baseline (ATB) technology cost table. Unknown - document me.",
-        "source_url": "",
-    },
-    "technology_heat_rates_nrelatb.csv": {
-        "source": "NREL Annual Technology Baseline (ATB) heat rate table. Unknown - document me.",
-        "source_url": "",
-    },
-    "transmission_capacity_merged.csv": {
-        "source": (
-            "Merged AC + non-AC transmission capacity per region pair (average of "
-            "forward/reverse MW). Unknown - document me for exact upstream files."
-        ),
-        "source_url": "",
-    },
-    "transmission_capacity_reeds.csv": {
-        "source": (
-            "ReEDS AC and non-AC transmission capacity files merged by "
-            "merge_transmission_capacity.py."
-        ),
-        "source_url": (
-            "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/"
-            "transmission_capacity_init_AC_ba_NARIS2024.csv"
-        ),
-    },
+# Seed provenance for files that have never been seen before. Each file maps to a list of
+# {source, source_url} objects (one per upstream). The tool preserves any edits made in
+# data/manifest.json on later runs. Source values marked "Unknown - document me" are
+# placeholders the maintainer should fill in. A source_url is optional per source.
+SOURCES: dict[str, list[dict[str, str]]] = {
+    "cpi_data.csv": [
+        {
+            "source": (
+                "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via "
+                "FRED with BLS public API fallback (superseded by "
+                "dollar_year_adjustment.csv)."
+            ),
+            "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS",
+        },
+    ],
+    "dollar_year_adjustment.csv": [
+        {
+            "source": (
+                "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index "
+                "2017=100), annual, from FRED with BEA NIPA API fallback."
+            ),
+            "source_url": (
+                "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA"
+            ),
+        },
+    ],
+    "distributed_capacity.parquet": [
+        {
+            "source": (
+                "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), "
+                "aggregated county -> BA and converted DC to AC (ILR 1.1) by "
+                "build_new_pg_dg_inputs.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
+                "dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+            ),
+        },
+        {
+            "source": (
+                "ReEDS county-to-zone mapping used to aggregate capacity to balancing areas."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
+                "county2zone.csv"
+            ),
+        },
+    ],
+    "distributed_profiles.parquet": [
+        {
+            "source": (
+                "ReEDS distributed PV generation profiles (multi-year "
+                "distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py."
+            ),
+            "source_url": (
+                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/"
+                "distpv-reference_ba.h5"
+            ),
+        },
+    ],
+    "fuel_prices.parquet": [
+        {
+            "source": (
+                "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric "
+                "Power' series by census division / scenario / fuel, mapped to ReEDS "
+                "Balancing Areas by .github/skills/eia-fuel-prices."
+            ),
+            "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip",
+        },
+    ],
+    "nerc_reserve_margins.csv": [
+        {
+            "source": (
+                "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level "
+                "(%)' by assessment area, extracted by .github/skills/nerc-reserve-margins "
+                "and carried forward through 2050."
+            ),
+            "source_url": (
+                "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf"
+            ),
+        },
+    ],
+    "nerc_reserve_margins_vintage.json": [
+        {
+            "source": (
+                "Sidecar vintage metadata (report year, source URL, retrieval timestamp) "
+                "written alongside nerc_reserve_margins.csv by the NERC reserve margins "
+                "extractor."
+            ),
+        },
+    ],
+    "network_costs_EI_PJM.csv": [
+        {"source": "Unknown - document me"},
+    ],
+    "network_costs_ReEDS.csv": [
+        {"source": "Unknown - document me"},
+    ],
+    "operational_constraints_reeds.csv": [
+        {"source": "Unknown - document me"},
+    ],
+    "plant_region_map.csv": [
+        {
+            "source": (
+                "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) "
+                "as the plant list, joined to ReEDS zones by transform_reeds_generators.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
+                "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+            ),
+        },
+        {
+            "source": (
+                "ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant "
+                "to a model region."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
+                "county2zone.csv"
+            ),
+        },
+    ],
+    "reeds_generators_transformed.csv": [
+        {
+            "source": (
+                "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) "
+                "cleaned and transformed by transform_reeds_generators.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
+                "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+            ),
+        },
+        {
+            "source": (
+                "PUDL/EIA yearly generators parquet, used for retirement info on existing "
+                "units."
+            ),
+            "source_url": (
+                "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/"
+                "out_eia__yearly_generators.parquet"
+            ),
+        },
+    ],
+    "reeds_load_transformed.parquet": [
+        {
+            "source": (
+                "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered "
+                "to weather years 2007-2013 and model years 2020-2050 by "
+                "transform_reeds_load.py."
+            ),
+            "source_url": (
+                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/"
+                "EER_IRAlow_load_hourly.h5"
+            ),
+        },
+    ],
+    "regional_cost_multipliers.csv": [
+        {
+            "source": (
+                "EIA capital cost AEO2025 PDF tables mapped to PowerGenome "
+                "technologies/regions by extract_location_variation.py."
+            ),
+            "source_url": (
+                "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/"
+                "capital_cost_AEO2025.pdf"
+            ),
+        },
+    ],
+    "reserve_margins.csv": [
+        {
+            "source": (
+                "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions "
+                "via the ReEDS hierarchy by build_reserve_margins.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/"
+                "prm_annual.csv"
+            ),
+        },
+    ],
+    "technology_costs_atb.parquet": [
+        {"source": "Unknown - document me"},
+    ],
+    "technology_heat_rates_nrelatb.csv": [
+        {"source": "Unknown - document me"},
+    ],
+    "transmission_capacity_merged.csv": [
+        {"source": "Unknown - document me"},
+    ],
+    "transmission_capacity_reeds.csv": [
+        {
+            "source": (
+                "ReEDS AC and non-AC transmission capacity files merged by "
+                "merge_transmission_capacity.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
+                "transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+            ),
+        },
+    ],
 }
 
 
@@ -198,19 +253,40 @@ def calver(date_str: str) -> str:
     return date_str.replace("-", ".")
 
 
+def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
+    """Return a clean list of {source[, source_url]} objects."""
+    out = []
+    for s in raw_sources:
+        item: dict = {"source": s.get("source", "Unknown - document me")}
+        if s.get("source_url"):
+            item["source_url"] = s["source_url"]
+        out.append(item)
+    return out
+
+
+def _prior_sources(prior: dict) -> list[dict]:
+    """Extract sources from a prior entry, migrating the old single-field format."""
+    if "sources" in prior:
+        return _normalize_sources(prior["sources"])
+    # Old (pre-2) format: a single ``source`` str plus an optional ``source_url`` str.
+    item: dict = {"source": prior.get("source", "Unknown - document me")}
+    if prior.get("source_url"):
+        item["source_url"] = prior["source_url"]
+    return [item]
+
+
 def build_new_entry(filename: str, md5: str, date_str: str) -> dict:
     """Create a fresh manifest entry for a file never seen before."""
-    seed = SOURCES.get(filename, {})
-    entry: dict = {
-        "source": seed.get("source", "Unknown - document me"),
+    seed = SOURCES.get(filename)
+    if seed is None:
+        seed = [{"source": "Unknown - document me"}]
+    return {
+        "sources": _normalize_sources(seed),
         "last_updated": date_str,
         "version": date_str,
         "md5": md5,
         "history": [],
     }
-    if seed.get("source_url"):
-        entry["source_url"] = seed["source_url"]
-    return entry
 
 
 def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
@@ -223,15 +299,23 @@ def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
             "md5": prior["md5"],
         }
     )
-    entry = {
-        "source": prior.get("source", "Unknown - document me"),
+    return {
+        "sources": _prior_sources(prior),
         "last_updated": date_str,
         "version": date_str,
         "md5": md5,
         "history": history,
     }
-    if prior.get("source_url"):
-        entry["source_url"] = prior["source_url"]
+
+
+def _migrate_entry(prior: dict) -> dict:
+    """Migrate an entry from the old ``source``/``source_url`` format to ``sources``."""
+    if "sources" in prior:
+        return prior
+    entry = dict(prior)
+    entry["sources"] = _prior_sources(prior)
+    entry.pop("source", None)
+    entry.pop("source_url", None)
     return entry
 
 
@@ -265,7 +349,7 @@ def update_manifest(
             print(f"[added]    {filename}")
             changed_any = True
         elif prior.get("md5") == md5:
-            files[filename] = prior
+            files[filename] = _migrate_entry(prior)
             print(f"[unchanged] {filename}")
         else:
             files[filename] = advance_entry(prior, md5, date_str)

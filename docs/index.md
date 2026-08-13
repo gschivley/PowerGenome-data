@@ -59,8 +59,12 @@ and automatic Zenodo publishing.
   "generated_at_utc": "2026-08-11T19:55:29.157504+00:00",
   "files": {
     "fuel_prices.parquet": {
-      "source": "EIA Annual Energy Outlook ...",
-      "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip",
+      "sources": [
+        {
+          "source": "EIA Annual Energy Outlook ...",
+          "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
+        }
+      ],
       "last_updated": "2026-08-11",
       "version": "2026-08-11",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
@@ -74,7 +78,9 @@ and automatic Zenodo publishing.
 - `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
   advances to the current date whenever any file is added or its contents change, and is otherwise
   preserved from the previous run. Use this to tag a dataset release (e.g. on Zenodo).
-- Per file — `source` / `source_url` describe the upstream origin (human-maintained), `version` /
+- Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
+  (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
+  the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
   `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash, and
   `history` holds prior `{version, last_updated, md5}` entries for every change that has been seen.
 
@@ -93,8 +99,8 @@ Behavior:
 - Unchanged files keep their existing version, date, and source.
 - Changed or newly added files get `version`/`last_updated` set to the current date, the previous entry
   moves onto `history`, and `data_version` advances (CalVer `YYYY.MM.DD`).
-- Hand-edited `source` / `source_url` fields are preserved across runs; the script only fills them in
-  for files it has never seen (from a built-in seed map — genuinely unknown origins are marked
+- Hand-edited `sources` entries (including `source_url`) are preserved across runs; the script only fills
+  them in for files it has never seen (from a built-in seed map — genuinely unknown origins are marked
   `"Unknown - document me"` so they can be filled in).
 - Files that are no longer present in `data/` are dropped from the manifest (with a warning).
 
