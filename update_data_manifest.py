@@ -125,12 +125,6 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             ),
         },
     ],
-    "network_costs_EI_PJM.csv": [
-        {"source": "Unknown - document me"},
-    ],
-    "network_costs_ReEDS.csv": [
-        {"source": "Unknown - document me"},
-    ],
     "operational_constraints_reeds.csv": [
         {"source": "Unknown - document me"},
     ],
@@ -216,23 +210,36 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         },
     ],
     "technology_costs_atb.parquet": [
-        {"source": "Unknown - document me"},
+        {
+            "source": ("NREL ATB 2024 v4"),
+            "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50",
+        },
     ],
     "technology_heat_rates_nrelatb.csv": [
-        {"source": "Unknown - document me"},
-    ],
-    "transmission_capacity_merged.csv": [
-        {"source": "Unknown - document me"},
+        {
+            "source": ("NREL ATB 2024 v4"),
+            "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50",
+        },
     ],
     "transmission_capacity_reeds.csv": [
         {
             "source": (
-                "ReEDS AC and non-AC transmission capacity files merged by "
+                "ReEDS AC transmission capacity files merged by "
                 "merge_transmission_capacity.py."
             ),
             "source_url": (
                 "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
                 "transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+            ),
+        },
+        {
+            "source": (
+                "ReEDS non-AC transmission capacity files merged by "
+                "merge_transmission_capacity.py."
+            ),
+            "source_url": (
+                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
+                "transmission/transmission_capacity_init_nonAC_ba.csv"
             ),
         },
     ],
@@ -385,7 +392,10 @@ def parse_args(argv=None) -> argparse.Namespace:
         description="Build/update data/manifest.json provenance + version history."
     )
     parser.add_argument(
-        "--data-dir", type=Path, default=Path("data"), help="Directory to scan (default: data/)"
+        "--data-dir",
+        type=Path,
+        default=Path("data"),
+        help="Directory to scan (default: data/)",
     )
     parser.add_argument(
         "--manifest",
