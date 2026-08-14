@@ -126,7 +126,17 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         },
     ],
     "operational_constraints_reeds.csv": [
-        {"source": "Unknown - document me"},
+        {
+            "source": (
+                "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), "
+                "transformed by build_operational_constraints_reeds.py into PowerGenome"
+                " operational constraints."
+            ),
+            "source_url": (
+                "https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/"
+                "plant_characteristics/pcm_defaults.json"
+            ),
+        },
     ],
     "plant_region_map.csv": [
         {

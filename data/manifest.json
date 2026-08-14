@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.08.11",
+  "data_version": "2026.08.14",
   "files": {
     "cpi_data.csv": {
       "history": [],
@@ -111,15 +111,22 @@
       "version": "2026-08-11"
     },
     "operational_constraints_reeds.csv": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "md5": "d25c411a3bb2a146612afb1232da84f7",
-      "sources": [
+      "history": [
         {
-          "source": "Unknown - document me"
+          "last_updated": "2026-08-11",
+          "md5": "d25c411a3bb2a146612afb1232da84f7",
+          "version": "2026-08-11"
         }
       ],
-      "version": "2026-08-11"
+      "last_updated": "2026-08-14",
+      "md5": "75b7e22488de8048e56c1e1f81c359f9",
+      "sources": [
+        {
+          "source": "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), transformed by build_operational_constraints_reeds.py into PowerGenome operational constraints.",
+          "source_url": "https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json"
+        }
+      ],
+      "version": "2026-08-14"
     },
     "plant_region_map.csv": {
       "history": [],
@@ -235,6 +242,6 @@
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-08-13T20:28:04.006658+00:00",
+  "generated_at_utc": "2026-08-14T17:40:38.996263+00:00",
   "manifest_version": 1
 }
