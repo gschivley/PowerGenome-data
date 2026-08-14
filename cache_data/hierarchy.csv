@@ -1,40 +1,40 @@
 ba,nercr,transreg,transgrp,cendiv,st,interconnect,st_interconnect,country,usda_region,h2ptcreg,hurdlereg,aggreg,nercr-latest
-p1,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Puget_Sound_Energy_Inc,p1,WECC_NW
-p2,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Bonneville_Power_Administration,p2,WECC_NW
-p3,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Avista_Corp,p3,WECC_NW
-p4,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,PUD_No2_of_Grant_County,p4,WECC_NW
-p5,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,Bonneville_Power_Administration,p5,WECC_NW
-p6,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,PacifiCorp_West,p6,WECC_NW
-p7,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,Bonneville_Power_Administration,p7,WECC_NW
-p8,WECC_NW,NorthernGrid,NorthernGrid_South,Pacific,CA,western,CA,USA,pacific,California,PacifiCorp_West,p8,WECC_NW
-p9,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p9,WECC_CA
-p10,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p10,WECC_CA
-p11,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p11,WECC_CA
-p12,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,NV,western,NV,USA,mountain,Mountain,Nevada_Power_Co,p12,WECC_SW
-p13,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,NV,western,NV,USA,mountain,Mountain,Nevada_Power_Co,p13,WECC_SW
-p14,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Avista_Corp,p14,WECC_NW
-p15,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Idaho_Power_Co,p15,WECC_Basin
-p16,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Idaho_Power_Co,p16,WECC_Basin
-p17,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p17,WECC_NW
-p18,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p18,WECC_NW
-p19,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,WAPA_Upper_Great_Plains_West,p19,WECC_NW
-p20,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p20,WECC_NW
-p21,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,WY,western,WY,USA,mountain,Mountain,PacifiCorp_East,p21,WECC_Basin
-p22,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,WY,western,WY,USA,mountain,Mountain,PacifiCorp_East,p22,WECC_RM
-p23,WECC_NW,WestConnect,WestConnect_North,Mountain,WY,western,WY,USA,mountain,Mountain,WAPA_Rocky_Mountain_Region,p23,WECC_RM
-p24,WECC_NW,WestConnect,WestConnect_North,Mountain,WY,western,WY,USA,mountain,Mountain,WAPA_Rocky_Mountain_Region,p24,WECC_RM
-p25,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,UT,western,UT,USA,mountain,Mountain,PacifiCorp_East,p25,WECC_Basin
-p26,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,UT,western,UT,USA,mountain,Mountain,PacifiCorp_East,p26,WECC_Basin
-p27,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,WAPA_Desert_Southwest_Region,p27,WECC_SW
-p28,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,z28,WECC_SW
-p29,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,p29,WECC_SW
-p30,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,z28,WECC_SW
-p31,WECC_SW,WestConnect,WestConnect_South,Mountain,NM,western,NM_western,USA,mountain,Southwest,Public_Service_Co_of_New_Mexico,p31,WECC_SW
-p32,WECC_NW,WestConnect,WestConnect_North,Mountain,SD,western,SD_western,USA,northern-plains,Plains,WAPA_Rocky_Mountain_Region,p32,WECC_RM
-p33,WECC_NW,WestConnect,WestConnect_North,Mountain,CO,western,CO,USA,mountain,Mountain,Public_Service_Co_of_Colorado,p33,WECC_RM
-p34,WECC_NW,WestConnect,WestConnect_North,Mountain,CO,western,CO,USA,mountain,Mountain,Public_Service_Co_of_Colorado,p34,WECC_RM
-p35,SPP,SPP,SPP_North,West_North_Central,MT,eastern,MT_eastern,USA,mountain,Mountain,SPP,p35,SPP
-p36,SPP,SPP,SPP_North,West_North_Central,ND,eastern,ND,USA,northern-plains,Plains,SPP,p36,SPP
+p1,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Puget_Sound_Energy_Inc,p1,WECC-Northwest
+p2,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Bonneville_Power_Administration,p2,WECC-Northwest
+p3,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,Avista_Corp,p3,WECC-Northwest
+p4,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,WA,western,WA,USA,pacific,Northwest,PUD_No2_of_Grant_County,p4,WECC-Northwest
+p5,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,Bonneville_Power_Administration,p5,WECC-Northwest
+p6,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,PacifiCorp_West,p6,WECC-Northwest
+p7,WECC_NW,NorthernGrid,NorthernGrid_West,Pacific,OR,western,OR,USA,pacific,Northwest,Bonneville_Power_Administration,p7,WECC-Northwest
+p8,WECC_NW,NorthernGrid,NorthernGrid_South,Pacific,CA,western,CA,USA,pacific,California,PacifiCorp_West,p8,WECC-Northwest
+p9,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p9,WECC-California
+p10,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p10,WECC-California
+p11,WECC_CA,CAISO,CAISO,Pacific,CA,western,CA,USA,pacific,California,CAISO,p11,WECC-California
+p12,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,NV,western,NV,USA,mountain,Mountain,Nevada_Power_Co,p12,WECC-Southwest
+p13,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,NV,western,NV,USA,mountain,Mountain,Nevada_Power_Co,p13,WECC-Southwest
+p14,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Avista_Corp,p14,WECC-Northwest
+p15,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Idaho_Power_Co,p15,WECC-Basin
+p16,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,ID,western,ID,USA,mountain,Northwest,Idaho_Power_Co,p16,WECC-Basin
+p17,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p17,WECC-Northwest
+p18,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p18,WECC-Northwest
+p19,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,WAPA_Upper_Great_Plains_West,p19,WECC-Northwest
+p20,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,MT,western,MT_western,USA,mountain,Mountain,Northwestern_Energy,p20,WECC-Northwest
+p21,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,WY,western,WY,USA,mountain,Mountain,PacifiCorp_East,p21,WECC-Basin
+p22,WECC_NW,NorthernGrid,NorthernGrid_East,Mountain,WY,western,WY,USA,mountain,Mountain,PacifiCorp_East,p22,WECC-Rocky Mountain
+p23,WECC_NW,WestConnect,WestConnect_North,Mountain,WY,western,WY,USA,mountain,Mountain,WAPA_Rocky_Mountain_Region,p23,WECC-Rocky Mountain
+p24,WECC_NW,WestConnect,WestConnect_North,Mountain,WY,western,WY,USA,mountain,Mountain,WAPA_Rocky_Mountain_Region,p24,WECC-Rocky Mountain
+p25,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,UT,western,UT,USA,mountain,Mountain,PacifiCorp_East,p25,WECC-Basin
+p26,WECC_NW,NorthernGrid,NorthernGrid_South,Mountain,UT,western,UT,USA,mountain,Mountain,PacifiCorp_East,p26,WECC-Basin
+p27,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,WAPA_Desert_Southwest_Region,p27,WECC-Southwest
+p28,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,z28,WECC-Southwest
+p29,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,p29,WECC-Southwest
+p30,WECC_SW,WestConnect,WestConnect_South,Mountain,AZ,western,AZ,USA,mountain,Southwest,Arizona_Public_Service_Co,z28,WECC-Southwest
+p31,WECC_SW,WestConnect,WestConnect_South,Mountain,NM,western,NM_western,USA,mountain,Southwest,Public_Service_Co_of_New_Mexico,p31,WECC-Southwest
+p32,WECC_NW,WestConnect,WestConnect_North,Mountain,SD,western,SD_western,USA,northern-plains,Plains,WAPA_Rocky_Mountain_Region,p32,WECC-Rocky Mountain
+p33,WECC_NW,WestConnect,WestConnect_North,Mountain,CO,western,CO,USA,mountain,Mountain,Public_Service_Co_of_Colorado,p33,WECC-Rocky Mountain
+p34,WECC_NW,WestConnect,WestConnect_North,Mountain,CO,western,CO,USA,mountain,Mountain,Public_Service_Co_of_Colorado,p34,WECC-Rocky Mountain
+p35,SPP,SPP,SPP_North,West_North_Central,MT,eastern,MT_eastern,USA,mountain,Mountain,SPP,p35,MRO-SPP
+p36,SPP,SPP,SPP_North,West_North_Central,ND,eastern,ND,USA,northern-plains,Plains,SPP,p36,MRO-SPP
 p37,MISO,MISO,MISO_North,West_North_Central,ND,eastern,ND,USA,northern-plains,Plains,MISO,p37,MISO
 p38,SPP,SPP,SPP_North,West_North_Central,SD,eastern,SD_eastern,USA,northern-plains,Plains,SPP,p38,SPP
 p39,SPP,SPP,SPP_North,West_North_Central,NE,eastern,NE,USA,northern-plains,Plains,SPP,p39,SPP
