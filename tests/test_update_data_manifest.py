@@ -150,6 +150,41 @@ class ManifestTests(unittest.TestCase):
             first["files"]["stable.csv"]["md5"],
         )
 
+    def test_empty_or_null_source_normalized_to_placeholder(self):
+        norm = MODULE._normalize_sources([{"source": None}, {"source": ""}, {"source": "   "}])
+        self.assertEqual(norm, [{"source": "Unknown - document me"}] * 3)
+
+    def test_placeholder_sources_backfilled_from_seed_on_rerun(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        # Simulate an older manifest that predates documented provenance.
+        manifest["files"][SINGLE_SOURCE_FILE]["sources"] = [
+            {"source": "Unknown - document me"}
+        ]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        result = self._run(data_dir, "2026-08-11")
+        sources = result["files"][SINGLE_SOURCE_FILE]["sources"]
+        self.assertEqual(sources[0]["source"], MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"])
+        self.assertIn("source_url", sources[0])
+
+    def test_hand_edited_sources_not_overwritten_by_backfill(self):
+        # A real (non-placeholder) source must be preserved on rerun.
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        custom = {"source": "Custom documented source", "source_url": "https://example.com/x"}
+        manifest["files"][SINGLE_SOURCE_FILE]["sources"] = [custom]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        result = self._run(data_dir, "2026-08-11")
+        self.assertEqual(result["files"][SINGLE_SOURCE_FILE]["sources"], [custom])
+
+    def test_date_argument_validation(self):
+        self.assertEqual(MODULE._validated_iso_date("2026-08-11"), "2026-08-11")
+        for bad in ("2026-13-45", "08-11-2026", "not-a-date", "2026-02-30", "", "20260811"):
+            with self.assertRaises(Exception):
+                MODULE._validated_iso_date(bad)
+
 
 if __name__ == "__main__":
     unittest.main()

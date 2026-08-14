@@ -78,8 +78,9 @@ and automatic Zenodo publishing.
 
 - `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
 - `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
-  advances to the current date whenever any file is added or its contents change, and is otherwise
-  preserved from the previous run. Use this to tag a dataset release (e.g. on Zenodo).
+  advances to the current date whenever a data input is added or its contents change, and is otherwise
+  preserved from the previous run. The manifest file itself is excluded from scanning, so it never
+  triggers a `data_version` bump on its own. Use this to tag a dataset release (e.g. on Zenodo).
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
@@ -103,7 +104,9 @@ Behavior:
   moves onto `history`, and `data_version` advances (CalVer `YYYY.MM.DD`).
 - Hand-edited `sources` entries (including `source_url`) are preserved across runs; the script only fills
   them in for files it has never seen (from a built-in seed map — genuinely unknown origins are marked
-  `"Unknown - document me"` so they can be filled in).
+  `"Unknown - document me"` so they can be filled in). If an entry still carries the
+  `"Unknown - document me"` placeholder and a real seed now exists for that file, a later run upgrades the
+  placeholder to the seed, so provenance backfills automatically once it has been documented.
 - Files that are no longer present in `data/` are dropped from the manifest (with a warning).
 
 Run the tests with:

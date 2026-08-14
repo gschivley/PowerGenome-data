@@ -271,12 +271,20 @@ def calver(date_str: str) -> str:
 
 
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
-    """Return a clean list of {source[, source_url]} objects."""
+    """Return a clean list of {source[, source_url]} objects.
+
+    ``source`` is always a non-empty string: explicit null/empty values are
+    coerced to the ``"Unknown - document me"`` placeholder instead of being
+    emitted as-is (which would violate the manifest schema).
+    """
     out = []
     for s in raw_sources:
-        item: dict = {"source": s.get("source", "Unknown - document me")}
+        source = s.get("source")
+        if source is None or not str(source).strip():
+            source = "Unknown - document me"
+        item: dict = {"source": str(source).strip()}
         if s.get("source_url"):
-            item["source_url"] = s["source_url"]
+            item["source_url"] = str(s["source_url"]).strip()
         out.append(item)
     return out
 
@@ -286,10 +294,10 @@ def _prior_sources(prior: dict) -> list[dict]:
     if "sources" in prior:
         return _normalize_sources(prior["sources"])
     # Old (pre-2) format: a single ``source`` str plus an optional ``source_url`` str.
-    item: dict = {"source": prior.get("source", "Unknown - document me")}
+    item: dict = {"source": prior.get("source")}
     if prior.get("source_url"):
         item["source_url"] = prior["source_url"]
-    return [item]
+    return _normalize_sources([item])
 
 
 def build_new_entry(filename: str, md5: str, date_str: str) -> dict:
@@ -325,6 +333,13 @@ def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
     }
 
 
+def _advance_entry(filename: str, prior: dict, md5: str, date_str: str) -> dict:
+    """Like :func:`advance_entry` but applies placeholder source backfill."""
+    entry = advance_entry(prior, md5, date_str)
+    entry["sources"] = _resolve_sources(filename, prior)
+    return entry
+
+
 def _migrate_entry(prior: dict) -> dict:
     """Migrate an entry from the old ``source``/``source_url`` format to ``sources``."""
     if "sources" in prior:
@@ -334,6 +349,35 @@ def _migrate_entry(prior: dict) -> dict:
     entry.pop("source", None)
     entry.pop("source_url", None)
     return entry
+
+
+def _is_placeholder_sources(sources: list[dict]) -> bool:
+    """True when every source is the ``"Unknown - document me"`` placeholder.
+
+    Used to backfill provenance: a placeholder is a stand-in for metadata that
+    has since been documented, not a deliberate human edit.
+    """
+    if not sources:
+        return True
+    return all(
+        not str(s.get("source", "")).strip()
+        or str(s.get("source", "")).strip() == "Unknown - document me"
+        for s in sources
+    )
+
+
+def _resolve_sources(filename: str, prior: dict) -> list[dict]:
+    """Sources to keep for an existing entry, backfilling placeholders from seed.
+
+    Human-provided sources are preserved verbatim, but if the entry still carries
+    the ``"Unknown - document me"`` placeholder and a real seed now exists in
+    :data:`SOURCES`, the placeholder is upgraded so reruns converge on the seed.
+    """
+    sources = _prior_sources(prior)
+    seed = SOURCES.get(filename)
+    if _is_placeholder_sources(sources) and seed:
+        return _normalize_sources(seed)
+    return sources
 
 
 def load_existing(manifest_path: Path) -> dict:
@@ -366,10 +410,12 @@ def update_manifest(
             print(f"[added]    {filename}")
             changed_any = True
         elif prior.get("md5") == md5:
-            files[filename] = _migrate_entry(prior)
+            entry = _migrate_entry(prior)
+            entry["sources"] = _resolve_sources(filename, prior)
+            files[filename] = entry
             print(f"[unchanged] {filename}")
         else:
-            files[filename] = advance_entry(prior, md5, date_str)
+            files[filename] = _advance_entry(filename, prior, md5, date_str)
             print(f"[changed]  {filename}")
             changed_any = True
 
@@ -397,6 +443,19 @@ def update_manifest(
     print(f"\nWrote {manifest_path} (data_version={data_version})")
 
 
+def _validated_iso_date(value: str) -> str:
+    """Argparse type: require a real ``YYYY-MM-DD`` date."""
+    if not isinstance(value, str):
+        raise argparse.ArgumentTypeError(f"date must be YYYY-MM-DD, got {value!r}")
+    try:
+        datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"invalid date {value!r}: must be YYYY-MM-DD"
+        ) from None
+    return value
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build/update data/manifest.json provenance + version history."
@@ -415,6 +474,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--date",
+        type=_validated_iso_date,
         default=datetime.now(timezone.utc).date().isoformat(),
         help="Change date as YYYY-MM-DD (default: UTC today)",
     )

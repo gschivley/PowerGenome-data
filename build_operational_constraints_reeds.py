@@ -338,12 +338,19 @@ def validate_operational_constraints(df: pd.DataFrame) -> None:
     no_constraint = df["Resource"].astype(str).str.contains(
         r"batter|pumped|hyd|imports|Run of River", case=False, regex=True
     )
-    required = ["Min_Power", "Ramp_Up_Percentage", "Ramp_Dn_Percentage"]
+    required = [
+        "Min_Power",
+        "Ramp_Up_Percentage",
+        "Ramp_Dn_Percentage",
+        "Up_Time",
+        "Down_Time",
+    ]
     missing_mask = df.loc[~no_constraint, required].isna().any(axis=1)
     bad = df.loc[~no_constraint].loc[missing_mask, "Resource"].tolist()
     if bad:
         raise ValueError(
-            f"{len(bad)} thermal-row(s) missing Min_Power/ramp values: {bad}"
+            f"{len(bad)} thermal-row(s) missing Min_Power/ramp/up-downtime "
+            f"values: {bad}"
         )
 
 

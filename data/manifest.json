@@ -202,7 +202,8 @@
       "md5": "4c65c88129c4db3d0df180c3eb28a3ec",
       "sources": [
         {
-          "source": "Unknown - document me"
+          "source": "NREL ATB 2024 v4",
+          "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50"
         }
       ],
       "version": "2026-08-11"
@@ -213,7 +214,8 @@
       "md5": "356c16b73d98fd6ac2dcf95510701630",
       "sources": [
         {
-          "source": "Unknown - document me"
+          "source": "NREL ATB 2024 v4",
+          "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50"
         }
       ],
       "version": "2026-08-11"
@@ -242,6 +244,6 @@
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-08-14T17:40:38.996263+00:00",
+  "generated_at_utc": "2026-08-14T18:38:10.294325+00:00",
   "manifest_version": 1
 }

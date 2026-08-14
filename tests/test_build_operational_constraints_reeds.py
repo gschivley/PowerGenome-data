@@ -234,6 +234,14 @@ class OperationalConstraintsTests(unittest.TestCase):
                 make_pcm_df().assign(tech=lambda d: d["tech"].replace({"gas-cc": "ghost-tech"}))
             )
 
+    def test_thermal_row_without_up_down_time_raises(self):
+        # Thermal rows must have Up_Time and Down_Time; a missing value must fail.
+        df = MODULE.build_operational_constraints(make_pcm_df())
+        df.loc[df["Resource"] == "gas-cc", "Up_Time"] = np.nan
+        with self.assertRaises(ValueError) as ctx:
+            MODULE.validate_operational_constraints(df)
+        self.assertIn("gas-cc", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
