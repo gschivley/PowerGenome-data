@@ -123,9 +123,12 @@ manifest described above.
 
 ### What it does
 
-- Reads `data/manifest.json` and uses its top-level `data_version` (CalVer `YYYY.MM.DD`) as the Zenodo
-  `version`.
-- Builds the Zenodo description from the manifest: a per-file table of each data element's own
+- Reads `data/manifest.json` and derives the Zenodo `version` from its top-level `data_version`
+  (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
+  that multiple releases on the same date never share a version number. The suffix is computed by
+  counting already-published versions of the dataset's concept carrying the same `data_version`.
+- Builds the Zenodo description from the manifest: a change note listing the files **added**,
+  **updated**, and **removed** in this release, plus a per-file table of each data element's own
   `version` (the date that element was last updated), `last_updated`, `md5`, and its `sources`.
 - Uploads **only files that changed** since the last published release (compared by `md5`), so the
   initial release uploads everything and later releases upload just the new/updated files. Files that
@@ -165,6 +168,7 @@ Without `--publish` the script leaves the deposition as a draft. If a draft alre
 ### Release state (`.zenodo.json`)
 
 On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
-`zenodo_release` block tracking the published `data_version`, the `deposition_id`, the resolved `doi`,
-and the per-file `md5`s that were released. `.zenodo.json` contains no secrets and is committed to the
-repo so later runs know what changed and can create new versions against the same record.
+`zenodo_release` block tracking the published `data_version`, the `release_version` (the version string
+actually recorded on Zenodo, suffix included), the `deposition_id`, the resolved `doi`, and the per-file
+`md5`s that were released. `.zenodo.json` contains no secrets and is committed to the repo so later runs
+know what changed and can create new versions against the same record.

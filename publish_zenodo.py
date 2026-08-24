@@ -3,8 +3,10 @@
 
 The release is driven entirely by data/manifest.json:
   * The Zenodo release version is the manifest's top-level "data_version"
-    (calendar version, e.g. "2026.08.14").
-  * The Zenodo description is generated from the manifest: one
+    with a sequential per-day suffix, e.g. "2026.08.24.v1", "2026.08.24.v2",
+    so multiple releases on the same date get distinct version numbers.
+  * The Zenodo description is generated from the manifest: a change note
+    listing files added, updated, and removed in this release, plus one
     file/version/last-updated/sources table per data element, using each
     file's own "version" key (the date that data element was last updated).
   * Only files whose md5 changed since the last release are uploaded. The
@@ -35,6 +37,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import urllib.parse
 
 try:
     import requests
@@ -163,10 +166,19 @@ def describe_file(filename: str, info: dict) -> str:
     )
 
 
-def build_description(manifest: dict, updated_files: list[str], initial: bool) -> str:
+def build_description(
+    manifest: dict,
+    added: list[str],
+    updated: list[str],
+    removed: list[str],
+    initial: bool,
+) -> str:
     data_version = manifest["data_version"]
     files = manifest["files"]
     esc = html.escape
+
+    def names_html(names: list[str]) -> str:
+        return "".join(f"<li><code>{esc(name)}</code></li>" for name in names)
 
     if initial:
         change_note = (
@@ -174,11 +186,20 @@ def build_description(manifest: dict, updated_files: list[str], initial: bool) -
             f"All {len(files)} files are new in this version.</p>"
         )
     else:
-        names = "".join(f"<li><code>{esc(name)}</code></li>" for name in updated_files)
-        change_note = (
-            f"<p><strong>Files updated in this release:</strong></p>"
-            f"<ul>{names if names else '<li>None</li>'}</ul>"
-        )
+        sections = []
+        if added:
+            sections.append(
+                f"<p><strong>Files added in this release:</strong></p><ul>{names_html(added)}</ul>"
+            )
+        if updated:
+            sections.append(
+                f"<p><strong>Files updated in this release:</strong></p><ul>{names_html(updated)}</ul>"
+            )
+        if removed:
+            sections.append(
+                f"<p><strong>Files removed in this release:</strong></p><ul>{names_html(removed)}</ul>"
+            )
+        change_note = "".join(sections) or "<p><em>No file changes in this release.</em></p>"
 
     file_sections = "\n".join(
         describe_file(filename, info)
@@ -212,6 +233,39 @@ def raise_for_status(response: requests.Response, action: str) -> None:
     except requests.HTTPError as exc:
         detail = response.text.strip()
         raise SystemExit(f"{action} failed with HTTP {response.status_code}: {detail}") from exc
+
+
+def next_release_version(
+    session: requests.Session,
+    base_url: str,
+    data_version: str,
+    conceptrecid,
+) -> str:
+    """Return the Zenodo version string for a release of ``data_version``.
+
+    The base is the manifest data_version (e.g. "2026.08.14") with a
+    sequential per-day suffix so multiple releases on the same date never
+    share a version number (e.g. "2026.08.14.v1", "2026.08.14.v2", ...).
+    The suffix is the count of already-published versions of this concept
+    carrying the same data_version plus one, so it stays unique without
+    relying on local state. A brand-new deposition (no concept yet) gets
+    ".v1".
+    """
+    if not conceptrecid:
+        return f"{data_version}.v1"
+    query = urllib.parse.quote(f'conceptrecid:"{conceptrecid}"')
+    response = session.get(
+        f"{base_url}/records/?q={query}&all_versions=true&size=100",
+        timeout=120,
+    )
+    raise_for_status(response, "Listing published versions")
+    prefix = f"{data_version}."
+    count = 0
+    for hit in response.json().get("hits", {}).get("hits", []):
+        version = (hit.get("metadata") or {}).get("version")
+        if version and (version == data_version or version.startswith(prefix)):
+            count += 1
+    return f"{data_version}.v{count + 1}"
 
 
 def create_deposition(session: requests.Session, base_url: str) -> dict:
@@ -373,18 +427,23 @@ def run_release(args) -> None:
     validate_constraints(local_paths)
 
     # Determine which files were updated in this release.
-    changed = [
+    added = [name for name in manifest_files if name not in released_files]
+    updated = [
         name
         for name, info in manifest_files.items()
-        if released_files.get(name) != info.get("md5")
+        if name in released_files and released_files[name] != info.get("md5")
     ]
+    changed = added + updated
     removed = [name for name in released_files if name not in manifest_files]
     initial = not released_files
 
     log(f"data version: {data_version}")
-    log(f"updated files ({len(changed)}): {', '.join(changed) if changed else 'none'}")
+    if added:
+        log(f"files added ({len(added)}): {', '.join(added)}")
+    if updated:
+        log(f"files updated ({len(updated)}): {', '.join(updated)}")
     if removed:
-        log(f"files dropped from manifest: {', '.join(removed)}")
+        log(f"files dropped from manifest ({len(removed)}): {', '.join(removed)}")
     if not changed and not removed:
         log("no file changes detected since last release; the description/version may still be updated")
 
@@ -406,6 +465,10 @@ def run_release(args) -> None:
 
     deposition_id = str(deposition["id"])
     bucket_url = deposition["links"]["bucket"]
+    release_version = next_release_version(
+        session, base_url, data_version, deposition.get("conceptrecid")
+    )
+    log(f"release version: {release_version}")
 
     # Remove files no longer part of the manifest (covers released-then-dropped
     # files and any leftovers in a resumed draft / previous version).
@@ -434,7 +497,7 @@ def run_release(args) -> None:
             time.sleep(args.sleep_seconds)
 
     # Build + update metadata.
-    description = build_description(manifest, changed, initial)
+    description = build_description(manifest, added, updated, removed, initial)
     project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
     creators = project_metadata.get("creators") or default_creators()
     metadata = dict(project_metadata)
@@ -444,7 +507,7 @@ def run_release(args) -> None:
             "upload_type": project_metadata.get("upload_type") or "dataset",
             "access_right": project_metadata.get("access_right") or "open",
             "creators": creators,
-            "version": data_version,
+            "version": release_version,
             "description": description,
         }
     )
@@ -465,6 +528,7 @@ def run_release(args) -> None:
         "mode": "publish" if published else "draft",
         "environment": "production" if base_url == PRODUCTION_BASE else "sandbox",
         "data_version": data_version,
+        "release_version": release_version,
         "deposition_id": deposition_id,
         "draft_url": draft_page_url(base_url, deposition_id),
         "pre_reserved_doi": pre_reserved_doi(updated) or pre_reserved_doi(deposition),
@@ -482,6 +546,7 @@ def run_release(args) -> None:
     if save_state:
         new_release = {
             "data_version": data_version,
+            "release_version": release_version,
             "deposition_id": deposition_id,
             "published": published,
             "doi": publish_payload.get("doi") if published else None,
