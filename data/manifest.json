@@ -198,17 +198,6 @@
       ],
       "version": "2026-08-11"
     },
-    "transmission_capacity_merged.csv": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "md5": "997c77e87202c9e96b852b154dd13d78",
-      "sources": [
-        {
-          "source": "Unknown - document me"
-        }
-      ],
-      "version": "2026-08-11"
-    },
     "transmission_capacity_reeds.csv": {
       "history": [],
       "last_updated": "2026-08-11",
