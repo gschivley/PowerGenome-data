@@ -168,7 +168,13 @@ Without `--publish` the script leaves the deposition as a draft. If a draft alre
 ### Release state (`.zenodo.json`)
 
 On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
-`zenodo_release` block tracking the published `data_version`, the `release_version` (the version string
-actually recorded on Zenodo, suffix included), the `deposition_id`, the resolved `doi`, and the per-file
-`md5`s that were released. `.zenodo.json` contains no secrets and is committed to the repo so later runs
-know what changed and can create new versions against the same record.
+`zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
+the `release_version` (the version string actually recorded on Zenodo, suffix included), the
+`deposition_id`, the resolved `doi`, and the per-file `md5`s that were released. `.zenodo.json` contains no
+secrets and is committed to the repo so later runs know what changed and can create new versions against
+the same record.
+
+The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
+suffix counters are independent, so the script records which environment a release belongs to and ignores
+stored release state from the other environment (keeping shared metadata such as creators). This lets you
+publish to both sites from the same `.zenodo.json` without one release interfering with the other.

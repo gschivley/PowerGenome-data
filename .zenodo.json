@@ -13,6 +13,7 @@
     "version": "2026.08.14"
   },
   "zenodo_release": {
+    "environment": "sandbox",
     "data_version": "2026.08.14",
     "deposition_id": "590994",
     "doi": "10.5072/zenodo.590994",

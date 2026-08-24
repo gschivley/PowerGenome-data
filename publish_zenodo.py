@@ -401,7 +401,16 @@ def run_release(args) -> None:
     data_dir = manifest_path.parent
 
     state = load_state()
+    environment = "production" if base_url == PRODUCTION_BASE else "sandbox"
     released = state.get("zenodo_release", {})
+    # Release state is environment-specific: deposition ids, DOIs, and the
+    # version suffix counter differ between sandbox and production. Treat a
+    # stored release from the *other* environment as absent so each environment
+    # starts its own first release, while keeping shared metadata like creators.
+    stored_environment = released.get("environment", "sandbox")
+    if released and stored_environment != environment:
+        log(f"stored release state is for {stored_environment}, target is {environment}; ignoring it")
+        released = {}
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
@@ -526,7 +535,7 @@ def run_release(args) -> None:
 
     summary = {
         "mode": "publish" if published else "draft",
-        "environment": "production" if base_url == PRODUCTION_BASE else "sandbox",
+        "environment": environment,
         "data_version": data_version,
         "release_version": release_version,
         "deposition_id": deposition_id,
@@ -545,6 +554,7 @@ def run_release(args) -> None:
     save_state = args.publish or args.save_state
     if save_state:
         new_release = {
+            "environment": environment,
             "data_version": data_version,
             "release_version": release_version,
             "deposition_id": deposition_id,
