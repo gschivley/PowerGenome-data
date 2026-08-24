@@ -13,3 +13,6 @@ site/
 .venv
 
 *.DS_Store
+
+# Local secrets (e.g., Zenodo API token). Never commit.
+.env

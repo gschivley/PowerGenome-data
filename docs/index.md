@@ -49,8 +49,8 @@ Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other 
 
 `data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
 updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
-This is the provenance + change-detection layer that will eventually drive scheduled update workflows
-and automatic Zenodo publishing.
+This is the provenance + change-detection layer: it drives `publish_zenodo.py` (below), which publishes
+manifest-listed files to Zenodo and can be wired into scheduled update workflows.
 
 ### Read it
 
@@ -114,3 +114,57 @@ Run the tests with:
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Publishing to Zenodo
+
+`publish_zenodo.py` publishes the manifest-listed files in `data/` to a Zenodo deposition and keeps
+the Zenodo record in sync with the manifest across releases. It is the publishing counterpart to the
+manifest described above.
+
+### What it does
+
+- Reads `data/manifest.json` and uses its top-level `data_version` (CalVer `YYYY.MM.DD`) as the Zenodo
+  `version`.
+- Builds the Zenodo description from the manifest: a per-file table of each data element's own
+  `version` (the date that element was last updated), `last_updated`, `md5`, and its `sources`.
+- Uploads **only files that changed** since the last published release (compared by `md5`), so the
+  initial release uploads everything and later releases upload just the new/updated files. Files that
+  were released before but are no longer in the manifest are removed from the draft.
+- Creates a **new version** of the existing record on subsequent releases, so Zenodo keeps the full file
+  history. The first release creates a new deposition.
+- Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
+
+### Requirements
+
+- A plain Python environment with the `requests` package (e.g. `uv run python publish_zenodo.py` or a
+  `.venv` with `requests` installed).
+- A Zenodo personal access token with `deposit:write` and `deposit:actions` scopes, supplied via the
+  `ZENODO_TOKEN` environment variable (or `ZENODO_SANDBOX_API_KEY` for sandbox). It may be loaded from a
+  local `.env` file without extra arguments — `.env` is git-ignored and never committed.
+
+### Usage
+
+```bash
+# Show what the release would contain (no API calls)
+uv run python publish_zenodo.py --dry-run
+
+# Create/update the Zenodo draft (sandbox) and print the draft URL + DOI.
+uv run python publish_zenodo.py
+
+# Publish the draft (irreversible in production) and record release state.
+uv run python publish_zenodo.py --publish
+
+# Publish to production Zenodo.
+uv run python publish_zenodo.py --publish --production
+```
+
+Without `--publish` the script leaves the deposition as a draft. If a draft already exists it is resumed
+(no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
+`--publish` after an identical release is a no-op.
+
+### Release state (`.zenodo.json`)
+
+On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
+`zenodo_release` block tracking the published `data_version`, the `deposition_id`, the resolved `doi`,
+and the per-file `md5`s that were released. `.zenodo.json` contains no secrets and is committed to the
+repo so later runs know what changed and can create new versions against the same record.
