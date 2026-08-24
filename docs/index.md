@@ -21,6 +21,7 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | `merge_transmission_capacity.py` | `data/transmission_capacity_reeds.csv` | ReEDS AC and non-AC transmission CSVs from NREL GitHub | Downloads and caches the raw files, averages forward/reverse AC MW, sums AC+non-AC per region pair, keeps notes. |
 | `build_emission_policies.py` | `emission_policies_wecc.csv` (path hard-coded) | ESR Excel workbook (`ESR_Inputs_ReEDS_WECC.xlsx`); `settings/model_definition.yml` for model years and aggregations | Pop-weighted ESR values by region/year; enforces CES ≥ RPS when both apply. |
 | `fetch_gdp_ipd_data.py` | `data/dollar_year_adjustment.csv` | FRED (series `A191RD3A086NBEA`); BEA NIPA API (fallback, requires `BEA_API_KEY` env var) | Fetches annual GDP Implicit Price Deflator (GDP-IPD, index 2017=100) from 1980 onward. GDP-IPD is used by AEO and ATB for dollar-year adjustments. Intended to supersede `cpi_data.csv`; some configs/consumers may still reference the older file until migration is complete. Run weekly via GitHub Actions. |
+| `build_operational_constraints_reeds.py` | `data/operational_constraints_reeds.csv` | ReEDS `pcm_defaults.json` (`inputs/plant_characteristics/` from NREL GitHub) | Builds PowerGenome operational constraints from ReEDS PCM defaults: drops all CSP technologies, maps ReEDS tech names to ATB/EIA new-build names (see `TECH_MAP` in the script), applies battery/pumped-storage efficiency and duration overrides, and appends curated existing-technology rows preserved from the historical file. |
 
 ## Running the builders
 
@@ -35,6 +36,7 @@ uv run python extract_location_variation.py
 uv run python merge_transmission_capacity.py
 uv run python build_emission_policies.py
 uv run python fetch_gdp_ipd_data.py
+uv run python build_operational_constraints_reeds.py  # optional --pcm-path <local pcm_defaults.json> to avoid downloading
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
@@ -42,3 +44,73 @@ uv run python fetch_gdp_ipd_data.py
 ## Data files not regenerated here
 
 Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above.
+
+## Versioned data-source manifest (`data/manifest.json`)
+
+`data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
+updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
+This is the provenance + change-detection layer that will eventually drive scheduled update workflows
+and automatic Zenodo publishing.
+
+### Read it
+
+```json
+{
+  "manifest_version": 1,
+  "data_version": "2026.08.11",
+  "generated_at_utc": "2026-08-11T19:55:29.157504+00:00",
+  "files": {
+    "fuel_prices.parquet": {
+      "sources": [
+        {
+          "source": "EIA Annual Energy Outlook ...",
+          "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
+        }
+      ],
+      "last_updated": "2026-08-11",
+      "version": "2026-08-11",
+      "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "history": []
+    }
+  }
+}
+```
+
+- `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
+- `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
+  advances to the current date whenever a data input is added or its contents change, and is otherwise
+  preserved from the previous run. The manifest file itself is excluded from scanning, so it never
+  triggers a `data_version` bump on its own. Use this to tag a dataset release (e.g. on Zenodo).
+- Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
+  (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
+  the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
+  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash, and
+  `history` holds prior `{version, last_updated, md5}` entries for every change that has been seen.
+
+### Update it
+
+Run `update_data_manifest.py` from the repo root after any data file changes:
+
+```bash
+uv run python update_data_manifest.py            # rescan data/ and bump versions on change
+uv run python update_data_manifest.py --dry-run  # preview changes without writing
+uv run python update_data_manifest.py --date 2026-08-11  # override the change date (reproducible runs)
+```
+
+Behavior:
+
+- Unchanged files keep their existing version, date, and source.
+- Changed or newly added files get `version`/`last_updated` set to the current date, the previous entry
+  moves onto `history`, and `data_version` advances (CalVer `YYYY.MM.DD`).
+- Hand-edited `sources` entries (including `source_url`) are preserved across runs; the script only fills
+  them in for files it has never seen (from a built-in seed map — genuinely unknown origins are marked
+  `"Unknown - document me"` so they can be filled in). If an entry still carries the
+  `"Unknown - document me"` placeholder and a real seed now exists for that file, a later run upgrades the
+  placeholder to the seed, so provenance backfills automatically once it has been documented.
+- Files that are no longer present in `data/` are dropped from the manifest (with a warning).
+
+Run the tests with:
+
+```bash
+python -m unittest discover -s tests
+```
