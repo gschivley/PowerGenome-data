@@ -296,17 +296,23 @@ def draft_page_url(base_url: str, deposition_id: str) -> str:
     return f"{host}/deposit/{deposition_id}"
 
 
-def existing_draft_files(session: requests.Session, deposition: dict) -> dict[str, str]:
-    """Map of filename -> md5 for files already present in a draft deposition."""
+def existing_draft_files(session: requests.Session, deposition: dict) -> dict[str, tuple[str, str]]:
+    """Map of filename -> (file id, md5) for files already present in a draft.
+
+    The current Zenodo deposit-files API removes a file by its internal ``id``
+    (a UUID present in each file object); deleting by filename returns 500.
+    A filename fallback is kept for API variants without an explicit ``id``.
+    """
     response = session.get(deposition["links"]["files"], timeout=120)
     raise_for_status(response, "Listing draft files")
-    mapping: dict[str, str] = {}
+    mapping: dict[str, tuple[str, str]] = {}
     for item in response.json():
         name = item.get("key") or item.get("filename")
+        file_id = item.get("id") or name
         checksum = item.get("checksum", "")
         if checksum.startswith("md5:"):
             checksum = checksum.split(":", 1)[1]
-        mapping[name] = checksum
+        mapping[name] = (file_id, checksum)
     return mapping
 
 
@@ -404,10 +410,10 @@ def run_release(args) -> None:
     # Remove files no longer part of the manifest (covers released-then-dropped
     # files and any leftovers in a resumed draft / previous version).
     present = existing_draft_files(session, deposition)
-    for filename in present:
+    for filename, (file_id, _checksum) in present.items():
         if filename in local_paths:
             continue
-        file_url = deposition["links"]["files"] + f"/{filename}"
+        file_url = deposition["links"]["files"] + "/" + file_id
         log(f"removing {filename} (no longer in manifest)")
         delete_file(session, file_url, filename)
 
@@ -416,7 +422,8 @@ def run_release(args) -> None:
     uploads = []
     for index, (filename, local_path) in enumerate(local_paths.items()):
         local_md5 = local_md5s[filename]
-        if present.get(filename) == local_md5:
+        _, draft_checksum = present.get(filename, (None, None))
+        if draft_checksum == local_md5:
             log(f"already up to date in draft, skipping: {filename}")
             continue
         log(f"uploading {filename} ({local_path.stat().st_size / 1e6:.1f} MB)")
