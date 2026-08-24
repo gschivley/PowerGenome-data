@@ -88,28 +88,6 @@
       ],
       "version": "2026-08-11"
     },
-    "network_costs_EI_PJM.csv": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "md5": "471fb998e2a3826cf6d21b6a04ef45fc",
-      "sources": [
-        {
-          "source": "Unknown - document me"
-        }
-      ],
-      "version": "2026-08-11"
-    },
-    "network_costs_ReEDS.csv": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "md5": "72a91ff83f1ef9f70fc9cbb1074d21ad",
-      "sources": [
-        {
-          "source": "Unknown - document me"
-        }
-      ],
-      "version": "2026-08-11"
-    },
     "operational_constraints_reeds.csv": {
       "history": [
         {
