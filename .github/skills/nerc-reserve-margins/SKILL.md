@@ -12,7 +12,8 @@ Downloads the newest NERC Long-Term Reliability Assessment (LTRA), extracts the 
 `Reference Margin Level (%)` row from each detailed assessment-area table, converts percentages
 to decimal fractions, and writes a tidy CSV with `region`, `planning_year`, and `value`.
 Each region's last published value is carried forward through 2050. The exact report URL and
-report year are written to a JSON vintage sidecar.
+report year corresponding to the extraction are recorded in the Zenodo description when the
+data is published.
 
 This skill is independent of the ReEDS BA-level `data/reserve_margins.csv` workflow. It keeps
 NERC assessment-area names and does not map them to balancing areas or model regions.
@@ -29,7 +30,6 @@ NERC assessment-area names and does not map them to balancing areas or model reg
    caches it under `cache_data/nerc_ltra/`, and writes:
 
    - `data/nerc_reserve_margins.csv`
-   - `data/nerc_reserve_margins_vintage.json`
 
 2. For a reproducible historical extraction, provide the exact PDF URL:
 
@@ -39,7 +39,7 @@ NERC assessment-area names and does not map them to balancing areas or model reg
      --report-year 2025
    ```
 
-3. Use `--output`, `--vintage-output`, `--cache-dir`, and `--target-year` to override paths or
+3. Use `--output`, `--cache-dir`, and `--target-year` to override paths or
    the terminal year. The report's annual table headers are used as planning years. For a
    winter table with headers such as `2026-2027`, the first year (`2026`) is used as the
    planning year for that value.
@@ -56,9 +56,6 @@ region,planning_year,value
 sorted by region and planning year, have unique `(region, planning_year)` keys, and extend from
 each region's last published year through 2050 using that region's final published value.
 
-The vintage JSON records `report_year`, `source_url`, retrieval time, units, source metric,
-assessment-area count, and output year bounds.
-
 ## Verification
 
 Check the generated file with pandas:
@@ -72,8 +69,7 @@ Confirm that:
 - the columns are exactly `region`, `planning_year`, and `value`;
 - all values are numeric decimal fractions in `[0, 1]`;
 - `(region, planning_year)` is unique;
-- every region reaches the requested target year;
-- the vintage JSON identifies the exact PDF used; and
+- every region reaches the requested target year; and
 - the MISO 2030 value agrees with the corresponding report table.
 
 The extractor fails rather than producing partial data when it cannot identify a region,

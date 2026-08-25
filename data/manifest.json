@@ -83,18 +83,6 @@
       ],
       "version": "2026-08-11"
     },
-    "nerc_reserve_margins_vintage.json": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "license": "cc-zero",
-      "md5": "f10aef2af51faa5d227ec513262077c2",
-      "sources": [
-        {
-          "source": "Sidecar vintage metadata (report year, source URL, retrieval timestamp) written alongside nerc_reserve_margins.csv by the NERC reserve margins extractor."
-        }
-      ],
-      "version": "2026-08-11"
-    },
     "operational_constraints_reeds.csv": {
       "history": [
         {

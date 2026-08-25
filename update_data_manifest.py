@@ -116,15 +116,6 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             ),
         },
     ],
-    "nerc_reserve_margins_vintage.json": [
-        {
-            "source": (
-                "Sidecar vintage metadata (report year, source URL, retrieval timestamp) "
-                "written alongside nerc_reserve_margins.csv by the NERC reserve margins "
-                "extractor."
-            ),
-        },
-    ],
     "operational_constraints_reeds.csv": [
         {
             "source": (

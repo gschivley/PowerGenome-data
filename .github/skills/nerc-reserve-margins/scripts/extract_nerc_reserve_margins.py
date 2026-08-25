@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -21,7 +19,6 @@ DEFAULT_PDF_URL = (
     "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf"
 )
 DEFAULT_OUTPUT = Path("data/nerc_reserve_margins.csv")
-DEFAULT_VINTAGE = Path("data/nerc_reserve_margins_vintage.json")
 DEFAULT_CACHE_DIR = Path("cache_data/nerc_ltra")
 REQUEST_TIMEOUT_SECONDS = 60
 TARGET_YEAR = 2050
@@ -214,28 +211,10 @@ def download_pdf(url: str, cache_dir: Path) -> Path:
     return path
 
 
-def write_outputs(
-    df: pd.DataFrame,
-    output_path: Path,
-    vintage_path: Path,
-    source_url: str,
-    report_year: int,
-) -> None:
-    """Write the tidy CSV and source-vintage metadata."""
+def write_outputs(df: pd.DataFrame, output_path: Path) -> None:
+    """Write the tidy CSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    vintage_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
-    vintage = {
-        "report_year": report_year,
-        "source_url": source_url,
-        "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
-        "value_units": "decimal_fraction",
-        "source_metric": "Reference Margin Level (%)",
-        "assessment_area_count": int(df["region"].nunique()),
-        "planning_year_start": int(df["planning_year"].min()),
-        "planning_year_end": int(df["planning_year"].max()),
-    }
-    vintage_path.write_text(json.dumps(vintage, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> None:
@@ -246,7 +225,6 @@ def main() -> None:
     )
     parser.add_argument("--assessment-url", default=DEFAULT_ASSESSMENTS_URL)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--vintage-output", type=Path, default=DEFAULT_VINTAGE)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--target-year", type=int, default=TARGET_YEAR)
     args = parser.parse_args()
@@ -260,7 +238,7 @@ def main() -> None:
         source_url, report_year = resolve_pdf_url(args.assessment_url)
     pdf_path = download_pdf(source_url, args.cache_dir)
     extracted = extend_to_target(parse_pdf(pdf_path), args.target_year)
-    write_outputs(extracted, args.output, args.vintage_output, source_url, report_year)
+    write_outputs(extracted, args.output)
     print(
         f"Saved {len(extracted)} rows for {extracted['region'].nunique()} regions to {args.output}"
     )
