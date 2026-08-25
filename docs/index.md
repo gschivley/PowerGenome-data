@@ -70,6 +70,7 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
       "last_updated": "2026-08-11",
       "version": "2026-08-11",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "license": "public-domain",
       "history": []
     }
   }
@@ -84,8 +85,10 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
-  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash, and
-  `history` holds prior `{version, last_updated, md5}` entries for every change that has been seen.
+  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash,
+  `license` is a human-maintained identifier for the file's underlying-source license
+  (`public-domain`, `cc-by-4.0`, or `cc-zero`), and `history` holds prior
+  `{version, last_updated, md5}` entries for every change that has been seen.
 
 ### Update it
 
@@ -107,6 +110,9 @@ Behavior:
   `"Unknown - document me"` so they can be filled in). If an entry still carries the
   `"Unknown - document me"` placeholder and a real seed now exists for that file, a later run upgrades the
   placeholder to the seed, so provenance backfills automatically once it has been documented.
+- Hand-maintained `license` values are preserved when a file changes (only `version`/`last_updated`/`md5`
+  are rewritten); files that carry no `license` are flagged with a warning so the attribution can be
+  added.
 - Files that are no longer present in `data/` are dropped from the manifest (with a warning).
 
 Run the tests with:
@@ -128,8 +134,9 @@ manifest described above.
   that multiple releases on the same date never share a version number. The suffix is computed by
   counting already-published versions of the dataset's concept carrying the same `data_version`.
 - Builds the Zenodo description from the manifest: a change note listing the files **added**,
-  **updated**, and **removed** in this release, plus a per-file table of each data element's own
-  `version` (the date that element was last updated), `last_updated`, `md5`, and its `sources`.
+  **updated**, and **removed** in this release, a licensing paragraph (the compilation is CC0 while
+  individual files retain their underlying-source license), plus a per-file table of each data element's own
+  `version` (the date that element was last updated), `last_updated`, `md5`, its `license`, and its `sources`.
 - Uploads **only files that changed** since the last published release (compared by `md5`), so the
   initial release uploads everything and later releases upload just the new/updated files. Files that
   were released before but are no longer in the manifest are removed from the draft.
@@ -170,9 +177,11 @@ Without `--publish` the script leaves the deposition as a draft. If a draft alre
 On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
 `zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
 the `release_version` (the version string actually recorded on Zenodo, suffix included), the
-`deposition_id`, the resolved `doi`, and the per-file `md5`s that were released. `.zenodo.json` contains no
-secrets and is committed to the repo so later runs know what changed and can create new versions against
-the same record.
+`deposition_id`, the resolved `doi`, and the per-file `md5`s that were released. The metadata block carries
+the fields applied to every release — `title`, `creators`, `access_right`, and the compilation `license`
+(e.g. `cc-zero`) — while each file's source license is recorded in `data/manifest.json` and surfaced in the
+description. `.zenodo.json` contains no secrets and is committed to the repo so later runs know what
+changed and can create new versions against the same record.
 
 The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
 suffix counters are independent, so the script records which environment a release belongs to and ignores

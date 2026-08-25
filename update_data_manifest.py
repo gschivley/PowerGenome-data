@@ -324,13 +324,18 @@ def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
             "md5": prior["md5"],
         }
     )
-    return {
+    entry = {
         "sources": _prior_sources(prior),
         "last_updated": date_str,
         "version": date_str,
         "md5": md5,
         "history": history,
     }
+    # The human-maintained license attribution is not a content hash and must
+    # survive a data update, unlike version/last_updated/md5.
+    if prior.get("license"):
+        entry["license"] = prior["license"]
+    return entry
 
 
 def _advance_entry(filename: str, prior: dict, md5: str, date_str: str) -> dict:
@@ -418,6 +423,8 @@ def update_manifest(
             files[filename] = _advance_entry(filename, prior, md5, date_str)
             print(f"[changed]  {filename}")
             changed_any = True
+        if not files[filename].get("license"):
+            print(f"[warn]     {filename}: no 'license' set (add one manually)")
 
     # Drop files that no longer exist in data/.
     for filename in sorted(set(old_files) - set(files)):

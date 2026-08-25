@@ -143,6 +143,13 @@ def default_creators() -> list[dict]:
 # Description generation from the manifest
 # ---------------------------------------------------------------------------
 
+LICENSE_LABELS = {
+    "cc-zero": "CC0 (public domain dedication)",
+    "cc-by-4.0": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "public-domain": "Public domain (U.S. government)",
+}
+
+
 def describe_file(filename: str, info: dict) -> str:
     esc = html.escape
     sources = info.get("sources") or []
@@ -155,12 +162,15 @@ def describe_file(filename: str, info: dict) -> str:
         else:
             source_items.append(f"<li><strong>Source:</strong> {text}</li>")
     sources_html = "<ul>" + "".join(source_items) + "</ul>" if source_items else "<em>No source documented.</em>"
+    license_key = info.get("license") or ""
+    license_label = LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
         f"<tr><th>Data element version</th><td>{esc(info.get('version') or 'Unknown')}</td></tr>"
         f"<tr><th>Last updated</th><td>{esc(info.get('last_updated') or 'Unknown')}</td></tr>"
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
+        f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
         f"</table>"
         f"{sources_html}"
     )
@@ -211,6 +221,13 @@ def build_description(
         f"corresponds to <code>data/manifest.json</code> data version "
         f"<code>{esc(data_version)}</code>.</p>"
         f"{change_note}"
+        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
+        "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
+        "public data from a variety of sources, each file retains the license of its "
+        "underlying source: U.S. government works (e.g. EIA, BEA, FRED) are in the public "
+        "domain, data derived from ReEDS / NREL (including the NREL ATB and PUDL) is "
+        "Creative Commons Attribution 4.0 International (CC BY 4.0), and NERC LTRA data is "
+        "CC BY 4.0. See each file's License row below.</p>"
         "<p>Each data element's own version key records when that element was "
         "last updated; the per-file sources below document where it came from.</p>"
         f"{file_sections}"

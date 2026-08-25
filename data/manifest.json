@@ -4,6 +4,7 @@
     "cpi_data.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "public-domain",
       "md5": "0dcf40c82a204b361f9da0fdc7070550",
       "sources": [
         {
@@ -16,6 +17,7 @@
     "distributed_capacity.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "d8c206063044ea93edb80e8cae100357",
       "sources": [
         {
@@ -32,6 +34,7 @@
     "distributed_profiles.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "39a54bb4fc2bf42287d66ceadb90714f",
       "sources": [
         {
@@ -44,6 +47,7 @@
     "dollar_year_adjustment.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "public-domain",
       "md5": "2e819d4d7f465d8d273b2da57f0a2fd1",
       "sources": [
         {
@@ -56,6 +60,7 @@
     "fuel_prices.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "public-domain",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
       "sources": [
         {
@@ -68,6 +73,7 @@
     "nerc_reserve_margins.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "b8ac4f0a59127c9e483d9b59aaad78b4",
       "sources": [
         {
@@ -80,6 +86,7 @@
     "nerc_reserve_margins_vintage.json": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-zero",
       "md5": "f10aef2af51faa5d227ec513262077c2",
       "sources": [
         {
@@ -97,6 +104,7 @@
         }
       ],
       "last_updated": "2026-08-14",
+      "license": "cc-by-4.0",
       "md5": "75b7e22488de8048e56c1e1f81c359f9",
       "sources": [
         {
@@ -109,6 +117,7 @@
     "plant_region_map.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "0d8a6f43695c230a418827820f071dd8",
       "sources": [
         {
@@ -125,6 +134,7 @@
     "reeds_generators_transformed.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "1dfff9c035410c487687ee9da9c85395",
       "sources": [
         {
@@ -141,6 +151,7 @@
     "reeds_load_transformed.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "2a6c49b1cd3ea175b776ce853f06485e",
       "sources": [
         {
@@ -153,6 +164,7 @@
     "regional_cost_multipliers.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "public-domain",
       "md5": "6c46df3480cbecd82ac1d724f4255658",
       "sources": [
         {
@@ -165,6 +177,7 @@
     "reserve_margins.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "597fc25a77553b29217ea35037258d73",
       "sources": [
         {
@@ -177,6 +190,7 @@
     "technology_costs_atb.parquet": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "4c65c88129c4db3d0df180c3eb28a3ec",
       "sources": [
         {
@@ -189,6 +203,7 @@
     "technology_heat_rates_nrelatb.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "356c16b73d98fd6ac2dcf95510701630",
       "sources": [
         {
@@ -201,6 +216,7 @@
     "transmission_capacity_reeds.csv": {
       "history": [],
       "last_updated": "2026-08-11",
+      "license": "cc-by-4.0",
       "md5": "afed76f028868aae1d68c095bca01f24",
       "sources": [
         {
