@@ -257,32 +257,39 @@ def next_release_version(
     base_url: str,
     data_version: str,
     conceptrecid,
+    local_versions: list[str] | None = None,
 ) -> str:
     """Return the Zenodo version string for a release of ``data_version``.
 
     The base is the manifest data_version (e.g. "2026.08.14") with a
     sequential per-day suffix so multiple releases on the same date never
     share a version number (e.g. "2026.08.14.v1", "2026.08.14.v2", ...).
-    The suffix is the count of already-published versions of this concept
-    carrying the same data_version plus one, so it stays unique without
-    relying on local state. A brand-new deposition (no concept yet) gets
-    ".v1".
+    The suffix is one more than the larger of two counts, each counting the
+    releases that already carry this data_version (bare or ``.vN``-suffixed):
+    the versions published on Zenodo for this concept (via the
+    eventually-consistent records search) and the release versions recorded
+    locally in the saved state (``zenodo_release.versions``). The local
+    history closes the window where a fast follow-up release would not yet be
+    indexed by Zenodo's search, preventing two releases from reusing a
+    suffix. A brand-new deposition (no concept yet) gets ".v1".
     """
-    if not conceptrecid:
-        return f"{data_version}.v1"
-    query = urllib.parse.quote(f'conceptrecid:"{conceptrecid}"')
-    response = session.get(
-        f"{base_url}/records/?q={query}&all_versions=true&size=100",
-        timeout=120,
-    )
-    raise_for_status(response, "Listing published versions")
-    prefix = f"{data_version}."
-    count = 0
-    for hit in response.json().get("hits", {}).get("hits", []):
-        version = (hit.get("metadata") or {}).get("version")
-        if version and (version == data_version or version.startswith(prefix)):
-            count += 1
-    return f"{data_version}.v{count + 1}"
+    def matches(version: str) -> bool:
+        return version == data_version or version.startswith(f"{data_version}.")
+
+    local_count = sum(1 for v in (local_versions or []) if matches(v))
+    remote_count = 0
+    if conceptrecid:
+        query = urllib.parse.quote(f'conceptrecid:"{conceptrecid}"')
+        response = session.get(
+            f"{base_url}/records/?q={query}&all_versions=true&size=100",
+            timeout=120,
+        )
+        raise_for_status(response, "Listing published versions")
+        for hit in response.json().get("hits", {}).get("hits", []):
+            version = (hit.get("metadata") or {}).get("version")
+            if version and matches(version):
+                remote_count += 1
+    return f"{data_version}.v{max(local_count, remote_count) + 1}"
 
 
 def create_deposition(session: requests.Session, base_url: str) -> dict:
@@ -399,6 +406,32 @@ def validate_constraints(files_by_name: dict[str, Path]) -> None:
         sys.exit(f"Zenodo allows at most 50 GB per record; total is {total_bytes / 1e9:.1f} GB.")
 
 
+def uncommitted_release_files(manifest: dict, data_dir: Path) -> list[str]:
+    """Names of files in the manifest that differ from git HEAD.
+
+    Publishing a release whose files are not in git history means the Zenodo
+    record has no reproducible commit behind it. Returns ``[]`` when git is
+    unavailable or the tree is clean for every manifest file.
+    """
+    paths = [data_dir / name for name in manifest["files"]]
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain", "--"] + [str(p) for p in paths],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    dirty = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        # porcelain format: XY <path>; X = staged, Y = worktree. '', M, D, A,
+        # or '?' (untracked) all mean the file differs from HEAD.
+        if line[0] in "MAD?" or line[1:2] in "MD":
+            dirty.append(line)
+    return dirty
+
+
 def run_release(args) -> None:
     global PROJECT_ROOT, STATE_PATH
     PROJECT_ROOT = Path.cwd()
@@ -478,6 +511,19 @@ def run_release(args) -> None:
         log(f"version {data_version} is already published on Zenodo (deposition {deposition_id}); nothing to do.")
         return
 
+    # Publishing files that aren't in git history leaves a record with no
+    # reproducible commit behind it. Refuse unless --allow-dirty is passed.
+    dirty = uncommitted_release_files(manifest, data_dir)
+    if dirty and not getattr(args, "allow_dirty", False):
+        log("uncommitted changes vs git HEAD in release files:")
+        for line in dirty:
+            log(f"  {line}")
+        sys.exit(
+            "Release files differ from git HEAD. Commit the changes first, or "
+            "re-run with --allow-dirty. Publishing an uncommitted release leaves "
+            "no reproducible commit for the Zenodo record."
+        )
+
     # Resolve the target draft.
     if deposition_id and not previously_published:
         log(f"resuming unpublished draft {deposition_id}")
@@ -492,7 +538,11 @@ def run_release(args) -> None:
     deposition_id = str(deposition["id"])
     bucket_url = deposition["links"]["bucket"]
     release_version = next_release_version(
-        session, base_url, data_version, deposition.get("conceptrecid")
+        session,
+        base_url,
+        data_version,
+        deposition.get("conceptrecid"),
+        released.get("versions") if isinstance(released, dict) else None,
     )
     log(f"release version: {release_version}")
 
@@ -570,6 +620,12 @@ def run_release(args) -> None:
     # draft can be continued; changed-file diff only applies when published).
     save_state = args.publish or args.save_state
     if save_state:
+        # Track released version strings per environment so a fast follow-up
+        # release never reuses a suffix even while Zenodo's search index lags.
+        prior_versions = released.get("versions", []) if isinstance(released, dict) else []
+        versions = list(prior_versions)
+        if published and release_version not in versions:
+            versions.append(release_version)
         new_release = {
             "environment": environment,
             "data_version": data_version,
@@ -577,6 +633,7 @@ def run_release(args) -> None:
             "deposition_id": deposition_id,
             "published": published,
             "doi": publish_payload.get("doi") if published else None,
+            "versions": versions,
             "files": {name: info["md5"] for name, info in manifest_files.items()},
         }
         merged = {"metadata": metadata, "zenodo_release": new_release}
@@ -598,6 +655,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--publish", action="store_true", help="Publish the deposition (irreversible in production). Default is draft-only.")
     parser.add_argument("--save-state", action="store_true", help="Write .zenodo.json even when only creating a draft. Always written on publish.")
     parser.add_argument("--sleep-seconds", type=float, default=1.0, help="Delay between file uploads (default 1.0).")
+    parser.add_argument("--allow-dirty", action="store_true", help="Publish even when release files differ from git HEAD.")
     parser.add_argument("--dry-run", action="store_true", help="Show the release plan without calling the Zenodo API.")
     return parser
 

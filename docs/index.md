@@ -132,7 +132,9 @@ manifest described above.
 - Reads `data/manifest.json` and derives the Zenodo `version` from its top-level `data_version`
   (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
   that multiple releases on the same date never share a version number. The suffix is computed by
-  counting already-published versions of the dataset's concept carrying the same `data_version`.
+  combining the already-published versions of the dataset's concept carrying the same `data_version`
+  with the release versions recorded locally (see `versions` under Release state below), so a fast
+  follow-up release never reuses a suffix even while Zenodo's search index is still catching up.
 - Builds the Zenodo description from the manifest: a change note listing the files **added**,
   **updated**, and **removed** in this release, a licensing paragraph (the compilation is CC0 while
   individual files retain their underlying-source license), plus a per-file table of each data element's own
@@ -142,6 +144,8 @@ manifest described above.
   were released before but are no longer in the manifest are removed from the draft.
 - Creates a **new version** of the existing record on subsequent releases, so Zenodo keeps the full file
   history. The first release creates a new deposition.
+- Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
+  a committed state of the repository); pass `--allow-dirty` to override.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
 
 ### Requirements
@@ -166,18 +170,27 @@ uv run python publish_zenodo.py --publish
 
 # Publish to production Zenodo.
 uv run python publish_zenodo.py --publish --production
+
+# Publish anyway even though release files are uncommitted (not recommended).
+uv run python publish_zenodo.py --publish --allow-dirty
 ```
 
 Without `--publish` the script leaves the deposition as a draft. If a draft already exists it is resumed
 (no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
 `--publish` after an identical release is a no-op.
 
+The script verifies that every file listed in the manifest is committed to git before it contacts Zenodo.
+If any release file differs from HEAD it prints the offending paths and exits; commit the changes first or
+pass `--allow-dirty`. This keeps each Zenodo record reproducible from the repository history.
+
 ### Release state (`.zenodo.json`)
 
 On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
 `zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
 the `release_version` (the version string actually recorded on Zenodo, suffix included), the
-`deposition_id`, the resolved `doi`, and the per-file `md5`s that were released. The metadata block carries
+`deposition_id`, the resolved `doi`, the `versions` history (every release version string published in
+this environment, used to keep same-day suffixes unique even while Zenodo's search index lags), and the
+per-file `md5`s that were released. The metadata block carries
 the fields applied to every release — `title`, `creators`, `access_right`, and the compilation `license`
 (e.g. `cc-zero`) — while each file's source license is recorded in `data/manifest.json` and surfaced in the
 description. `.zenodo.json` contains no secrets and is committed to the repo so later runs know what
