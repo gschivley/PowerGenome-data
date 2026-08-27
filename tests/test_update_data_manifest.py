@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -184,6 +185,79 @@ class ManifestTests(unittest.TestCase):
         for bad in ("2026-13-45", "08-11-2026", "not-a-date", "2026-02-30", "", "20260811"):
             with self.assertRaises(Exception):
                 MODULE._validated_iso_date(bad)
+
+
+class GitTrackedTests(unittest.TestCase):
+    def _make_git_data_dir(self, files, commit):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        data_dir = root / "data"
+        data_dir.mkdir()
+        for name, content in files.items():
+            (data_dir / name).write_text(content)
+
+        def git(*args):
+            subprocess.run(
+                ["git", "-C", str(root), *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        git("init", "-q")
+        git("config", "user.name", "test")
+        git("config", "user.email", "test@example.com")
+        for name in commit:
+            git("add", f"data/{name}")
+        if commit:
+            git("commit", "-qm", "seed")
+        return data_dir
+
+    def test_new_untracked_file_is_skipped(self):
+        data_dir = self._make_git_data_dir(
+            {SINGLE_SOURCE_FILE: "a", "scratch.csv": "b"},
+            commit=[SINGLE_SOURCE_FILE],
+        )
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11")
+        manifest = json.loads(manifest_path.read_text())
+        self.assertIn(SINGLE_SOURCE_FILE, manifest["files"])
+        self.assertNotIn("scratch.csv", manifest["files"])
+
+    def test_include_untracked_adds_new_file(self):
+        data_dir = self._make_git_data_dir(
+            {SINGLE_SOURCE_FILE: "a", "scratch.csv": "b"},
+            commit=[SINGLE_SOURCE_FILE],
+        )
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(
+            data_dir, manifest_path, "2026-08-11", include_untracked=True
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertIn("scratch.csv", manifest["files"])
+        self.assertEqual(
+            manifest["files"]["scratch.csv"]["sources"],
+            [{"source": "Unknown - document me"}],
+        )
+
+    def test_manifested_file_still_updated_when_untracked(self):
+        # A file already in the manifest keeps being tracked even if it is no
+        # longer in git (it is not *new* untracked content).
+        data_dir = self._make_git_data_dir({SINGLE_SOURCE_FILE: "a"}, commit=[SINGLE_SOURCE_FILE])
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11")
+        subprocess.run(
+            ["git", "-C", str(data_dir.parent), "rm", "-q", "--cached", "data/" + SINGLE_SOURCE_FILE],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        (data_dir / SINGLE_SOURCE_FILE).write_text("changed")
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["files"][SINGLE_SOURCE_FILE]["version"], "2026-08-12")
+        self.assertEqual(len(manifest["files"][SINGLE_SOURCE_FILE]["history"]), 1)
 
 
 if __name__ == "__main__":
