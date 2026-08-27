@@ -12,13 +12,24 @@ The release is driven entirely by data/manifest.json:
   * Only files whose md5 changed since the last release are uploaded. The
     first release (no prior state) uploads all manifest files. Files
     previously released but no longer in the manifest are removed from the
-    draft so Zenodo mirrors the manifest.
+    draft so Zenodo mirrors the manifest. Removed files keep their prior
+    version/license/sources in the description, plus an optional note from
+    "zenodo_release"."removal_notes" in .zenodo.json ({filename: note}).
+  * Updated files are listed with their version transition (prior -> new).
+  * A run whose only difference is description-relevant manifest metadata
+    (source text, license, version) still produces a release, because the
+    manifest's metadata hash is compared, not just file md5s.
 
-Release state (last published data_version, deposition id, per-file md5s,
-publish status) is stored in .zenodo.json in the project root. That file
-contains no secrets and is safe to commit. If a draft was created but not
-yet published, the draft is resumed on the next run instead of creating a
-duplicate.
+Release state (last published data_version, deposition id, per-file entries
+with md5/version/license/sources, the manifest metadata hash, and publish
+status) is stored in .zenodo.json in the project root. That file contains no
+secrets and is safe to commit. State is written on every run that resolves a
+deposition, so if a draft was created but not yet published, the draft is
+resumed on the next run instead of creating a duplicate.
+
+Files missing a "license" or carrying only placeholder sources ("Unknown -
+document me") are flagged: a warning in the sandbox, and a refusal in
+production unless --allow-undocumented is passed.
 
 Defaults to the Zenodo sandbox. Production requires --production or
 USE_PRODUCTION=true. Publishing requires --publish; without it a draft is
@@ -38,6 +49,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -119,6 +131,18 @@ def git_user_name() -> str:
         return ""
 
 
+def git_short_sha() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            text=True,
+            cwd=PROJECT_ROOT if PROJECT_ROOT is not None else Path.cwd(),
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # Manifest + state
 # ---------------------------------------------------------------------------
@@ -133,9 +157,10 @@ def load_manifest(manifest_path: Path) -> dict:
     return manifest
 
 
-def load_state() -> dict:
-    if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+def load_state(path: Path | None = None) -> dict:
+    target = path if path is not None else STATE_PATH
+    if target is not None and target.exists():
+        return json.loads(target.read_text(encoding="utf-8"))
     return {}
 
 
@@ -163,7 +188,7 @@ LICENSE_LABELS = {
 }
 
 
-def describe_file(filename: str, info: dict) -> str:
+def describe_file(filename: str, info: dict, note: str | None = None) -> str:
     esc = html.escape
     sources = info.get("sources") or []
     source_items = []
@@ -182,18 +207,94 @@ def describe_file(filename: str, info: dict) -> str:
         else "<em>No source documented.</em>"
     )
     license_key = info.get("license") or ""
-    license_label = (
-        LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
+    license_label = LICENSE_LABELS.get(license_key) or license_key or "Not specified"
+    version = info.get("version") or "Unknown"
+    last_updated = info.get("last_updated") or "Unknown"
+    # In the current manifest schema version == last_updated; only show the
+    # row when they diverge so the table doesn't repeat itself.
+    updated_row = (
+        f"<tr><th>Last updated</th><td>{esc(last_updated)}</td></tr>"
+        if last_updated != version
+        else ""
     )
+    note_html = f"<p><strong>Note:</strong> {esc(note)}</p>" if note else ""
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
-        f"<tr><th>Data element version</th><td>{esc(info.get('version') or 'Unknown')}</td></tr>"
-        f"<tr><th>Last updated</th><td>{esc(info.get('last_updated') or 'Unknown')}</td></tr>"
+        f"<tr><th>Data element version</th><td>{esc(version)}</td></tr>"
+        f"{updated_row}"
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
         f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
         f"</table>"
+        f"{note_html}"
         f"{sources_html}"
+    )
+
+
+def manifest_meta_hash(manifest: dict) -> str:
+    """Hash of the description-relevant subset of the manifest.
+
+    Detects manifest-only edits (source text, license, version, md5) that do
+    not change ``data_version``, so a description-refresh release is not
+    skipped. Ignores ``generated_at_utc`` and ``history``.
+    """
+    relevant = {
+        name: {
+            key: info.get(key)
+            for key in ("version", "last_updated", "license", "sources", "md5")
+        }
+        for name, info in manifest["files"].items()
+    }
+    payload = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def undocumented_files(manifest_files: dict) -> list[str]:
+    """Files missing a license or carrying only placeholder sources."""
+    bad = []
+    for name, info in sorted(manifest_files.items()):
+        if not info.get("license"):
+            bad.append(name)
+            continue
+        sources = info.get("sources") or []
+        if not sources or all(
+            not str(s.get("source", "")).strip()
+            or str(s.get("source", "")).strip() == "Unknown - document me"
+            for s in sources
+        ):
+            bad.append(name)
+    return bad
+
+
+def normalize_released_files(raw: dict) -> dict[str, dict]:
+    """Released-file state as ``{name: entry}`` with at least an ``md5`` key.
+
+    Accepts the current format (full entry dicts with md5/version/license/
+    sources) and the legacy format (``{name: md5-string}``).
+    """
+    out: dict[str, dict] = {}
+    for name, value in (raw or {}).items():
+        out[name] = dict(value) if isinstance(value, dict) else {"md5": value}
+    return out
+
+
+def licensing_paragraph(files: dict) -> str:
+    """CC0 compilation preamble + files grouped by their per-file license."""
+    esc = html.escape
+    groups: dict[str, list[str]] = {}
+    for name, info in sorted(files.items()):
+        groups.setdefault(info.get("license") or "", []).append(name)
+    parts = []
+    for key in sorted(groups, key=lambda k: (not k, k)):
+        label = LICENSE_LABELS.get(key) or key or "Not specified"
+        names = ", ".join(f"<code>{esc(n)}</code>" for n in groups[key])
+        parts.append(f"<p><strong>{esc(label)}:</strong> {names}.</p>")
+    return (
+        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
+        "Creative Commons Zero (CC0, public domain dedication). Because the files "
+        "assemble public data from a variety of sources, each file retains the "
+        "license of its underlying source. Files grouped by license:</p>"
+        + "".join(parts)
     )
 
 
@@ -202,14 +303,34 @@ def build_description(
     added: list[str],
     updated: list[str],
     removed: list[str],
-    initial: bool,
+    removed_details: dict[str, dict],
+    removal_notes: dict[str, str] | None = None,
+    initial: bool = False,
+    published_at: str | None = None,
+    git_sha: str | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     files = manifest["files"]
     esc = html.escape
+    removal_notes = removal_notes or {}
 
     def names_html(names: list[str]) -> str:
         return "".join(f"<li><code>{esc(name)}</code></li>" for name in names)
+
+    def updated_names_html(names: list[str]) -> str:
+        items = []
+        for name in names:
+            entry = files.get(name) or {}
+            history = entry.get("history") or []
+            prior_version = history[-1].get("version") if history else None
+            if prior_version:
+                items.append(
+                    f"<li><code>{esc(name)}</code> ({esc(prior_version)} "
+                    f"&rarr; {esc(entry.get('version') or 'Unknown')})</li>"
+                )
+            else:
+                items.append(f"<li><code>{esc(name)}</code></li>")
+        return "".join(items)
 
     if initial:
         change_note = (
@@ -224,11 +345,14 @@ def build_description(
             )
         if updated:
             sections.append(
-                f"<p><strong>Files updated in this release:</strong></p><ul>{names_html(updated)}</ul>"
+                "<p><strong>Files updated in this release</strong> "
+                f"(prior version &rarr; new version):</p><ul>{updated_names_html(updated)}</ul>"
             )
         if removed:
             sections.append(
-                f"<p><strong>Files removed in this release:</strong></p><ul>{names_html(removed)}</ul>"
+                "<p><strong>Files removed in this release:</strong> prior "
+                f"version, license, and sources are listed below the licensing notes.</p>"
+                f"<ul>{names_html(removed)}</ul>"
             )
         change_note = (
             "".join(sections) or "<p><em>No file changes in this release.</em></p>"
@@ -237,19 +361,30 @@ def build_description(
     file_sections = "\n".join(
         describe_file(filename, info) for filename, info in sorted(files.items())
     )
+    removed_sections = "\n".join(
+        describe_file(name, removed_details.get(name) or {}, note=removal_notes.get(name))
+        for name in removed
+    )
+    removed_block = (
+        "<p><strong>Removed files, last released state:</strong></p>" + removed_sections
+        if removed_sections
+        else ""
+    )
+
+    provenance_bits = []
+    if published_at:
+        provenance_bits.append(f"published {esc(published_at)}")
+    if git_sha:
+        provenance_bits.append(f"git commit <code>{esc(git_sha)}</code>")
+    provenance = f" ({', '.join(provenance_bits)})" if provenance_bits else ""
 
     return (
         "<p>PowerGenome input data assembled from public sources. This release "
         f"corresponds to <code>data/manifest.json</code> data version "
-        f"<code>{esc(data_version)}</code>.</p>"
+        f"<code>{esc(data_version)}</code>{provenance}.</p>"
         f"{change_note}"
-        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
-        "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
-        "public data from a variety of sources, each file retains the license of its "
-        "underlying source: U.S. government works (e.g. EIA, BEA, FRED) are in the public "
-        "domain, data derived from ReEDS / NREL (including the NREL ATB and PUDL) is "
-        "Creative Commons Attribution 4.0 International (CC BY 4.0), and NERC LTRA data is "
-        "CC BY 4.0. See each file's License row below.</p>"
+        f"{licensing_paragraph(files)}"
+        f"{removed_block}"
         "<p>Each data element's own version key records when that element was "
         "last updated; the per-file sources below document where it came from.</p>"
         f"{file_sections}"
@@ -519,7 +654,13 @@ def run_release(args) -> None:
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
-    released_files = released.get("files", {}) if previously_published else {}
+    # Entries are full dicts (md5/version/license/sources); legacy md5-string
+    # state is normalized on read.
+    released_files = (
+        normalize_released_files(released.get("files", {}))
+        if previously_published
+        else {}
+    )
     deposition_id = released.get("deposition_id")
 
     # Local file existence + manifest md5 verification.
@@ -547,11 +688,13 @@ def run_release(args) -> None:
     updated = [
         name
         for name, info in manifest_files.items()
-        if name in released_files and released_files[name] != info.get("md5")
+        if name in released_files
+        and released_files[name].get("md5") != info.get("md5")
     ]
     changed = added + updated
     removed = [name for name in released_files if name not in manifest_files]
     initial = not released_files
+    meta_changed = released.get("manifest_meta_hash") != manifest_meta_hash(manifest)
 
     log(f"data version: {data_version}")
     if added:
@@ -565,17 +708,35 @@ def run_release(args) -> None:
             "no file changes detected since last release; the description/version may still be updated"
         )
 
-    # Nothing to do if this exact version was already published unchanged.
+    # Nothing to do if this exact version was already published unchanged --
+    # including description-relevant manifest metadata (meta_changed), so
+    # source/license edits in the manifest are not silently dropped.
     if (
         previously_published
         and data_version == released.get("data_version")
         and not changed
         and not removed
+        and not meta_changed
     ):
         log(
             f"version {data_version} is already published on Zenodo (deposition {deposition_id}); nothing to do."
         )
         return
+
+    # Refuse to publish files whose provenance is undocumented (production
+    # only; sandbox warns).
+    undocumented = undocumented_files(manifest_files)
+    if undocumented:
+        message = (
+            "files missing a license or with placeholder sources: "
+            + ", ".join(undocumented)
+        )
+        if use_production and not getattr(args, "allow_undocumented", False):
+            sys.exit(
+                f"Refusing production release: {message}. Document them in "
+                "data/manifest.json, or re-run with --allow-undocumented."
+            )
+        log(f"warning: {message}")
 
     # Publishing files that aren't in git history leaves a record with no
     # reproducible commit behind it. Refuse unless --allow-dirty is passed.
@@ -639,7 +800,21 @@ def run_release(args) -> None:
             time.sleep(args.sleep_seconds)
 
     # Build + update metadata.
-    description = build_description(manifest, added, updated, removed, initial)
+    description = build_description(
+        manifest,
+        added,
+        updated,
+        removed,
+        removed_details={name: released_files[name] for name in removed},
+        removal_notes=released.get("removal_notes")
+        if isinstance(released, dict)
+        else None,
+        initial=initial,
+        published_at=datetime.now(timezone.utc).date().isoformat()
+        if args.publish
+        else None,
+        git_sha=git_short_sha(),
+    )
     project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
     creators = project_metadata.get("creators") or default_creators()
     metadata = dict(project_metadata)
@@ -650,11 +825,12 @@ def run_release(args) -> None:
             "access_right": project_metadata.get("access_right") or "open",
             "creators": creators,
             "version": release_version,
+            "description_type": "text/html",
             "description": description,
         }
     )
 
-    updated = set_metadata(session, base_url, deposition_id, metadata)
+    updated_deposition = set_metadata(session, base_url, deposition_id, metadata)
 
     # Publish (only with --publish) or leave as draft.
     published = False
@@ -675,7 +851,8 @@ def run_release(args) -> None:
         "release_version": release_version,
         "deposition_id": deposition_id,
         "draft_url": draft_page_url(base_url, deposition_id),
-        "pre_reserved_doi": pre_reserved_doi(updated) or pre_reserved_doi(deposition),
+        "pre_reserved_doi": pre_reserved_doi(updated_deposition)
+        or pre_reserved_doi(deposition),
         "doi": publish_payload.get("doi") if published else None,
         "record_url": (
             (
@@ -691,33 +868,45 @@ def run_release(args) -> None:
     }
     print(json.dumps(summary, indent=2))
 
-    # Persist release state (after a successful publish, or on resume so the
-    # draft can be continued; changed-file diff only applies when published).
-    save_state = args.publish or args.save_state
-    if save_state:
-        # Track released version strings per environment so a fast follow-up
-        # release never reuses a suffix even while Zenodo's search index lags.
-        prior_versions = (
-            released.get("versions", []) if isinstance(released, dict) else []
-        )
-        versions = list(prior_versions)
-        if published and release_version not in versions:
-            versions.append(release_version)
-        new_release = {
-            "environment": environment,
-            "data_version": data_version,
-            "release_version": release_version,
-            "deposition_id": deposition_id,
-            "published": published,
-            "doi": publish_payload.get("doi") if published else None,
-            "versions": versions,
-            "files": {name: info["md5"] for name, info in manifest_files.items()},
-        }
-        merged = {"metadata": metadata, "zenodo_release": new_release}
-        STATE_PATH.write_text(
-            json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        log(f"state written to {STATE_PATH}")
+    # Persist release state on every run that resolved a deposition, so an
+    # unpublished draft is resumed (not duplicated) on the next run.
+    # Track released version strings per environment so a fast follow-up
+    # release never reuses a suffix even while Zenodo's search index lags.
+    prior_versions = released.get("versions", []) if isinstance(released, dict) else []
+    versions = list(prior_versions)
+    if published and release_version not in versions:
+        versions.append(release_version)
+    # Per-file entries keep the released provenance (version/license/sources)
+    # so a later release can document removed files in full detail.
+    removal_notes = (
+        dict(released.get("removal_notes", {})) if isinstance(released, dict) else {}
+    )
+    new_release = {
+        "environment": environment,
+        "data_version": data_version,
+        "release_version": release_version,
+        "deposition_id": deposition_id,
+        "published": published,
+        "doi": publish_payload.get("doi") if published else None,
+        "versions": versions,
+        "manifest_meta_hash": manifest_meta_hash(manifest),
+        "removal_notes": removal_notes,
+        "files": {
+            name: {
+                "md5": info.get("md5"),
+                "version": info.get("version"),
+                "last_updated": info.get("last_updated"),
+                "license": info.get("license"),
+                "sources": info.get("sources") or [],
+            }
+            for name, info in manifest_files.items()
+        },
+    }
+    merged = {"metadata": metadata, "zenodo_release": new_release}
+    STATE_PATH.write_text(
+        json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    log(f"state written to {STATE_PATH}")
 
     if not published:
         log(
@@ -753,9 +942,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Publish the deposition (irreversible in production). Default is draft-only.",
     )
     parser.add_argument(
-        "--save-state",
+        "--allow-undocumented",
         action="store_true",
-        help="Write .zenodo.json even when only creating a draft. Always written on publish.",
+        help=(
+            "Proceed even when files lack a license or have placeholder sources "
+            "(only needed for production releases; the sandbox only warns)."
+        ),
     )
     parser.add_argument(
         "--sleep-seconds",
@@ -776,12 +968,60 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def dry_run(manifest_path: Path) -> None:
+def dry_run(manifest_path: Path, args) -> None:
     manifest = load_manifest(manifest_path)
     data_dir = manifest_path.parent
     files = manifest["files"]
     print(f"data version: {manifest['data_version']}")
     print(f"manifest files: {len(files)}")
+
+    # Release plan vs the last published state (no API calls needed).
+    use_production = args.use_production or truthy_env("USE_PRODUCTION")
+    environment = "production" if use_production else "sandbox"
+    state = load_state(Path.cwd() / ".zenodo.json")
+    released = state.get("zenodo_release", {})
+    if (
+        isinstance(released, dict)
+        and released.get("environment") == environment
+        and released.get("published")
+    ):
+        released_files = normalize_released_files(released.get("files", {}))
+        added = [n for n in files if n not in released_files]
+        updated = [
+            n
+            for n, info in files.items()
+            if n in released_files and released_files[n].get("md5") != info.get("md5")
+        ]
+        removed = [n for n in released_files if n not in files]
+        meta_changed = (
+            released.get("manifest_meta_hash") != manifest_meta_hash(manifest)
+        )
+        release_label = released.get("release_version") or "?"
+        print(
+            f"\nrelease plan vs last published {released.get('data_version')} "
+            f"({release_label}):"
+        )
+        for label, names in (
+            ("added", added),
+            ("updated", updated),
+            ("removed", removed),
+        ):
+            print(f"  {label}: {', '.join(names) if names else 'none'}")
+        print(f"  manifest metadata changed: {'yes' if meta_changed else 'no'}")
+        if not (added or updated or removed or meta_changed):
+            print("  -> no new release would be created")
+    else:
+        print(
+            f"\nno prior published {environment} release in .zenodo.json; "
+            "all files would be added"
+        )
+
+    undocumented = undocumented_files(files)
+    if undocumented:
+        print(f"\nundocumented (missing license or placeholder sources): {', '.join(undocumented)}")
+        if use_production and not getattr(args, "allow_undocumented", False):
+            print("  -> production release would be refused without --allow-undocumented")
+
     for name, info in sorted(files.items()):
         missing = not (data_dir / name).exists()
         print(
@@ -795,7 +1035,7 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.dry_run:
         manifest_path = Path(args.manifest).expanduser()
-        dry_run(manifest_path)
+        dry_run(manifest_path, args)
         return
     run_release(args)
 
