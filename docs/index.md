@@ -49,8 +49,8 @@ Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other 
 
 `data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
 updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
-This is the provenance + change-detection layer that will eventually drive scheduled update workflows
-and automatic Zenodo publishing.
+This is the provenance + change-detection layer: it drives `publish_zenodo.py` (below), which publishes
+manifest-listed files to Zenodo and can be wired into scheduled update workflows.
 
 ### Read it
 
@@ -70,6 +70,7 @@ and automatic Zenodo publishing.
       "last_updated": "2026-08-11",
       "version": "2026-08-11",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "license": "public-domain",
       "history": []
     }
   }
@@ -84,8 +85,10 @@ and automatic Zenodo publishing.
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
-  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash, and
-  `history` holds prior `{version, last_updated, md5}` entries for every change that has been seen.
+  `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash,
+  `license` is a human-maintained identifier for the file's underlying-source license
+  (`public-domain`, `cc-by-4.0`, or `cc-zero`), and `history` holds prior
+  `{version, last_updated, md5}` entries for every change that has been seen.
 
 ### Update it
 
@@ -107,6 +110,9 @@ Behavior:
   `"Unknown - document me"` so they can be filled in). If an entry still carries the
   `"Unknown - document me"` placeholder and a real seed now exists for that file, a later run upgrades the
   placeholder to the seed, so provenance backfills automatically once it has been documented.
+- Hand-maintained `license` values are preserved when a file changes (only `version`/`last_updated`/`md5`
+  are rewritten); files that carry no `license` are flagged with a warning so the attribution can be
+  added.
 - Files that are no longer present in `data/` are dropped from the manifest (with a warning).
 
 Run the tests with:
@@ -114,3 +120,83 @@ Run the tests with:
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Publishing to Zenodo
+
+`publish_zenodo.py` publishes the manifest-listed files in `data/` to a Zenodo deposition and keeps
+the Zenodo record in sync with the manifest across releases. It is the publishing counterpart to the
+manifest described above.
+
+### What it does
+
+- Reads `data/manifest.json` and derives the Zenodo `version` from its top-level `data_version`
+  (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
+  that multiple releases on the same date never share a version number. The suffix is computed by
+  combining the already-published versions of the dataset's concept carrying the same `data_version`
+  with the release versions recorded locally (see `versions` under Release state below), so a fast
+  follow-up release never reuses a suffix even while Zenodo's search index is still catching up.
+- Builds the Zenodo description from the manifest: a change note listing the files **added**,
+  **updated**, and **removed** in this release, a licensing paragraph (the compilation is CC0 while
+  individual files retain their underlying-source license), plus a per-file table of each data element's own
+  `version` (the date that element was last updated), `last_updated`, `md5`, its `license`, and its `sources`.
+- Uploads **only files that changed** since the last published release (compared by `md5`), so the
+  initial release uploads everything and later releases upload just the new/updated files. Files that
+  were released before but are no longer in the manifest are removed from the draft.
+- Creates a **new version** of the existing record on subsequent releases, so Zenodo keeps the full file
+  history. The first release creates a new deposition.
+- Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
+  a committed state of the repository); pass `--allow-dirty` to override.
+- Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
+
+### Requirements
+
+- A plain Python environment with the `requests` package (e.g. `uv run python publish_zenodo.py` or a
+  `.venv` with `requests` installed).
+- A Zenodo personal access token with `deposit:write` and `deposit:actions` scopes, supplied via the
+  `ZENODO_TOKEN` environment variable (or `ZENODO_SANDBOX_API_KEY` for sandbox). It may be loaded from a
+  local `.env` file without extra arguments — `.env` is git-ignored and never committed.
+
+### Usage
+
+```bash
+# Show what the release would contain (no API calls)
+uv run python publish_zenodo.py --dry-run
+
+# Create/update the Zenodo draft (sandbox) and print the draft URL + DOI.
+uv run python publish_zenodo.py
+
+# Publish the draft (irreversible in production) and record release state.
+uv run python publish_zenodo.py --publish
+
+# Publish to production Zenodo.
+uv run python publish_zenodo.py --publish --production
+
+# Publish anyway even though release files are uncommitted (not recommended).
+uv run python publish_zenodo.py --publish --allow-dirty
+```
+
+Without `--publish` the script leaves the deposition as a draft. If a draft already exists it is resumed
+(no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
+`--publish` after an identical release is a no-op.
+
+The script verifies that every file listed in the manifest is committed to git before it contacts Zenodo.
+If any release file differs from HEAD it prints the offending paths and exits; commit the changes first or
+pass `--allow-dirty`. This keeps each Zenodo record reproducible from the repository history.
+
+### Release state (`.zenodo.json`)
+
+On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
+`zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
+the `release_version` (the version string actually recorded on Zenodo, suffix included), the
+`deposition_id`, the resolved `doi`, the `versions` history (every release version string published in
+this environment, used to keep same-day suffixes unique even while Zenodo's search index lags), and the
+per-file `md5`s that were released. The metadata block carries
+the fields applied to every release — `title`, `creators`, `access_right`, and the compilation `license`
+(e.g. `cc-zero`) — while each file's source license is recorded in `data/manifest.json` and surfaced in the
+description. `.zenodo.json` contains no secrets and is committed to the repo so later runs know what
+changed and can create new versions against the same record.
+
+The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
+suffix counters are independent, so the script records which environment a release belongs to and ignores
+stored release state from the other environment (keeping shared metadata such as creators). This lets you
+publish to both sites from the same `.zenodo.json` without one release interfering with the other.
