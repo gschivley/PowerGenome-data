@@ -362,7 +362,9 @@ def build_description(
         describe_file(filename, info) for filename, info in sorted(files.items())
     )
     removed_sections = "\n".join(
-        describe_file(name, removed_details.get(name) or {}, note=removal_notes.get(name))
+        describe_file(
+            name, removed_details.get(name) or {}, note=removal_notes.get(name)
+        )
         for name in removed
     )
     removed_block = (
@@ -688,8 +690,7 @@ def run_release(args) -> None:
     updated = [
         name
         for name, info in manifest_files.items()
-        if name in released_files
-        and released_files[name].get("md5") != info.get("md5")
+        if name in released_files and released_files[name].get("md5") != info.get("md5")
     ]
     changed = added + updated
     removed = [name for name in released_files if name not in manifest_files]
@@ -727,9 +728,8 @@ def run_release(args) -> None:
     # only; sandbox warns).
     undocumented = undocumented_files(manifest_files)
     if undocumented:
-        message = (
-            "files missing a license or with placeholder sources: "
-            + ", ".join(undocumented)
+        message = "files missing a license or with placeholder sources: " + ", ".join(
+            undocumented
         )
         if use_production and not getattr(args, "allow_undocumented", False):
             sys.exit(
@@ -806,13 +806,13 @@ def run_release(args) -> None:
         updated,
         removed,
         removed_details={name: released_files[name] for name in removed},
-        removal_notes=released.get("removal_notes")
-        if isinstance(released, dict)
-        else None,
+        removal_notes=(
+            released.get("removal_notes") if isinstance(released, dict) else None
+        ),
         initial=initial,
-        published_at=datetime.now(timezone.utc).date().isoformat()
-        if args.publish
-        else None,
+        published_at=(
+            datetime.now(timezone.utc).date().isoformat() if args.publish else None
+        ),
         git_sha=git_short_sha(),
     )
     project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
@@ -993,8 +993,8 @@ def dry_run(manifest_path: Path, args) -> None:
             if n in released_files and released_files[n].get("md5") != info.get("md5")
         ]
         removed = [n for n in released_files if n not in files]
-        meta_changed = (
-            released.get("manifest_meta_hash") != manifest_meta_hash(manifest)
+        meta_changed = released.get("manifest_meta_hash") != manifest_meta_hash(
+            manifest
         )
         release_label = released.get("release_version") or "?"
         print(
@@ -1018,9 +1018,13 @@ def dry_run(manifest_path: Path, args) -> None:
 
     undocumented = undocumented_files(files)
     if undocumented:
-        print(f"\nundocumented (missing license or placeholder sources): {', '.join(undocumented)}")
+        print(
+            f"\nundocumented (missing license or placeholder sources): {', '.join(undocumented)}"
+        )
         if use_production and not getattr(args, "allow_undocumented", False):
-            print("  -> production release would be refused without --allow-undocumented")
+            print(
+                "  -> production release would be refused without --allow-undocumented"
+            )
 
     for name, info in sorted(files.items()):
         missing = not (data_dir / name).exists()

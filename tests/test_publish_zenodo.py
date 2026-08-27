@@ -102,7 +102,9 @@ class DescriptionTests(unittest.TestCase):
     def test_licensing_paragraph_derived_from_files(self):
         desc = self._build()
         self.assertIn("CC0, public domain dedication", desc)
-        self.assertIn("Creative Commons Attribution 4.0 International (CC BY 4.0)", desc)
+        self.assertIn(
+            "Creative Commons Attribution 4.0 International (CC BY 4.0)", desc
+        )
         self.assertIn("Public domain (U.S. government)", desc)
         # Files are listed under their license group.
         self.assertIn("<code>alpha.csv</code>", desc)

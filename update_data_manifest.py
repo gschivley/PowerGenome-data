@@ -282,9 +282,7 @@ def git_tracked_filenames(data_dir: Path) -> set[str] | None:
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
-    return {
-        Path(line.strip()).name for line in out.splitlines() if line.strip()
-    }
+    return {Path(line.strip()).name for line in out.splitlines() if line.strip()}
 
 
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:

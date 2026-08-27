@@ -43,7 +43,10 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(seeded["md5"], MODULE.md5_of(data_dir / SINGLE_SOURCE_FILE))
         self.assertEqual(seeded["history"], [])
         self.assertEqual(len(seeded["sources"]), 1)
-        self.assertEqual(seeded["sources"][0]["source"], MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"])
+        self.assertEqual(
+            seeded["sources"][0]["source"],
+            MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"],
+        )
         self.assertIn("source_url", seeded["sources"][0])
 
         unknown = manifest["files"]["unknown.csv"]
@@ -71,15 +74,22 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(entry["last_updated"], "2026-09-03")
         self.assertEqual(len(entry["history"]), 1)
         self.assertEqual(entry["history"][0]["version"], "2026-08-11")
-        self.assertEqual(entry["history"][0]["md5"], first["files"][SINGLE_SOURCE_FILE]["md5"])
+        self.assertEqual(
+            entry["history"][0]["md5"], first["files"][SINGLE_SOURCE_FILE]["md5"]
+        )
 
     def test_source_edits_are_preserved_on_change(self):
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         manifest = self._run(data_dir, "2026-08-11")
         manifest["files"][SINGLE_SOURCE_FILE]["sources"].append(
-            {"source": "A hand-added second source", "source_url": "https://example.com/x"}
+            {
+                "source": "A hand-added second source",
+                "source_url": "https://example.com/x",
+            }
         )
-        manifest["files"][SINGLE_SOURCE_FILE]["sources"][0]["source"] = "Custom edited text"
+        manifest["files"][SINGLE_SOURCE_FILE]["sources"][0][
+            "source"
+        ] = "Custom edited text"
         (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
         (data_dir / SINGLE_SOURCE_FILE).write_text("different")
@@ -135,7 +145,10 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn("source", entry)
         self.assertNotIn("source_url", entry)
         self.assertEqual(len(entry["sources"]), 1)
-        self.assertEqual(entry["sources"][0]["source"], manifest["files"][SINGLE_SOURCE_FILE]["sources"][0]["source"])
+        self.assertEqual(
+            entry["sources"][0]["source"],
+            manifest["files"][SINGLE_SOURCE_FILE]["sources"][0]["source"],
+        )
         # data_version preserved (no content changed)
         self.assertEqual(result["data_version"], "2026.08.11")
 
@@ -152,7 +165,9 @@ class ManifestTests(unittest.TestCase):
         )
 
     def test_empty_or_null_source_normalized_to_placeholder(self):
-        norm = MODULE._normalize_sources([{"source": None}, {"source": ""}, {"source": "   "}])
+        norm = MODULE._normalize_sources(
+            [{"source": None}, {"source": ""}, {"source": "   "}]
+        )
         self.assertEqual(norm, [{"source": "Unknown - document me"}] * 3)
 
     def test_placeholder_sources_backfilled_from_seed_on_rerun(self):
@@ -166,14 +181,19 @@ class ManifestTests(unittest.TestCase):
 
         result = self._run(data_dir, "2026-08-11")
         sources = result["files"][SINGLE_SOURCE_FILE]["sources"]
-        self.assertEqual(sources[0]["source"], MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"])
+        self.assertEqual(
+            sources[0]["source"], MODULE.SOURCES[SINGLE_SOURCE_FILE][0]["source"]
+        )
         self.assertIn("source_url", sources[0])
 
     def test_hand_edited_sources_not_overwritten_by_backfill(self):
         # A real (non-placeholder) source must be preserved on rerun.
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         manifest = self._run(data_dir, "2026-08-11")
-        custom = {"source": "Custom documented source", "source_url": "https://example.com/x"}
+        custom = {
+            "source": "Custom documented source",
+            "source_url": "https://example.com/x",
+        }
         manifest["files"][SINGLE_SOURCE_FILE]["sources"] = [custom]
         (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
@@ -182,7 +202,14 @@ class ManifestTests(unittest.TestCase):
 
     def test_date_argument_validation(self):
         self.assertEqual(MODULE._validated_iso_date("2026-08-11"), "2026-08-11")
-        for bad in ("2026-13-45", "08-11-2026", "not-a-date", "2026-02-30", "", "20260811"):
+        for bad in (
+            "2026-13-45",
+            "08-11-2026",
+            "not-a-date",
+            "2026-02-30",
+            "",
+            "20260811",
+        ):
             with self.assertRaises(Exception):
                 MODULE._validated_iso_date(bad)
 
@@ -244,11 +271,21 @@ class GitTrackedTests(unittest.TestCase):
     def test_manifested_file_still_updated_when_untracked(self):
         # A file already in the manifest keeps being tracked even if it is no
         # longer in git (it is not *new* untracked content).
-        data_dir = self._make_git_data_dir({SINGLE_SOURCE_FILE: "a"}, commit=[SINGLE_SOURCE_FILE])
+        data_dir = self._make_git_data_dir(
+            {SINGLE_SOURCE_FILE: "a"}, commit=[SINGLE_SOURCE_FILE]
+        )
         manifest_path = data_dir / "manifest.json"
         MODULE.update_manifest(data_dir, manifest_path, "2026-08-11")
         subprocess.run(
-            ["git", "-C", str(data_dir.parent), "rm", "-q", "--cached", "data/" + SINGLE_SOURCE_FILE],
+            [
+                "git",
+                "-C",
+                str(data_dir.parent),
+                "rm",
+                "-q",
+                "--cached",
+                "data/" + SINGLE_SOURCE_FILE,
+            ],
             check=True,
             capture_output=True,
             text=True,
