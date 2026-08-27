@@ -24,8 +24,9 @@ Defaults to the Zenodo sandbox. Production requires --production or
 USE_PRODUCTION=true. Publishing requires --publish; without it a draft is
 created/updated and the draft URL is printed.
 
-The API token is read from the ZENODO_TOKEN environment variable, which may
-be loaded from a local dotenv file (default .env) via --dotenv-path.
+The API token is read from the environment: ZENODO_SANDBOX_API_KEY for the
+sandbox and ZENODO_API_KEY for production. Tokens may be loaded from a local
+dotenv file (default .env) via --dotenv-path.
 """
 
 import argparse
@@ -82,12 +83,20 @@ def resolve_base(use_production: bool) -> str:
     return PRODUCTION_BASE if use_production else SANDBOX_BASE
 
 
-def load_token() -> str:
-    token = os.getenv("ZENODO_TOKEN") or os.getenv("ZENODO_SANDBOX_API_KEY")
+def load_token(use_production: bool) -> str:
+    if use_production:
+        token = os.getenv("ZENODO_API_KEY")
+        if not token:
+            sys.exit(
+                "A production token is required. Set ZENODO_API_KEY in the "
+                "environment or a local .env file (see --dotenv-path)."
+            )
+        return token
+    token = os.getenv("ZENODO_SANDBOX_API_KEY")
     if not token:
         sys.exit(
-            "A token is required. Set ZENODO_TOKEN (or ZENODO_SANDBOX_API_KEY for "
-            "sandbox) in the environment or a local .env file (see --dotenv-path)."
+            "A sandbox token is required. Set ZENODO_SANDBOX_API_KEY in the "
+            "environment or a local .env file (see --dotenv-path)."
         )
     return token
 
@@ -438,9 +447,11 @@ def run_release(args) -> None:
     STATE_PATH = PROJECT_ROOT / ".zenodo.json"
 
     load_dotenv(Path(args.dotenv_path).expanduser())
-    token = load_token()
+    use_production = args.use_production or truthy_env("USE_PRODUCTION")
+    environment = "production" if use_production else "sandbox"
+    token = load_token(use_production)
     session = make_session(token)
-    base_url = resolve_base(args.use_production or truthy_env("USE_PRODUCTION"))
+    base_url = resolve_base(use_production)
 
     manifest_path = Path(args.manifest).expanduser()
     if not manifest_path.is_absolute():
@@ -451,7 +462,6 @@ def run_release(args) -> None:
     data_dir = manifest_path.parent
 
     state = load_state()
-    environment = "production" if base_url == PRODUCTION_BASE else "sandbox"
     released = state.get("zenodo_release", {})
     # Release state is environment-specific: deposition ids, DOIs, and the
     # version suffix counter differ between sandbox and production. Treat a
