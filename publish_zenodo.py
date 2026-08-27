@@ -34,11 +34,11 @@ import hashlib
 import html
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
 import urllib.parse
+from pathlib import Path
 
 try:
     import requests
@@ -60,6 +60,7 @@ def log(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Environment / helpers
 # ---------------------------------------------------------------------------
+
 
 def load_dotenv(dotenv_path: Path) -> None:
     if not dotenv_path.exists():
@@ -122,10 +123,13 @@ def git_user_name() -> str:
 # Manifest + state
 # ---------------------------------------------------------------------------
 
+
 def load_manifest(manifest_path: Path) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if "data_version" not in manifest or not isinstance(manifest.get("files"), dict):
-        sys.exit(f"Manifest {manifest_path} must have 'data_version' and a 'files' object.")
+        sys.exit(
+            f"Manifest {manifest_path} must have 'data_version' and a 'files' object."
+        )
     return manifest
 
 
@@ -167,12 +171,20 @@ def describe_file(filename: str, info: dict) -> str:
         text = esc(source.get("source") or "")
         url = source.get("source_url")
         if url:
-            source_items.append(f'<li><strong>Source:</strong> <a href="{esc(url)}">{esc(url)}</a> &mdash; {text}</li>')
+            source_items.append(
+                f'<li><strong>Source:</strong> <a href="{esc(url)}">{esc(url)}</a> &mdash; {text}</li>'
+            )
         else:
             source_items.append(f"<li><strong>Source:</strong> {text}</li>")
-    sources_html = "<ul>" + "".join(source_items) + "</ul>" if source_items else "<em>No source documented.</em>"
+    sources_html = (
+        "<ul>" + "".join(source_items) + "</ul>"
+        if source_items
+        else "<em>No source documented.</em>"
+    )
     license_key = info.get("license") or ""
-    license_label = LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
+    license_label = (
+        LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
+    )
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
@@ -218,11 +230,12 @@ def build_description(
             sections.append(
                 f"<p><strong>Files removed in this release:</strong></p><ul>{names_html(removed)}</ul>"
             )
-        change_note = "".join(sections) or "<p><em>No file changes in this release.</em></p>"
+        change_note = (
+            "".join(sections) or "<p><em>No file changes in this release.</em></p>"
+        )
 
     file_sections = "\n".join(
-        describe_file(filename, info)
-        for filename, info in sorted(files.items())
+        describe_file(filename, info) for filename, info in sorted(files.items())
     )
 
     return (
@@ -247,6 +260,7 @@ def build_description(
 # API calls
 # ---------------------------------------------------------------------------
 
+
 def make_session(token: str) -> requests.Session:
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {token}"})
@@ -258,7 +272,9 @@ def raise_for_status(response: requests.Response, action: str) -> None:
         response.raise_for_status()
     except requests.HTTPError as exc:
         detail = response.text.strip()
-        raise SystemExit(f"{action} failed with HTTP {response.status_code}: {detail}") from exc
+        raise SystemExit(
+            f"{action} failed with HTTP {response.status_code}: {detail}"
+        ) from exc
 
 
 def next_release_version(
@@ -282,6 +298,7 @@ def next_release_version(
     indexed by Zenodo's search, preventing two releases from reusing a
     suffix. A brand-new deposition (no concept yet) gets ".v1".
     """
+
     def matches(version: str) -> bool:
         return version == data_version or version.startswith(f"{data_version}.")
 
@@ -303,22 +320,29 @@ def next_release_version(
 
 def create_deposition(session: requests.Session, base_url: str) -> dict:
     response = session.post(
-        f"{base_url}/deposit/depositions", json={},
-        headers={"Content-Type": "application/json"}, timeout=120,
+        f"{base_url}/deposit/depositions",
+        json={},
+        headers={"Content-Type": "application/json"},
+        timeout=120,
     )
     raise_for_status(response, "Creating deposition")
     return response.json()
 
 
-def get_deposition(session: requests.Session, base_url: str, deposition_id: str) -> dict:
-    response = session.get(f"{base_url}/deposit/depositions/{deposition_id}", timeout=120)
+def get_deposition(
+    session: requests.Session, base_url: str, deposition_id: str
+) -> dict:
+    response = session.get(
+        f"{base_url}/deposit/depositions/{deposition_id}", timeout=120
+    )
     raise_for_status(response, f"Fetching deposition {deposition_id}")
     return response.json()
 
 
 def create_new_version(session: requests.Session, base_url: str, record: str) -> dict:
     response = session.post(
-        f"{base_url}/deposit/depositions/{record}/actions/newversion", timeout=120,
+        f"{base_url}/deposit/depositions/{record}/actions/newversion",
+        timeout=120,
     )
     raise_for_status(response, "Creating new version draft")
     payload = response.json()
@@ -357,18 +381,25 @@ def delete_file(session: requests.Session, file_url: str, filename: str) -> None
     raise_for_status(response, f"Deleting {filename} from draft")
 
 
-def set_metadata(session: requests.Session, base_url: str, deposition_id: str, metadata: dict) -> dict:
+def set_metadata(
+    session: requests.Session, base_url: str, deposition_id: str, metadata: dict
+) -> dict:
     response = session.put(
         f"{base_url}/deposit/depositions/{deposition_id}",
-        json={"metadata": metadata}, headers={"Content-Type": "application/json"}, timeout=120,
+        json={"metadata": metadata},
+        headers={"Content-Type": "application/json"},
+        timeout=120,
     )
     raise_for_status(response, "Updating metadata")
     return response.json()
 
 
-def publish_deposition(session: requests.Session, base_url: str, deposition_id: str) -> dict:
+def publish_deposition(
+    session: requests.Session, base_url: str, deposition_id: str
+) -> dict:
     response = session.post(
-        f"{base_url}/deposit/depositions/{deposition_id}/actions/publish", timeout=120,
+        f"{base_url}/deposit/depositions/{deposition_id}/actions/publish",
+        timeout=120,
     )
     raise_for_status(response, "Publishing deposition")
     return response.json()
@@ -379,11 +410,17 @@ def pre_reserved_doi(payload: dict) -> str | None:
 
 
 def draft_page_url(base_url: str, deposition_id: str) -> str:
-    host = "https://zenodo.org" if base_url == PRODUCTION_BASE else "https://sandbox.zenodo.org"
+    host = (
+        "https://zenodo.org"
+        if base_url == PRODUCTION_BASE
+        else "https://sandbox.zenodo.org"
+    )
     return f"{host}/deposit/{deposition_id}"
 
 
-def existing_draft_files(session: requests.Session, deposition: dict) -> dict[str, tuple[str, str]]:
+def existing_draft_files(
+    session: requests.Session, deposition: dict
+) -> dict[str, tuple[str, str]]:
     """Map of filename -> (file id, md5) for files already present in a draft.
 
     The current Zenodo deposit-files API removes a file by its internal ``id``
@@ -407,12 +444,17 @@ def existing_draft_files(session: requests.Session, deposition: dict) -> dict[st
 # Release logic
 # ---------------------------------------------------------------------------
 
+
 def validate_constraints(files_by_name: dict[str, Path]) -> None:
     total_bytes = sum(path.stat().st_size for path in files_by_name.values())
     if len(files_by_name) > MAX_FILES:
-        sys.exit(f"Zenodo allows at most {MAX_FILES} files per record; manifest has {len(files_by_name)}.")
+        sys.exit(
+            f"Zenodo allows at most {MAX_FILES} files per record; manifest has {len(files_by_name)}."
+        )
     if total_bytes > MAX_TOTAL_BYTES:
-        sys.exit(f"Zenodo allows at most 50 GB per record; total is {total_bytes / 1e9:.1f} GB.")
+        sys.exit(
+            f"Zenodo allows at most 50 GB per record; total is {total_bytes / 1e9:.1f} GB."
+        )
 
 
 def uncommitted_release_files(manifest: dict, data_dir: Path) -> list[str]:
@@ -426,7 +468,8 @@ def uncommitted_release_files(manifest: dict, data_dir: Path) -> list[str]:
     try:
         out = subprocess.check_output(
             ["git", "status", "--porcelain", "--"] + [str(p) for p in paths],
-            text=True, stderr=subprocess.DEVNULL,
+            text=True,
+            stderr=subprocess.DEVNULL,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
@@ -469,7 +512,9 @@ def run_release(args) -> None:
     # starts its own first release, while keeping shared metadata like creators.
     stored_environment = released.get("environment", "sandbox")
     if released and stored_environment != environment:
-        log(f"stored release state is for {stored_environment}, target is {environment}; ignoring it")
+        log(
+            f"stored release state is for {stored_environment}, target is {environment}; ignoring it"
+        )
         released = {}
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
@@ -483,7 +528,9 @@ def run_release(args) -> None:
     for filename in manifest_files:
         local_path = data_dir / filename
         if not local_path.exists():
-            sys.exit(f"Manifest lists {filename} but {local_path} does not exist on disk.")
+            sys.exit(
+                f"Manifest lists {filename} but {local_path} does not exist on disk."
+            )
         actual = md5_for_file(local_path)
         local_md5s[filename] = actual
         expected = manifest_files[filename].get("md5")
@@ -514,11 +561,20 @@ def run_release(args) -> None:
     if removed:
         log(f"files dropped from manifest ({len(removed)}): {', '.join(removed)}")
     if not changed and not removed:
-        log("no file changes detected since last release; the description/version may still be updated")
+        log(
+            "no file changes detected since last release; the description/version may still be updated"
+        )
 
     # Nothing to do if this exact version was already published unchanged.
-    if previously_published and data_version == released.get("data_version") and not changed and not removed:
-        log(f"version {data_version} is already published on Zenodo (deposition {deposition_id}); nothing to do.")
+    if (
+        previously_published
+        and data_version == released.get("data_version")
+        and not changed
+        and not removed
+    ):
+        log(
+            f"version {data_version} is already published on Zenodo (deposition {deposition_id}); nothing to do."
+        )
         return
 
     # Publishing files that aren't in git history leaves a record with no
@@ -608,7 +664,9 @@ def run_release(args) -> None:
         publish_payload = publish_deposition(session, base_url, deposition_id)
         published = True
     else:
-        log(f"draft only (no --publish); draft: {draft_page_url(base_url, deposition_id)}")
+        log(
+            f"draft only (no --publish); draft: {draft_page_url(base_url, deposition_id)}"
+        )
 
     summary = {
         "mode": "publish" if published else "draft",
@@ -619,7 +677,14 @@ def run_release(args) -> None:
         "draft_url": draft_page_url(base_url, deposition_id),
         "pre_reserved_doi": pre_reserved_doi(updated) or pre_reserved_doi(deposition),
         "doi": publish_payload.get("doi") if published else None,
-        "record_url": (publish_payload.get("links", {}).get("record_html") or publish_payload.get("links", {}).get("html")) if published else None,
+        "record_url": (
+            (
+                publish_payload.get("links", {}).get("record_html")
+                or publish_payload.get("links", {}).get("html")
+            )
+            if published
+            else None
+        ),
         "updated_files": [u["filename"] for u in uploads],
         "removed_files": removed,
         "check_uploads": uploads,
@@ -632,7 +697,9 @@ def run_release(args) -> None:
     if save_state:
         # Track released version strings per environment so a fast follow-up
         # release never reuses a suffix even while Zenodo's search index lags.
-        prior_versions = released.get("versions", []) if isinstance(released, dict) else []
+        prior_versions = (
+            released.get("versions", []) if isinstance(released, dict) else []
+        )
         versions = list(prior_versions)
         if published and release_version not in versions:
             versions.append(release_version)
@@ -647,11 +714,15 @@ def run_release(args) -> None:
             "files": {name: info["md5"] for name, info in manifest_files.items()},
         }
         merged = {"metadata": metadata, "zenodo_release": new_release}
-        STATE_PATH.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        STATE_PATH.write_text(
+            json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         log(f"state written to {STATE_PATH}")
 
     if not published:
-        log("Not published. Run again with --publish to publish this draft, or download from the draft URL above.")
+        log(
+            "Not published. Run again with --publish to publish this draft, or download from the draft URL above."
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -659,14 +730,49 @@ def build_parser() -> argparse.ArgumentParser:
         prog="publish_zenodo.py",
         description="Publish/update data/manifest.json files to Zenodo (sandbox by default).",
     )
-    parser.add_argument("--manifest", default="data/manifest.json", help="Path to the release manifest (default: data/manifest.json).")
-    parser.add_argument("--dotenv-path", default=".env", help="Optional dotenv file supplying ZENODO_TOKEN.")
-    parser.add_argument("--use-production", "--production", dest="use_production", action="store_true", help="Use production Zenodo instead of the sandbox.")
-    parser.add_argument("--publish", action="store_true", help="Publish the deposition (irreversible in production). Default is draft-only.")
-    parser.add_argument("--save-state", action="store_true", help="Write .zenodo.json even when only creating a draft. Always written on publish.")
-    parser.add_argument("--sleep-seconds", type=float, default=1.0, help="Delay between file uploads (default 1.0).")
-    parser.add_argument("--allow-dirty", action="store_true", help="Publish even when release files differ from git HEAD.")
-    parser.add_argument("--dry-run", action="store_true", help="Show the release plan without calling the Zenodo API.")
+    parser.add_argument(
+        "--manifest",
+        default="data/manifest.json",
+        help="Path to the release manifest (default: data/manifest.json).",
+    )
+    parser.add_argument(
+        "--dotenv-path",
+        default=".env",
+        help="Optional dotenv file supplying ZENODO_SANDBOX_API_KEY / ZENODO_API_KEY.",
+    )
+    parser.add_argument(
+        "--use-production",
+        "--production",
+        dest="use_production",
+        action="store_true",
+        help="Use production Zenodo instead of the sandbox.",
+    )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help="Publish the deposition (irreversible in production). Default is draft-only.",
+    )
+    parser.add_argument(
+        "--save-state",
+        action="store_true",
+        help="Write .zenodo.json even when only creating a draft. Always written on publish.",
+    )
+    parser.add_argument(
+        "--sleep-seconds",
+        type=float,
+        default=1.0,
+        help="Delay between file uploads (default 1.0).",
+    )
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Publish even when release files differ from git HEAD.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the release plan without calling the Zenodo API.",
+    )
     return parser
 
 
@@ -678,7 +784,9 @@ def dry_run(manifest_path: Path) -> None:
     print(f"manifest files: {len(files)}")
     for name, info in sorted(files.items()):
         missing = not (data_dir / name).exists()
-        print(f"  {'MISSING ' if missing else 'ok      '}{name}  (version {info.get('version')})")
+        print(
+            f"  {'MISSING ' if missing else 'ok      '}{name}  (version {info.get('version')})"
+        )
     total = sum((data_dir / n).stat().st_size for n in files if (data_dir / n).exists())
     print(f"total bytes: {total / 1e6:.1f} MB")
 
