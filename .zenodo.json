@@ -1,41 +1,51 @@
 {
   "metadata": {
     "access_right": "open",
-    "license": "cc-zero",
     "creators": [
       {
         "name": "Schivley, Greg",
         "orcid": "0000-0002-8947-694X"
       }
     ],
-    "description": "<p>PowerGenome input data assembled from public sources. This release corresponds to <code>data/manifest.json</code> data version <code>2026.08.14</code>.</p><p><strong>Files updated in this release:</strong></p><ul><li>None</li></ul><p>Each data element's own version key records when that element was last updated; the per-file sources below document where it came from.</p><h3><code>cpi_data.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>0dcf40c82a204b361f9da0fdc7070550</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS\">https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS</a> &mdash; U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv).</li></ul>\n<h3><code>distributed_capacity.parquet</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>d8c206063044ea93edb80e8cae100357</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv</a> &mdash; ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -&gt; BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.</li><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv</a> &mdash; ReEDS county-to-zone mapping used to aggregate capacity to balancing areas.</li></ul>\n<h3><code>distributed_profiles.parquet</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>39a54bb4fc2bf42287d66ceadb90714f</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5\">https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5</a> &mdash; ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.</li></ul>\n<h3><code>dollar_year_adjustment.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>2e819d4d7f465d8d273b2da57f0a2fd1</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA\">https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA</a> &mdash; U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index 2017=100), annual, from FRED with BEA NIPA API fallback.</li></ul>\n<h3><code>fuel_prices.parquet</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>a5393175e8eabda1134e849ceeb6f5e1</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://www.eia.gov/opendata/bulk/AEO2026.zip\">https://www.eia.gov/opendata/bulk/AEO2026.zip</a> &mdash; EIA Annual Energy Outlook (AEO) bulk data: &#x27;Energy Prices : Electric Power&#x27; series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.</li></ul>\n<h3><code>nerc_reserve_margins.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>b8ac4f0a59127c9e483d9b59aaad78b4</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf\">https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf</a> &mdash; NERC Long-Term Reliability Assessment (LTRA) &#x27;Reference Margin Level (%)&#x27; by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.</li></ul>\n<h3><code>nerc_reserve_margins_vintage.json</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>f10aef2af51faa5d227ec513262077c2</code></td></tr></table><ul><li><strong>Source:</strong> Sidecar vintage metadata (report year, source URL, retrieval timestamp) written alongside nerc_reserve_margins.csv by the NERC reserve margins extractor.</li></ul>\n<h3><code>operational_constraints_reeds.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-14</td></tr><tr><th>Last updated</th><td>2026-08-14</td></tr><tr><th>md5</th><td><code>75b7e22488de8048e56c1e1f81c359f9</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json\">https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json</a> &mdash; ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), transformed by build_operational_constraints_reeds.py into PowerGenome operational constraints.</li></ul>\n<h3><code>plant_region_map.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>0d8a6f43695c230a418827820f071dd8</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv</a> &mdash; ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) as the plant list, joined to ReEDS zones by transform_reeds_generators.py.</li><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv</a> &mdash; ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant to a model region.</li></ul>\n<h3><code>reeds_generators_transformed.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>1dfff9c035410c487687ee9da9c85395</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv</a> &mdash; ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py.</li><li><strong>Source:</strong> <a href=\"https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet\">https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet</a> &mdash; PUDL/EIA yearly generators parquet, used for retirement info on existing units.</li></ul>\n<h3><code>reeds_load_transformed.parquet</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>2a6c49b1cd3ea175b776ce853f06485e</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5\">https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5</a> &mdash; ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.</li></ul>\n<h3><code>regional_cost_multipliers.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>6c46df3480cbecd82ac1d724f4255658</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf\">https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf</a> &mdash; EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.</li></ul>\n<h3><code>reserve_margins.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>597fc25a77553b29217ea35037258d73</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv\">https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv</a> &mdash; ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.</li></ul>\n<h3><code>technology_costs_atb.parquet</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>4c65c88129c4db3d0df180c3eb28a3ec</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://data.openei.org/s3_viewer?bucket=oedi-data-lake&amp;prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&amp;limit=50\">https://data.openei.org/s3_viewer?bucket=oedi-data-lake&amp;prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&amp;limit=50</a> &mdash; NREL ATB 2024 v4</li></ul>\n<h3><code>technology_heat_rates_nrelatb.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>356c16b73d98fd6ac2dcf95510701630</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://data.openei.org/s3_viewer?bucket=oedi-data-lake&amp;prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&amp;limit=50\">https://data.openei.org/s3_viewer?bucket=oedi-data-lake&amp;prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&amp;limit=50</a> &mdash; NREL ATB 2024 v4</li></ul>\n<h3><code>transmission_capacity_reeds.csv</code></h3><table><tr><th>Data element version</th><td>2026-08-11</td></tr><tr><th>Last updated</th><td>2026-08-11</td></tr><tr><th>md5</th><td><code>afed76f028868aae1d68c095bca01f24</code></td></tr></table><ul><li><strong>Source:</strong> <a href=\"https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv\">https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv</a> &mdash; ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.</li></ul>",
-    "title": "PowerGenome Input Data",
-    "upload_type": "dataset",
-    "version": "2026.08.14"
-  },
-  "zenodo_release": {
-    "environment": "sandbox",
-    "data_version": "2026.08.14",
-    "deposition_id": "590994",
-    "doi": "10.5072/zenodo.590994",
-    "files": {
-      "cpi_data.csv": "0dcf40c82a204b361f9da0fdc7070550",
-      "distributed_capacity.parquet": "d8c206063044ea93edb80e8cae100357",
-      "distributed_profiles.parquet": "39a54bb4fc2bf42287d66ceadb90714f",
-      "dollar_year_adjustment.csv": "2e819d4d7f465d8d273b2da57f0a2fd1",
-      "fuel_prices.parquet": "a5393175e8eabda1134e849ceeb6f5e1",
-      "nerc_reserve_margins.csv": "b8ac4f0a59127c9e483d9b59aaad78b4",
-      "nerc_reserve_margins_vintage.json": "f10aef2af51faa5d227ec513262077c2",
-      "operational_constraints_reeds.csv": "75b7e22488de8048e56c1e1f81c359f9",
-      "plant_region_map.csv": "0d8a6f43695c230a418827820f071dd8",
-      "reeds_generators_transformed.csv": "1dfff9c035410c487687ee9da9c85395",
-      "reeds_load_transformed.parquet": "2a6c49b1cd3ea175b776ce853f06485e",
-      "regional_cost_multipliers.csv": "6c46df3480cbecd82ac1d724f4255658",
-      "reserve_margins.csv": "597fc25a77553b29217ea35037258d73",
-      "technology_costs_atb.parquet": "4c65c88129c4db3d0df180c3eb28a3ec",
-      "technology_heat_rates_nrelatb.csv": "356c16b73d98fd6ac2dcf95510701630",
-      "transmission_capacity_reeds.csv": "afed76f028868aae1d68c095bca01f24"
+    "license": "cc-zero",
+    "sections": {
+      "core": {
+        "title": "PowerGenome Input Data"
+      },
+      "existing_resource_groups": {
+        "title": "PowerGenome Existing Renewable Resource Groups"
+      },
+      "profiles": {
+        "title": "PowerGenome Renewable Resource Profiles"
+      }
     },
-    "published": true
+    "upload_type": "dataset"
+  },
+  "releases": {
+    "core": {
+      "data_version": "2026.08.14",
+      "deposition_id": "590994",
+      "doi": "10.5072/zenodo.590994",
+      "environment": "sandbox",
+      "files": {
+        "cpi_data.csv": "0dcf40c82a204b361f9da0fdc7070550",
+        "distributed_capacity.parquet": "d8c206063044ea93edb80e8cae100357",
+        "distributed_profiles.parquet": "39a54bb4fc2bf42287d66ceadb90714f",
+        "dollar_year_adjustment.csv": "2e819d4d7f465d8d273b2da57f0a2fd1",
+        "fuel_prices.parquet": "a5393175e8eabda1134e849ceeb6f5e1",
+        "nerc_reserve_margins.csv": "b8ac4f0a59127c9e483d9b59aaad78b4",
+        "nerc_reserve_margins_vintage.json": "f10aef2af51faa5d227ec513262077c2",
+        "operational_constraints_reeds.csv": "75b7e22488de8048e56c1e1f81c359f9",
+        "plant_region_map.csv": "0d8a6f43695c230a418827820f071dd8",
+        "reeds_generators_transformed.csv": "1dfff9c035410c487687ee9da9c85395",
+        "reeds_load_transformed.parquet": "2a6c49b1cd3ea175b776ce853f06485e",
+        "regional_cost_multipliers.csv": "6c46df3480cbecd82ac1d724f4255658",
+        "reserve_margins.csv": "597fc25a77553b29217ea35037258d73",
+        "technology_costs_atb.parquet": "4c65c88129c4db3d0df180c3eb28a3ec",
+        "technology_heat_rates_nrelatb.csv": "356c16b73d98fd6ac2dcf95510701630",
+        "transmission_capacity_reeds.csv": "afed76f028868aae1d68c095bca01f24"
+      },
+      "published": true
+    }
   }
 }

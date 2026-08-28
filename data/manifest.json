@@ -216,5 +216,15 @@
     }
   },
   "generated_at_utc": "2026-08-14T18:38:10.294325+00:00",
-  "manifest_version": 1
+  "manifest_version": 1,
+  "sections": {
+    "existing_resource_groups": {
+      "_comment": "Resource group files for existing renewables (PowerGenome RESOURCE_GROUPS). Files live in existing_resource_groups/ and are published as their own Zenodo deposit by publish_zenodo.py.",
+      "files": {}
+    },
+    "profiles": {
+      "_comment": "Hourly generation profiles for new-build renewable resources (PowerGenome RESOURCE_GROUP_PROFILES). Files live in resource_profiles/ and are published as their own Zenodo deposit by publish_zenodo.py.",
+      "files": {}
+    }
+  }
 }

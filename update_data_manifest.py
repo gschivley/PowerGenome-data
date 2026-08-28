@@ -22,6 +22,14 @@ Run from the repo root:
     uv run python update_data_manifest.py
     uv run python update_data_manifest.py --dry-run
     uv run python update_data_manifest.py --date 2026-08-11
+
+The manifest's flat top-level ``files`` object is the *core* collection. Additional
+collections published as their own Zenodo deposits (see publish_zenodo.py) live
+under a top-level ``sections`` object keyed by section name (``profiles`` ->
+``resource_profiles/``, ``existing_resource_groups`` -> ``existing_resource_groups/``)
+with the same per-file entry schema. This tool scans only ``data/``; run it with
+``--data-dir``/``--manifest`` or merge section entries by hand for the other
+collections.
 """
 
 from __future__ import annotations

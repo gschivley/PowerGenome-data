@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """Publish PowerGenome-data data files listed in data/manifest.json to Zenodo.
 
-The release is driven entirely by data/manifest.json:
+Each data collection (section) in the manifest is published to its own Zenodo
+deposit:
+
+  * ``core``                     -- files under ``data/`` ("PowerGenome Input Data")
+  * ``profiles``                 -- files under ``resource_profiles/`` (hourly
+                                    generation profiles for new-build renewable
+                                    resources; PowerGenome ``RESOURCE_GROUP_PROFILES``)
+  * ``existing_resource_groups`` -- files under ``existing_resource_groups/``
+                                    (resource group files for existing renewables;
+                                    PowerGenome ``RESOURCE_GROUPS``)
+
+The flat top-level ``files`` object in the manifest is the core section (this
+keeps older manifests valid); the other sections live under a top-level
+``sections`` object. Sections with no files are skipped, so a deposit is only
+created once a collection actually has data.
+
+Each release is driven by data/manifest.json:
   * The Zenodo release version is the manifest's top-level "data_version"
     with a sequential per-day suffix, e.g. "2026.08.24.v1", "2026.08.24.v2",
     so multiple releases on the same date get distinct version numbers.
@@ -14,11 +30,12 @@ The release is driven entirely by data/manifest.json:
     previously released but no longer in the manifest are removed from the
     draft so Zenodo mirrors the manifest.
 
-Release state (last published data_version, deposition id, per-file md5s,
-publish status) is stored in .zenodo.json in the project root. That file
-contains no secrets and is safe to commit. If a draft was created but not
-yet published, the draft is resumed on the next run instead of creating a
-duplicate.
+Release state (per-section data_version, deposition id, per-file md5s, publish
+status) is stored in .zenodo.json in the project root, under a "releases"
+object keyed by section. The legacy single-deposit "zenodo_release" object is
+migrated into ``releases.core`` on load. .zenodo.json contains no secrets and
+is safe to commit. If a draft was created but not yet published, the draft is
+resumed on the next run instead of creating a duplicate.
 
 Defaults to the Zenodo sandbox. Production requires --production or
 USE_PRODUCTION=true. Publishing requires --publish; without it a draft is
@@ -51,6 +68,29 @@ MAX_FILES = 100
 MAX_TOTAL_BYTES = 50 * 1024 * 1024 * 1024
 PROJECT_ROOT = None
 STATE_PATH = None
+
+# One Zenodo deposit per data collection (manifest section). ``data_dir`` is
+# relative to the repo root; ``key_prefix`` prefixes file keys inside the
+# deposit so filenames can never collide across collections and downloads
+# self-organize by collection.
+COLLECTIONS = {
+    "core": {
+        "data_dir": "data",
+        "key_prefix": "",
+        "title": "PowerGenome Input Data",
+    },
+    "profiles": {
+        "data_dir": "resource_profiles",
+        "key_prefix": "profiles/",
+        "title": "PowerGenome Renewable Resource Profiles",
+    },
+    "existing_resource_groups": {
+        "data_dir": "existing_resource_groups",
+        "key_prefix": "existing_resource_groups/",
+        "title": "PowerGenome Existing Renewable Resource Groups",
+    },
+}
+CORE_SECTION = "core"
 
 
 def log(msg: str) -> None:
@@ -130,13 +170,73 @@ def load_manifest(manifest_path: Path) -> dict:
         sys.exit(
             f"Manifest {manifest_path} must have 'data_version' and a 'files' object."
         )
+    sections = manifest.setdefault("sections", {})
+    if not isinstance(sections, dict):
+        sys.exit(f"Manifest {manifest_path}: 'sections' must be an object.")
+    for name, section in sections.items():
+        if name not in COLLECTIONS:
+            sys.exit(
+                f"Manifest {manifest_path}: unknown section {name!r}; "
+                f"known sections: {', '.join(sorted(COLLECTIONS))}."
+            )
+        if not isinstance(section, dict) or not isinstance(section.get("files"), dict):
+            sys.exit(
+                f"Manifest {manifest_path}: section {name!r} must be an object "
+                "with a 'files' object."
+            )
     return manifest
+
+
+def manifest_sections(manifest: dict) -> dict[str, dict]:
+    """Files per collection. The flat top-level ``files`` object is the core
+    section; other collections live under ``sections``."""
+    sections = {CORE_SECTION: manifest["files"]}
+    for name in COLLECTIONS:
+        if name == CORE_SECTION:
+            continue
+        section = (manifest.get("sections") or {}).get(name) or {}
+        sections[name] = section.get("files") or {}
+    return sections
 
 
 def load_state() -> dict:
     if STATE_PATH.exists():
         return json.loads(STATE_PATH.read_text(encoding="utf-8"))
     return {}
+
+
+def section_release(state: dict, section: str) -> dict:
+    """Release state for one collection, migrating the legacy single-deposit
+    ``zenodo_release`` object into ``releases.core``."""
+    releases = state.get("releases")
+    if isinstance(releases, dict) and isinstance(releases.get(section), dict):
+        return releases[section]
+    if section == CORE_SECTION:
+        legacy = state.get("zenodo_release")
+        if isinstance(legacy, dict) and legacy:
+            return legacy
+    return {}
+
+
+def section_metadata(state: dict, section: str) -> dict:
+    """Zenodo metadata for one collection: shared top-level defaults with
+    per-section overrides from ``metadata.sections.<section>``."""
+    project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
+    if not isinstance(project_metadata, dict):
+        project_metadata = {}
+    overrides = {}
+    sections = project_metadata.get("sections")
+    if isinstance(sections, dict) and isinstance(sections.get(section), dict):
+        overrides = sections[section]
+    merged = {k: v for k, v in project_metadata.items() if k != "sections"}
+    merged.update(overrides)
+    # Title/description/version are per-deposit and regenerated every release;
+    # a stray value in shared metadata (legacy state, hand edits) must not leak
+    # into another deposit. An explicit per-section override still wins.
+    for per_release_field in ("title", "description", "version"):
+        if per_release_field not in overrides:
+            merged.pop(per_release_field, None)
+    return merged
 
 
 def default_creators() -> list[dict]:
@@ -199,13 +299,15 @@ def describe_file(filename: str, info: dict) -> str:
 
 def build_description(
     manifest: dict,
+    section: str,
+    files: dict,
     added: list[str],
     updated: list[str],
     removed: list[str],
     initial: bool,
 ) -> str:
     data_version = manifest["data_version"]
-    files = manifest["files"]
+    title = COLLECTIONS[section]["title"]
     esc = html.escape
 
     def names_html(names: list[str]) -> str:
@@ -217,21 +319,21 @@ def build_description(
             f"All {len(files)} files are new in this version.</p>"
         )
     else:
-        sections = []
+        sections_html = []
         if added:
-            sections.append(
+            sections_html.append(
                 f"<p><strong>Files added in this release:</strong></p><ul>{names_html(added)}</ul>"
             )
         if updated:
-            sections.append(
+            sections_html.append(
                 f"<p><strong>Files updated in this release:</strong></p><ul>{names_html(updated)}</ul>"
             )
         if removed:
-            sections.append(
+            sections_html.append(
                 f"<p><strong>Files removed in this release:</strong></p><ul>{names_html(removed)}</ul>"
             )
         change_note = (
-            "".join(sections) or "<p><em>No file changes in this release.</em></p>"
+            "".join(sections_html) or "<p><em>No file changes in this release.</em></p>"
         )
 
     file_sections = "\n".join(
@@ -239,8 +341,8 @@ def build_description(
     )
 
     return (
-        "<p>PowerGenome input data assembled from public sources. This release "
-        f"corresponds to <code>data/manifest.json</code> data version "
+        f"<p>{esc(title)}: PowerGenome input data assembled from public sources. "
+        "This release corresponds to <code>data/manifest.json</code> data version "
         f"<code>{esc(data_version)}</code>.</p>"
         f"{change_note}"
         "<p><strong>Licensing:</strong> this compilation as a whole is released under "
@@ -354,11 +456,14 @@ def create_new_version(session: requests.Session, base_url: str, record: str) ->
     return payload
 
 
-def upload_file(session: requests.Session, bucket_url: str, path: Path) -> dict:
+def upload_file(
+    session: requests.Session, bucket_url: str, path: Path, key: str | None = None
+) -> dict:
     checksum = md5_for_file(path)
+    key = key or path.name
     with path.open("rb") as handle:
-        response = session.put(f"{bucket_url}/{path.name}", data=handle, timeout=3600)
-    raise_for_status(response, f"Uploading {path.name}")
+        response = session.put(f"{bucket_url}/{key}", data=handle, timeout=3600)
+    raise_for_status(response, f"Uploading {key}")
 
     payload = response.json()
     remote_checksum = payload.get("checksum", "")
@@ -457,14 +562,14 @@ def validate_constraints(files_by_name: dict[str, Path]) -> None:
         )
 
 
-def uncommitted_release_files(manifest: dict, data_dir: Path) -> list[str]:
-    """Names of files in the manifest that differ from git HEAD.
+def uncommitted_release_files(manifest_files: dict, data_dir: Path) -> list[str]:
+    """Names of files in a manifest section that differ from git HEAD.
 
     Publishing a release whose files are not in git history means the Zenodo
     record has no reproducible commit behind it. Returns ``[]`` when git is
-    unavailable or the tree is clean for every manifest file.
+    unavailable or the tree is clean for every file.
     """
-    paths = [data_dir / name for name in manifest["files"]]
+    paths = [data_dir / name for name in manifest_files]
     try:
         out = subprocess.check_output(
             ["git", "status", "--porcelain", "--"] + [str(p) for p in paths],
@@ -484,28 +589,29 @@ def uncommitted_release_files(manifest: dict, data_dir: Path) -> list[str]:
     return dirty
 
 
-def run_release(args) -> None:
-    global PROJECT_ROOT, STATE_PATH
-    PROJECT_ROOT = Path.cwd()
-    STATE_PATH = PROJECT_ROOT / ".zenodo.json"
+def release_section(
+    args,
+    session: requests.Session,
+    base_url: str,
+    environment: str,
+    manifest: dict,
+    section: str,
+    manifest_files: dict,
+    data_dir: Path,
+    state: dict,
+) -> dict:
+    """Create/update/publish the Zenodo deposit for one manifest section.
 
-    load_dotenv(Path(args.dotenv_path).expanduser())
-    use_production = args.use_production or truthy_env("USE_PRODUCTION")
-    environment = "production" if use_production else "sandbox"
-    token = load_token(use_production)
-    session = make_session(token)
-    base_url = resolve_base(use_production)
-
-    manifest_path = Path(args.manifest).expanduser()
-    if not manifest_path.is_absolute():
-        manifest_path = PROJECT_ROOT / manifest_path
-    manifest = load_manifest(manifest_path)
+    Returns ``{"section": ..., "summary": ..., "release": ..., "metadata": ...}``
+    where ``summary`` is the per-section run report, ``release`` is the new
+    state to persist under ``releases.<section>``, and ``metadata`` is the
+    Zenodo metadata that was set (or would be set) for the deposit.
+    """
     data_version = manifest["data_version"]
-    manifest_files = manifest["files"]
-    data_dir = manifest_path.parent
+    config = COLLECTIONS[section]
+    key_prefix = config["key_prefix"]
 
-    state = load_state()
-    released = state.get("zenodo_release", {})
+    released = section_release(state, section)
     # Release state is environment-specific: deposition ids, DOIs, and the
     # version suffix counter differ between sandbox and production. Treat a
     # stored release from the *other* environment as absent so each environment
@@ -513,7 +619,8 @@ def run_release(args) -> None:
     stored_environment = released.get("environment", "sandbox")
     if released and stored_environment != environment:
         log(
-            f"stored release state is for {stored_environment}, target is {environment}; ignoring it"
+            f"[{section}] stored release state is for {stored_environment}, "
+            f"target is {environment}; ignoring it"
         )
         released = {}
     previously_published = bool(released.get("published"))
@@ -529,40 +636,48 @@ def run_release(args) -> None:
         local_path = data_dir / filename
         if not local_path.exists():
             sys.exit(
-                f"Manifest lists {filename} but {local_path} does not exist on disk."
+                f"[{section}] manifest lists {filename} but {local_path} does not exist on disk."
             )
         actual = md5_for_file(local_path)
         local_md5s[filename] = actual
         expected = manifest_files[filename].get("md5")
         if expected and actual != expected:
             sys.exit(
-                f"Manifest md5 mismatch for {filename}: manifest says {expected}, "
+                f"[{section}] manifest md5 mismatch for {filename}: manifest says {expected}, "
                 f"file has {actual}. Run update_data_manifest.py before releasing."
             )
         local_paths[filename] = local_path
     validate_constraints(local_paths)
 
+    # Keys used inside the deposit bucket. Prefixed per section so filenames
+    # cannot collide across collections.
+    keys = {name: f"{key_prefix}{name}" for name in manifest_files}
+
     # Determine which files were updated in this release.
-    added = [name for name in manifest_files if name not in released_files]
+    added = [name for name in manifest_files if keys[name] not in released_files]
     updated = [
         name
         for name, info in manifest_files.items()
-        if name in released_files and released_files[name] != info.get("md5")
+        if keys[name] in released_files
+        and released_files[keys[name]] != info.get("md5")
     ]
     changed = added + updated
-    removed = [name for name in released_files if name not in manifest_files]
+    removed = [key for key in released_files if key not in set(keys.values())]
     initial = not released_files
 
-    log(f"data version: {data_version}")
+    log(f"[{section}] data version: {data_version}")
     if added:
-        log(f"files added ({len(added)}): {', '.join(added)}")
+        log(f"[{section}] files added ({len(added)}): {', '.join(added)}")
     if updated:
-        log(f"files updated ({len(updated)}): {', '.join(updated)}")
+        log(f"[{section}] files updated ({len(updated)}): {', '.join(updated)}")
     if removed:
-        log(f"files dropped from manifest ({len(removed)}): {', '.join(removed)}")
+        log(
+            f"[{section}] files dropped from manifest ({len(removed)}): {', '.join(removed)}"
+        )
     if not changed and not removed:
         log(
-            "no file changes detected since last release; the description/version may still be updated"
+            f"[{section}] no file changes detected since last release; "
+            "the description/version may still be updated"
         )
 
     # Nothing to do if this exact version was already published unchanged.
@@ -573,32 +688,47 @@ def run_release(args) -> None:
         and not removed
     ):
         log(
-            f"version {data_version} is already published on Zenodo (deposition {deposition_id}); nothing to do."
+            f"[{section}] version {data_version} is already published on Zenodo "
+            f"(deposition {deposition_id}); nothing to do."
         )
-        return
+        return {
+            "section": section,
+            "summary": {
+                "section": section,
+                "mode": "published",
+                "environment": environment,
+                "data_version": data_version,
+                "release_version": released.get("release_version"),
+                "deposition_id": deposition_id,
+                "doi": released.get("doi"),
+                "skipped": True,
+            },
+            "release": released,
+            "metadata": section_metadata(state, section),
+        }
 
     # Publishing files that aren't in git history leaves a record with no
     # reproducible commit behind it. Refuse unless --allow-dirty is passed.
-    dirty = uncommitted_release_files(manifest, data_dir)
+    dirty = uncommitted_release_files(manifest_files, data_dir)
     if dirty and not getattr(args, "allow_dirty", False):
-        log("uncommitted changes vs git HEAD in release files:")
+        log(f"[{section}] uncommitted changes vs git HEAD in release files:")
         for line in dirty:
             log(f"  {line}")
         sys.exit(
-            "Release files differ from git HEAD. Commit the changes first, or "
+            f"[{section}] release files differ from git HEAD. Commit the changes first, or "
             "re-run with --allow-dirty. Publishing an uncommitted release leaves "
             "no reproducible commit for the Zenodo record."
         )
 
     # Resolve the target draft.
     if deposition_id and not previously_published:
-        log(f"resuming unpublished draft {deposition_id}")
+        log(f"[{section}] resuming unpublished draft {deposition_id}")
         deposition = get_deposition(session, base_url, str(deposition_id))
     elif deposition_id:
-        log(f"creating new version from deposition {deposition_id}")
+        log(f"[{section}] creating new version from deposition {deposition_id}")
         deposition = create_new_version(session, base_url, str(deposition_id))
     else:
-        log("creating a new deposition")
+        log(f"[{section}] creating a new deposition")
         deposition = create_deposition(session, base_url)
 
     deposition_id = str(deposition["id"])
@@ -610,44 +740,49 @@ def run_release(args) -> None:
         deposition.get("conceptrecid"),
         released.get("versions") if isinstance(released, dict) else None,
     )
-    log(f"release version: {release_version}")
+    log(f"[{section}] release version: {release_version}")
 
     # Remove files no longer part of the manifest (covers released-then-dropped
     # files and any leftovers in a resumed draft / previous version).
+    wanted_keys = set(keys.values())
     present = existing_draft_files(session, deposition)
-    for filename, (file_id, _checksum) in present.items():
-        if filename in local_paths:
+    for key, (file_id, _checksum) in present.items():
+        if key in wanted_keys:
             continue
         file_url = deposition["links"]["files"] + "/" + file_id
-        log(f"removing {filename} (no longer in manifest)")
-        delete_file(session, file_url, filename)
+        log(f"[{section}] removing {key} (no longer in manifest)")
+        delete_file(session, file_url, key)
 
     # Upload files whose local checksum differs from what the draft already
     # holds (skips files unchanged since a prior draft copy / new-version).
     uploads = []
     for index, (filename, local_path) in enumerate(local_paths.items()):
+        key = keys[filename]
         local_md5 = local_md5s[filename]
-        _, draft_checksum = present.get(filename, (None, None))
+        _, draft_checksum = present.get(key, (None, None))
         if draft_checksum == local_md5:
-            log(f"already up to date in draft, skipping: {filename}")
+            log(f"[{section}] already up to date in draft, skipping: {key}")
             continue
-        log(f"uploading {filename} ({local_path.stat().st_size / 1e6:.1f} MB)")
-        result = upload_file(session, bucket_url, local_path)
-        result["filename"] = filename
+        log(f"[{section}] uploading {key} ({local_path.stat().st_size / 1e6:.1f} MB)")
+        result = upload_file(session, bucket_url, local_path, key=key)
+        result["filename"] = key
         uploads.append(result)
         if index < len(local_paths) - 1 and args.sleep_seconds > 0:
             time.sleep(args.sleep_seconds)
 
     # Build + update metadata.
-    description = build_description(manifest, added, updated, removed, initial)
-    project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
-    creators = project_metadata.get("creators") or default_creators()
-    metadata = dict(project_metadata)
+    description = build_description(
+        manifest, section, manifest_files, added, updated, removed, initial
+    )
+    base_metadata = section_metadata(state, section)
+    creators = base_metadata.get("creators") or default_creators()
+    metadata = dict(base_metadata)
+    # Core keeps its long-standing title unless explicitly overridden.
     metadata.update(
         {
-            "title": project_metadata.get("title") or "PowerGenome Input Data",
-            "upload_type": project_metadata.get("upload_type") or "dataset",
-            "access_right": project_metadata.get("access_right") or "open",
+            "title": base_metadata.get("title") or COLLECTIONS[section]["title"],
+            "upload_type": base_metadata.get("upload_type") or "dataset",
+            "access_right": base_metadata.get("access_right") or "open",
             "creators": creators,
             "version": release_version,
             "description": description,
@@ -660,15 +795,16 @@ def run_release(args) -> None:
     published = False
     publish_payload = {}
     if args.publish:
-        log(f"publishing deposition {deposition_id}")
+        log(f"[{section}] publishing deposition {deposition_id}")
         publish_payload = publish_deposition(session, base_url, deposition_id)
         published = True
     else:
         log(
-            f"draft only (no --publish); draft: {draft_page_url(base_url, deposition_id)}"
+            f"[{section}] draft only (no --publish); draft: {draft_page_url(base_url, deposition_id)}"
         )
 
     summary = {
+        "section": section,
         "mode": "publish" if published else "draft",
         "environment": environment,
         "data_version": data_version,
@@ -689,46 +825,115 @@ def run_release(args) -> None:
         "removed_files": removed,
         "check_uploads": uploads,
     }
-    print(json.dumps(summary, indent=2))
+
+    # Track released version strings per environment so a fast follow-up
+    # release never reuses a suffix even while Zenodo's search index lags.
+    prior_versions = released.get("versions", []) if isinstance(released, dict) else []
+    versions = list(prior_versions)
+    if published and release_version not in versions:
+        versions.append(release_version)
+    new_release = {
+        "environment": environment,
+        "data_version": data_version,
+        "release_version": release_version,
+        "deposition_id": deposition_id,
+        "published": published,
+        "doi": publish_payload.get("doi") if published else None,
+        "versions": versions,
+        "files": {keys[name]: info["md5"] for name, info in manifest_files.items()},
+    }
+
+    return {
+        "section": section,
+        "summary": summary,
+        "release": new_release,
+        "metadata": metadata,
+    }
+
+
+def run_release(args) -> None:
+    global PROJECT_ROOT, STATE_PATH
+    PROJECT_ROOT = Path.cwd()
+    STATE_PATH = PROJECT_ROOT / ".zenodo.json"
+
+    load_dotenv(Path(args.dotenv_path).expanduser())
+    use_production = args.use_production or truthy_env("USE_PRODUCTION")
+    environment = "production" if use_production else "sandbox"
+    token = load_token(use_production)
+    session = make_session(token)
+    base_url = resolve_base(use_production)
+
+    manifest_path = Path(args.manifest).expanduser()
+    if not manifest_path.is_absolute():
+        manifest_path = PROJECT_ROOT / manifest_path
+    manifest = load_manifest(manifest_path)
+    sections = manifest_sections(manifest)
+
+    state = load_state()
+    save_state = args.publish or args.save_state
+
+    results = []
+    for section, manifest_files in sections.items():
+        if not manifest_files:
+            log(f"[{section}] no files in manifest section; skipping")
+            continue
+        data_dir = PROJECT_ROOT / COLLECTIONS[section]["data_dir"]
+        if not data_dir.is_dir():
+            sys.exit(
+                f"[{section}] data directory {data_dir} does not exist but the "
+                "manifest section lists files."
+            )
+        results.append(
+            release_section(
+                args,
+                session,
+                base_url,
+                environment,
+                manifest,
+                section,
+                manifest_files,
+                data_dir,
+                state,
+            )
+        )
+
+    if not results:
+        log("no manifest sections with files; nothing to do.")
+        return
 
     # Persist release state (after a successful publish, or on resume so the
     # draft can be continued; changed-file diff only applies when published).
-    save_state = args.publish or args.save_state
     if save_state:
-        # Track released version strings per environment so a fast follow-up
-        # release never reuses a suffix even while Zenodo's search index lags.
-        prior_versions = (
-            released.get("versions", []) if isinstance(released, dict) else []
-        )
-        versions = list(prior_versions)
-        if published and release_version not in versions:
-            versions.append(release_version)
-        new_release = {
-            "environment": environment,
-            "data_version": data_version,
-            "release_version": release_version,
-            "deposition_id": deposition_id,
-            "published": published,
-            "doi": publish_payload.get("doi") if published else None,
-            "versions": versions,
-            "files": {name: info["md5"] for name, info in manifest_files.items()},
+        project_metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
+        if not isinstance(project_metadata, dict):
+            project_metadata = {}
+        project_metadata = dict(project_metadata)
+        # Description/version in stored metadata are per-deposit; keep the
+        # shared fields (creators, license, access_right, ...) only.
+        for per_release_field in ("title", "description", "version"):
+            project_metadata.pop(per_release_field, None)
+        new_state = {
+            "metadata": project_metadata,
+            "releases": {result["section"]: result["release"] for result in results},
         }
-        merged = {"metadata": metadata, "zenodo_release": new_release}
         STATE_PATH.write_text(
-            json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(new_state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         log(f"state written to {STATE_PATH}")
 
-    if not published:
+    summaries = [result["summary"] for result in results]
+    if any(not s.get("skipped") and s["mode"] == "draft" for s in summaries):
         log(
-            "Not published. Run again with --publish to publish this draft, or download from the draft URL above."
+            "Not all deposits published. Run again with --publish to publish the drafts, "
+            "or download from the draft URLs in the summary."
         )
+    print(json.dumps({"collections": summaries}, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="publish_zenodo.py",
-        description="Publish/update data/manifest.json files to Zenodo (sandbox by default).",
+        description="Publish/update data/manifest.json collections to Zenodo, one deposit per section (sandbox by default).",
     )
     parser.add_argument(
         "--manifest",
@@ -778,17 +983,29 @@ def build_parser() -> argparse.ArgumentParser:
 
 def dry_run(manifest_path: Path) -> None:
     manifest = load_manifest(manifest_path)
-    data_dir = manifest_path.parent
-    files = manifest["files"]
+    sections = manifest_sections(manifest)
+    project_root = Path.cwd()
     print(f"data version: {manifest['data_version']}")
-    print(f"manifest files: {len(files)}")
-    for name, info in sorted(files.items()):
-        missing = not (data_dir / name).exists()
-        print(
-            f"  {'MISSING ' if missing else 'ok      '}{name}  (version {info.get('version')})"
+    for section, files in sections.items():
+        config = COLLECTIONS[section]
+        data_dir = project_root / config["data_dir"]
+        print(f"\n[{section}] {config['title']} ({config['data_dir']}/)")
+        if not files:
+            print("  (no files in this manifest section; deposit skipped)")
+            continue
+        if not data_dir.is_dir():
+            print(f"  ERROR: data directory {data_dir} does not exist")
+            continue
+        print(f"  manifest files: {len(files)}")
+        for name, info in sorted(files.items()):
+            missing = not (data_dir / name).exists()
+            print(
+                f"  {'MISSING ' if missing else 'ok      '}{config['key_prefix']}{name}  (version {info.get('version')})"
+            )
+        total = sum(
+            (data_dir / n).stat().st_size for n in files if (data_dir / n).exists()
         )
-    total = sum((data_dir / n).stat().st_size for n in files if (data_dir / n).exists())
-    print(f"total bytes: {total / 1e6:.1f} MB")
+        print(f"  total bytes: {total / 1e6:.1f} MB")
 
 
 def main() -> None:

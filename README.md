@@ -12,3 +12,13 @@ Utilities and reference data for preparing PowerGenome inputs. Top-level Python 
 - GitHub Actions publishes the docs to GitHub Pages on pushes to `main` (`.github/workflows/docs.yml`).
 
 See the docs site for a script-by-script map of which files are generated and the upstream data sources they pull from.
+
+## Publishing to Zenodo
+
+Data is published to Zenodo as one deposit per collection via `publish_zenodo.py` (sandbox by default, `--publish --production` for a real release):
+
+- **PowerGenome Input Data** — core input tables from `data/`
+- **PowerGenome Renewable Resource Profiles** — hourly new-build renewable profiles from `resource_profiles/`
+- **PowerGenome Existing Renewable Resource Groups** — existing renewable resource group files from `existing_resource_groups/`
+
+Each collection is a section of `data/manifest.json`; deposits are only created once a collection has files. See the docs site for details.

@@ -123,13 +123,33 @@ python -m unittest discover -s tests
 
 ## Publishing to Zenodo
 
-`publish_zenodo.py` publishes the manifest-listed files in `data/` to a Zenodo deposition and keeps
-the Zenodo record in sync with the manifest across releases. It is the publishing counterpart to the
-manifest described above.
+`publish_zenodo.py` publishes the manifest-listed files to Zenodo, **one deposit per data
+collection**, and keeps each Zenodo record in sync with the manifest across releases. It is the
+publishing counterpart to the manifest described above.
+
+### Collections and deposits
+
+The manifest is split into sections; each non-empty section becomes its own Zenodo deposit with its
+own title, description, version history, and DOI:
+
+| Manifest section | Source folder | Deposit title | Contents |
+| --- | --- | --- | --- |
+| `files` (top level, `core`) | `data/` | PowerGenome Input Data | Core input tables (generators, load, fuels, costs, transmission, ...) |
+| `sections.profiles` | `resource_profiles/` | PowerGenome Renewable Resource Profiles | Hourly generation profiles for new-build renewable resources (PowerGenome `RESOURCE_GROUP_PROFILES`) |
+| `sections.existing_resource_groups` | `existing_resource_groups/` | PowerGenome Existing Renewable Resource Groups | Resource group files for existing renewables (PowerGenome `RESOURCE_GROUPS`) |
+
+Inside a deposit, file keys are prefixed by collection (`profiles/…`,
+`existing_resource_groups/…`), so downloads self-organize and filenames can never collide across
+collections. Sections with no files are skipped, so a deposit is only created once a collection
+actually has data. The flat top-level `files` object is the core section, which keeps older
+manifests valid.
+
+Each section's files use the same entry schema as the core `files` object (`sources`, `version`,
+`last_updated`, `md5`, `license`, `history`).
 
 ### What it does
 
-- Reads `data/manifest.json` and derives the Zenodo `version` from its top-level `data_version`
+- Reads `data/manifest.json` and derives each Zenodo `version` from its top-level `data_version`
   (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
   that multiple releases on the same date never share a version number. The suffix is computed by
   combining the already-published versions of the dataset's concept carrying the same `data_version`
@@ -142,8 +162,8 @@ manifest described above.
 - Uploads **only files that changed** since the last published release (compared by `md5`), so the
   initial release uploads everything and later releases upload just the new/updated files. Files that
   were released before but are no longer in the manifest are removed from the draft.
-- Creates a **new version** of the existing record on subsequent releases, so Zenodo keeps the full file
-  history. The first release creates a new deposition.
+- Creates a **new version** of each existing record on subsequent releases, so Zenodo keeps the full file
+  history. The first release of a collection creates a new deposition.
 - Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
   a committed state of the repository); pass `--allow-dirty` to override.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
@@ -175,7 +195,7 @@ uv run python publish_zenodo.py --publish --production
 uv run python publish_zenodo.py --publish --allow-dirty
 ```
 
-Without `--publish` the script leaves the deposition as a draft. If a draft already exists it is resumed
+Without `--publish` the script leaves each deposition as a draft. If a draft already exists it is resumed
 (no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
 `--publish` after an identical release is a no-op.
 
@@ -185,16 +205,19 @@ pass `--allow-dirty`. This keeps each Zenodo record reproducible from the reposi
 
 ### Release state (`.zenodo.json`)
 
-On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
-`zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
-the `release_version` (the version string actually recorded on Zenodo, suffix included), the
-`deposition_id`, the resolved `doi`, the `versions` history (every release version string published in
-this environment, used to keep same-day suffixes unique even while Zenodo's search index lags), and the
-per-file `md5`s that were released. The metadata block carries
-the fields applied to every release — `title`, `creators`, `access_right`, and the compilation `license`
-(e.g. `cc-zero`) — while each file's source license is recorded in `data/manifest.json` and surfaced in the
-description. `.zenodo.json` contains no secrets and is committed to the repo so later runs know what
-changed and can create new versions against the same record.
+On the first publish the script writes `.zenodo.json` in the repo root with shared Zenodo metadata plus
+a `releases` object keyed by collection section (`core`, `profiles`, `existing_resource_groups`).
+Each `releases.<section>` block tracks the environment (`sandbox` or `production`), the published
+`data_version`, the `release_version` (the version string actually recorded on Zenodo, suffix
+included), the `deposition_id`, the resolved `doi`, the `versions` history (every release version
+string published in this environment, used to keep same-day suffixes unique even while Zenodo's
+search index lags), and the per-file `md5`s that were released. The legacy single-deposit
+`zenodo_release` block is migrated into `releases.core` on load. The metadata block carries the fields
+shared by every deposit — `creators`, `access_right`, and the compilation `license` (e.g. `cc-zero`) —
+plus per-deposit title overrides under `metadata.sections.<section>`; each file's source license is
+recorded in `data/manifest.json` and surfaced in the description. `.zenodo.json` contains no secrets
+and is committed to the repo so later runs know what changed and can create new versions against the
+same records.
 
 The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
 suffix counters are independent, so the script records which environment a release belongs to and ignores
