@@ -178,7 +178,10 @@ class DryRunTests(unittest.TestCase):
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
                 out = io.StringIO()
                 with redirect_stdout(out):
-                    MODULE.dry_run(manifest_path)
+                    MODULE.dry_run(
+                        manifest_path,
+                        MODULE.requested_sections(mock.Mock(collection=None)),
+                    )
             text = out.getvalue()
         self.assertIn("[core] PowerGenome Input Data", text)
         self.assertIn("ok      core_a.csv", text)
@@ -188,6 +191,52 @@ class DryRunTests(unittest.TestCase):
             "[existing_resource_groups] PowerGenome Existing Renewable Resource Groups",
             text,
         )
+
+
+class CollectionFilterTests(unittest.TestCase):
+    def test_requested_sections_defaults_to_all(self):
+        args = mock.Mock(collection=None)
+        self.assertEqual(MODULE.requested_sections(args), list(MODULE.COLLECTIONS))
+
+    def test_requested_sections_honors_repeated_flags(self):
+        args = mock.Mock(collection=["profiles", "core"])
+        self.assertEqual(MODULE.requested_sections(args), ["profiles", "core"])
+
+    def test_dry_run_filters_to_requested_collection(self):
+        import io
+        from contextlib import redirect_stdout
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data").mkdir()
+            (root / "resource_profiles").mkdir()
+            (root / "resource_profiles" / "wind.parquet").write_text("w")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {"core_a.csv": {"version": "2026-08-11", "md5": "x"}},
+                "sections": {
+                    "profiles": {
+                        "files": {"wind.parquet": {"version": "2026-08-12", "md5": "y"}}
+                    },
+                    "existing_resource_groups": {"files": {}},
+                },
+            }
+            manifest_path = root / "data" / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            with mock.patch.object(MODULE.Path, "cwd", return_value=root):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    MODULE.dry_run(manifest_path, ["profiles"])
+            text = out.getvalue()
+        self.assertNotIn("[core]", text)
+        self.assertIn("[profiles] PowerGenome Renewable Resource Profiles", text)
+        self.assertIn("ok      profiles/wind.parquet", text)
+        self.assertNotIn("existing_resource_groups", text)
+
+    def test_unknown_collection_rejected_by_parser(self):
+        parser = MODULE.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--collection", "bogus"])
 
 
 if __name__ == "__main__":

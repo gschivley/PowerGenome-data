@@ -44,6 +44,10 @@ created/updated and the draft URL is printed.
 The API token is read from the environment: ZENODO_SANDBOX_API_KEY for the
 sandbox and ZENODO_API_KEY for production. Tokens may be loaded from a local
 dotenv file (default .env) via --dotenv-path.
+
+By default all collections with files are released on every run; pass one or
+more --collection <name> flags (core, profiles, existing_resource_groups) to
+limit the run to specific deposits.
 """
 
 import argparse
@@ -851,6 +855,17 @@ def release_section(
     }
 
 
+def requested_sections(args) -> list[str]:
+    """Manifest sections to process, honoring repeated ``--collection`` flags.
+
+    With no ``--collection`` flags every collection is processed (in registry
+    order). Names are validated by argparse ``choices``.
+    """
+    if not getattr(args, "collection", None):
+        return list(COLLECTIONS)
+    return list(args.collection)
+
+
 def run_release(args) -> None:
     global PROJECT_ROOT, STATE_PATH
     PROJECT_ROOT = Path.cwd()
@@ -867,7 +882,14 @@ def run_release(args) -> None:
     if not manifest_path.is_absolute():
         manifest_path = PROJECT_ROOT / manifest_path
     manifest = load_manifest(manifest_path)
-    sections = manifest_sections(manifest)
+    sections = {
+        section: files
+        for section, files in manifest_sections(manifest).items()
+        if section in requested_sections(args)
+    }
+    for section in requested_sections(args):
+        if section not in sections:
+            log(f"[{section}] not present in manifest; skipping")
 
     state = load_state()
     save_state = args.publish or args.save_state
@@ -974,6 +996,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Publish even when release files differ from git HEAD.",
     )
     parser.add_argument(
+        "--collection",
+        action="append",
+        choices=list(COLLECTIONS),
+        metavar="COLLECTION",
+        help=(
+            "Only release this collection; repeatable (e.g. --collection profiles). "
+            "Default: release every collection in the manifest. Choices: "
+            + ", ".join(sorted(COLLECTIONS))
+            + "."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show the release plan without calling the Zenodo API.",
@@ -981,12 +1015,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def dry_run(manifest_path: Path) -> None:
+def dry_run(manifest_path: Path, sections: list[str]) -> None:
     manifest = load_manifest(manifest_path)
-    sections = manifest_sections(manifest)
+    all_sections = manifest_sections(manifest)
     project_root = Path.cwd()
     print(f"data version: {manifest['data_version']}")
-    for section, files in sections.items():
+    for section in sections:
+        if section not in all_sections:
+            print(f"\n[{section}] not present in manifest; skipping")
+            continue
+        files = all_sections[section]
         config = COLLECTIONS[section]
         data_dir = project_root / config["data_dir"]
         print(f"\n[{section}] {config['title']} ({config['data_dir']}/)")
@@ -1012,7 +1050,7 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.dry_run:
         manifest_path = Path(args.manifest).expanduser()
-        dry_run(manifest_path)
+        dry_run(manifest_path, requested_sections(args))
         return
     run_release(args)
 

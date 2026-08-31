@@ -182,8 +182,14 @@ Each section's files use the same entry schema as the core `files` object (`sour
 # Show what the release would contain (no API calls)
 uv run python publish_zenodo.py --dry-run
 
+# Show only one collection's release plan
+uv run python publish_zenodo.py --dry-run --collection profiles
+
 # Create/update the Zenodo draft (sandbox) and print the draft URL + DOI.
 uv run python publish_zenodo.py
+
+# Resolve just one collection's draft (repeat --collection for several)
+uv run python publish_zenodo.py --collection profiles
 
 # Publish the draft (irreversible in production) and record release state.
 uv run python publish_zenodo.py --publish
@@ -194,6 +200,10 @@ uv run python publish_zenodo.py --publish --production
 # Publish anyway even though release files are uncommitted (not recommended).
 uv run python publish_zenodo.py --publish --allow-dirty
 ```
+
+By default every collection with files in the manifest is released. Pass `--collection`
+(repeatable; choices: `core`, `profiles`, `existing_resource_groups`) to limit the run to a
+single deposit or a subset.
 
 Without `--publish` the script leaves each deposition as a draft. If a draft already exists it is resumed
 (no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
