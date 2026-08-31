@@ -11,6 +11,14 @@ The manifest (``data/manifest.json``) records, for every file in ``data/``:
 * ``version`` and ``last_updated`` -- ISO date (``YYYY-MM-DD``) of the last change.
 * ``history`` -- append-only record of prior ``{version, last_updated, md5}`` entries.
 
+When the data directory is inside a git work tree, files that git does not
+track are *skipped* (with a ``[skipped]`` line) instead of being added with
+placeholder sources: the manifest drives the Zenodo release, and
+``publish_zenodo.py`` refuses to publish files that are not committed anyway.
+Files already present in the manifest are still tracked and updated. Pass
+``--include-untracked`` to restore the old behavior of scanning every file.
+Outside a git repository all files are scanned.
+
 It also tracks two top-level versions:
 
 * ``manifest_version`` -- schema version of the manifest itself; fixed at 1.
@@ -22,6 +30,7 @@ Run from the repo root:
     uv run python update_data_manifest.py
     uv run python update_data_manifest.py --dry-run
     uv run python update_data_manifest.py --date 2026-08-11
+    uv run python update_data_manifest.py --include-untracked
 """
 
 from __future__ import annotations
@@ -29,6 +38,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -261,6 +271,20 @@ def calver(date_str: str) -> str:
     return date_str.replace("-", ".")
 
 
+def git_tracked_filenames(data_dir: Path) -> set[str] | None:
+    """Filenames in ``data_dir`` tracked by git, or ``None`` outside a work tree."""
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files", "--", "."],
+            text=True,
+            cwd=data_dir,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return {Path(line.strip()).name for line in out.splitlines() if line.strip()}
+
+
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
     """Return a clean list of {source[, source_url]} objects.
 
@@ -387,10 +411,15 @@ def write_manifest(manifest_path: Path, manifest: dict) -> None:
 
 
 def update_manifest(
-    data_dir: Path, manifest_path: Path, date_str: str, dry_run: bool = False
+    data_dir: Path,
+    manifest_path: Path,
+    date_str: str,
+    dry_run: bool = False,
+    include_untracked: bool = False,
 ) -> None:
     existing = load_existing(manifest_path)
     old_files = existing.get("files", {})
+    tracked = None if include_untracked else git_tracked_filenames(data_dir)
 
     files: dict[str, dict] = {}
     changed_any = False
@@ -398,6 +427,16 @@ def update_manifest(
         if not path.is_file() or path.name == manifest_path.name:
             continue
         filename = path.name
+        if (
+            tracked is not None
+            and filename not in tracked
+            and filename not in old_files
+        ):
+            print(
+                f"[skipped]  {filename} (not tracked by git; commit it first or "
+                "pass --include-untracked)"
+            )
+            continue
         md5 = md5_of(path)
         prior = old_files.get(filename)
 
@@ -481,12 +520,26 @@ def parse_args(argv=None) -> argparse.Namespace:
         action="store_true",
         help="Print what would change without writing the manifest",
     )
+    parser.add_argument(
+        "--include-untracked",
+        action="store_true",
+        help=(
+            "Add files that git does not track (default inside a git work tree: "
+            "skip new untracked files, since releases require committed files)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = parse_args(argv)
-    update_manifest(args.data_dir, args.manifest, args.date, dry_run=args.dry_run)
+    update_manifest(
+        args.data_dir,
+        args.manifest,
+        args.date,
+        dry_run=args.dry_run,
+        include_untracked=args.include_untracked,
+    )
 
 
 if __name__ == "__main__":
