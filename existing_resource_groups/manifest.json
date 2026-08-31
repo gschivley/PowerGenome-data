@@ -1,0 +1,187 @@
+{
+  "data_version": "2026.08.31",
+  "files": {
+    "existing_hydro_reeds_ba_metadata.csv": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "b1a20e05842fda1981a09c4b6c6b6ef9",
+      "sources": [
+        {
+          "source": "Existing hydro resource metadata by ReEDS balancing area (capacity, id, etc.)."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_offshorewind_reeds_ba_metadata.csv": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "b0999fa2d364df9fcaf4b66faa65b5d3",
+      "sources": [
+        {
+          "source": "Existing offshore wind resource metadata by ReEDS balancing area."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "a7a027f6b129ccf7b6515d6bc122dbd3",
+      "sources": [
+        {
+          "source": "Hourly generation profiles for existing onshore wind by ReEDS balancing area, generated with NREL reV/SAM from WTK weather data and aggregated to balancing areas."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_onshorewind_reeds_ba_metadata.csv": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "463324ce80672d53403b88c4d4280822",
+      "sources": [
+        {
+          "source": "Existing onshore wind resource metadata by ReEDS balancing area."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_osw_profiles.csv": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "9795da32a4e244989cd98ba87aa420de",
+      "sources": [
+        {
+          "source": "Offshore wind generation profiles by ReEDS balancing area (CSV form)."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_osw_profiles_tidy.parquet": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "8fdd420cca0818afe38d978ee8fb12f7",
+      "sources": [
+        {
+          "source": "Offshore wind generation profiles by ReEDS balancing area (tidy parquet form)."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_solar_reeds_ba_metadata.csv": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "becd05df8595259008ad19fb2e95ce33",
+      "sources": [
+        {
+          "source": "Existing solar resource metadata by ReEDS balancing area."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "existing_solar_reeds_ba_profiles_20250513_tidy.parquet": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "e379a8228a779290122285276a8b760b",
+      "sources": [
+        {
+          "source": "Hourly generation profiles for existing solar by ReEDS balancing area, generated with NREL reV/SAM from NSRDB weather data and aggregated to balancing areas."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "hydro_conventional_2007_2013.parquet": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "a1a3d2ce5507293f8f7d0917e7d07877",
+      "sources": [
+        {
+          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, from PUDL monthly generation data interpolated to hourly."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "hydro_run_of_river_2007_2013.parquet": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "31afc0f401c76b47ba02a994fc9f24ec",
+      "sources": [
+        {
+          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, from PUDL monthly generation data interpolated to hourly."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "regional_hydro_True.json": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "931c086cec1d314c2c58fed9ad758833",
+      "sources": [
+        {
+          "source": "Regional aggregation flag for existing hydro resource groups."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "regional_offshorewind_True.json": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "79dd0b7c09fa92a36218270adb21ea9a",
+      "sources": [
+        {
+          "source": "Regional aggregation flag for existing offshore wind resource groups."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "regional_small_hydro_True.json": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "6dd235fd40cba22e9b21fa9aa5c79fd4",
+      "sources": [
+        {
+          "source": "Regional aggregation flag for existing small hydro resource groups."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "regional_solar_photovoltaic_True.json": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
+      "sources": [
+        {
+          "source": "Regional aggregation flag for existing solar photovoltaic resource groups."
+        }
+      ],
+      "version": "2026-08-31"
+    },
+    "regional_wind_True.json": {
+      "history": [],
+      "last_updated": "2026-08-31",
+      "license": "cc-by-4.0",
+      "md5": "8ef3157cd915e12f3f0e75a149105d54",
+      "sources": [
+        {
+          "source": "Regional aggregation flag for existing wind resource groups."
+        }
+      ],
+      "version": "2026-08-31"
+    }
+  },
+  "generated_at_utc": "2026-08-31T00:00:00+00:00",
+  "manifest_version": 1
+}

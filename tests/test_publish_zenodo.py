@@ -70,19 +70,97 @@ NEW_STATE = {
 
 
 class ManifestSectionTests(unittest.TestCase):
-    def test_flat_files_are_core_and_sections_map_to_collections(self):
-        sections = MODULE.manifest_sections(MANIFEST)
-        self.assertEqual(set(sections), set(MODULE.COLLECTIONS))
-        self.assertEqual(list(sections["core"]), ["core_a.csv"])
-        self.assertEqual(list(sections["profiles"]), ["wind.parquet"])
-        self.assertEqual(sections["existing_resource_groups"], {})
+    def _write(self, root, rel_dir, content):
+        d = root / rel_dir
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / "manifest.json"
+        p.write_text(json.dumps(content))
+        return p
 
-    def test_missing_sections_default_to_empty(self):
-        sections = MODULE.manifest_sections(
-            {"data_version": "2026.08.14", "files": {"a.csv": {}}}
-        )
-        self.assertEqual(sections["profiles"], {})
-        self.assertEqual(sections["existing_resource_groups"], {})
+    def _args(self, manifest):
+        args = mock.Mock()
+        args.manifest = str(manifest)
+        args.collection = None
+        return args
+
+    def test_local_manifests_are_used_per_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root,
+                "data",
+                {"data_version": "2026.08.14", "files": {"core_a.csv": {}}},
+            )
+            self._write(
+                root,
+                "resource_profiles",
+                {"data_version": "2026.08.31", "files": {"wind.parquet": {}}},
+            )
+            self._write(
+                root,
+                "existing_resource_groups",
+                {"data_version": "2026.08.31", "files": {"meta.csv": {}}},
+            )
+            manifests = MODULE.load_manifests(
+                self._args(root / "data" / "manifest.json"), root
+            )
+            self.assertEqual(set(manifests), set(MODULE.COLLECTIONS))
+            self.assertEqual(manifests["core"]["data_version"], "2026.08.14")
+            self.assertEqual(list(manifests["core"]["files"]), ["core_a.csv"])
+            self.assertEqual(manifests["profiles"]["data_version"], "2026.08.31")
+            self.assertEqual(list(manifests["profiles"]["files"]), ["wind.parquet"])
+            self.assertEqual(
+                manifests["existing_resource_groups"]["data_version"], "2026.08.31"
+            )
+
+    def test_missing_local_manifest_falls_back_to_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root,
+                "data",
+                MANIFEST,
+            )
+            manifests = MODULE.load_manifests(
+                self._args(root / "data" / "manifest.json"), root
+            )
+            # No resource_profiles/manifest.json -> falls back to sections.
+            self.assertEqual(list(manifests["profiles"]["files"]), ["wind.parquet"])
+            self.assertEqual(manifests["profiles"]["data_version"], "2026.08.14")
+            self.assertEqual(manifests["existing_resource_groups"]["files"], {})
+
+    def test_sections_fallback_defaults_to_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root, "data", {"data_version": "2026.08.14", "files": {"a.csv": {}}}
+            )
+            manifests = MODULE.load_manifests(
+                self._args(root / "data" / "manifest.json"), root
+            )
+            self.assertEqual(manifests["profiles"]["files"], {})
+            self.assertEqual(manifests["existing_resource_groups"]["files"], {})
+            self.assertEqual(manifests["profiles"]["data_version"], "2026.08.14")
+
+    def test_per_collection_data_version_is_independent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root,
+                "data",
+                {"data_version": "2026.08.14", "files": {"core_a.csv": {}}},
+            )
+            self._write(
+                root,
+                "resource_profiles",
+                {"data_version": "2026.08.31", "files": {"wind.parquet": {}}},
+            )
+            manifests = MODULE.load_manifests(
+                self._args(root / "data" / "manifest.json"), root
+            )
+            # Updating profiles must NOT touch the core version.
+            self.assertEqual(manifests["core"]["data_version"], "2026.08.14")
+            self.assertEqual(manifests["profiles"]["data_version"], "2026.08.31")
 
     def test_unknown_section_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -175,19 +253,43 @@ class DescriptionTests(unittest.TestCase):
 
 
 class ManifestEntryTests(unittest.TestCase):
-    def test_real_manifest_profiles_section_has_six_files(self):
+    def test_real_profiles_manifest_has_six_files(self):
         import json as _json
 
         real = _json.loads(
-            (Path(__file__).parents[1] / "data" / "manifest.json").read_text()
+            (
+                Path(__file__).parents[1] / "resource_profiles" / "manifest.json"
+            ).read_text()
         )
-        profiles = real["sections"]["profiles"]["files"]
+        self.assertIn("data_version", real)
+        profiles = real["files"]
         self.assertEqual(len(profiles), 6)
         self.assertIn("solar_site_mapping_20240801.parquet", profiles)
         for name, entry in profiles.items():
             self.assertIn("md5", entry)
             self.assertIn("source", entry["sources"][0])
             self.assertEqual(entry["license"], "cc-by-4.0")
+
+    def test_real_existing_resource_groups_manifest_has_fifteen_files(self):
+        import json as _json
+
+        real = _json.loads(
+            (
+                Path(__file__).parents[1] / "existing_resource_groups" / "manifest.json"
+            ).read_text()
+        )
+        self.assertIn("data_version", real)
+        self.assertEqual(len(real["files"]), 15)
+        for name, entry in real["files"].items():
+            self.assertIn("md5", entry)
+            self.assertIn("source", entry["sources"][0])
+
+
+def _mkargs(manifest_path, collection=None):
+    args = mock.Mock()
+    args.manifest = str(manifest_path)
+    args.collection = collection
+    return args
 
 
 class DryRunTests(unittest.TestCase):
@@ -202,20 +304,13 @@ class DryRunTests(unittest.TestCase):
             manifest = {
                 "data_version": "2026.08.14",
                 "files": {"core_a.csv": {"version": "2026-08-11", "md5": "x"}},
-                "sections": {
-                    "profiles": {"files": {}},
-                    "existing_resource_groups": {"files": {}},
-                },
             }
             manifest_path = root / "data" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
                 out = io.StringIO()
                 with redirect_stdout(out):
-                    MODULE.dry_run(
-                        manifest_path,
-                        MODULE.requested_sections(mock.Mock(collection=None)),
-                    )
+                    MODULE.dry_run(_mkargs(manifest_path))
             text = out.getvalue()
         self.assertIn("[core] PowerGenome Input Data", text)
         self.assertIn("ok      core_a.csv", text)
@@ -248,22 +343,25 @@ class CollectionFilterTests(unittest.TestCase):
             manifest = {
                 "data_version": "2026.08.14",
                 "files": {"core_a.csv": {"version": "2026-08-11", "md5": "x"}},
-                "sections": {
-                    "profiles": {
-                        "files": {"wind.parquet": {"version": "2026-08-12", "md5": "y"}}
-                    },
-                    "existing_resource_groups": {"files": {}},
-                },
             }
-            manifest_path = root / "data" / "manifest.json"
-            manifest_path.write_text(json.dumps(manifest))
+            profiles_manifest = {
+                "data_version": "2026.08.31",
+                "files": {"wind.parquet": {"version": "2026-08-12", "md5": "y"}},
+            }
+            (root / "data" / "manifest.json").write_text(json.dumps(manifest))
+            (root / "resource_profiles" / "manifest.json").write_text(
+                json.dumps(profiles_manifest)
+            )
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
                 out = io.StringIO()
                 with redirect_stdout(out):
-                    MODULE.dry_run(manifest_path, ["profiles"])
+                    MODULE.dry_run(
+                        _mkargs(root / "data" / "manifest.json", ["profiles"])
+                    )
             text = out.getvalue()
         self.assertNotIn("[core]", text)
         self.assertIn("[profiles] PowerGenome Renewable Resource Profiles", text)
+        self.assertIn("[data version 2026.08.31]", text)
         self.assertIn("ok      profiles/wind.parquet", text)
         self.assertNotIn("existing_resource_groups", text)
 

@@ -1,0 +1,85 @@
+{
+  "data_version": "2026.08.31",
+  "files": {
+    "offshorewind_rev_profiles_20240801_tidy.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "145cc41943fae1e31a4c80b0ef262d87",
+      "sources": [
+        {
+          "source": "NREL Wind Integration National Dataset Toolkit (WTK) hourly wind resource data for the NREL site nearest each 10 km CONUS grid point; simulated with NREL reV + SAM (NREL Reference 5.5 MW onshore / 12 MW offshore turbines) into hourly capacity-factor profiles for weather years 2007-2013.",
+          "source_url": "https://www.nrel.gov/grid/wind-toolkit.html"
+        }
+      ],
+      "version": "2024-08-01"
+    },
+    "offshorewind_site_mapping_20240801.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "bd38633e490fe647ab78ed4fa6d08e5b",
+      "sources": [
+        {
+          "source": "Maps each Princeton capacity area (CPA_ID) to the NREL resource site used for its profile and the great-circle distance (profile_dist) between them, from a 10 km CONUS grid with nearest-site selection.",
+          "source_url": "https://acee.princeton.edu/princeton-capacity-areas/"
+        }
+      ],
+      "version": "2024-08-01"
+    },
+    "onshorewind_rev_profiles_20240801_tidy.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "84129006615a73d2a119ef386f179d6a",
+      "sources": [
+        {
+          "source": "NREL Wind Integration National Dataset Toolkit (WTK) hourly wind resource data for the NREL site nearest each 10 km CONUS grid point; simulated with NREL reV + SAM (NREL Reference 5.5 MW onshore / 12 MW offshore turbines) into hourly capacity-factor profiles for weather years 2007-2013.",
+          "source_url": "https://www.nrel.gov/grid/wind-toolkit.html"
+        }
+      ],
+      "version": "2024-08-01"
+    },
+    "onshorewind_site_mapping_20240801.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "a66a01d5226e1bead37b4419f455a3d2",
+      "sources": [
+        {
+          "source": "Maps each Princeton capacity area (CPA_ID) to the NREL resource site used for its profile and the great-circle distance (profile_dist) between them, from a 10 km CONUS grid with nearest-site selection.",
+          "source_url": "https://acee.princeton.edu/princeton-capacity-areas/"
+        }
+      ],
+      "version": "2024-08-01"
+    },
+    "solar_rev_profiles_20240801_tidy.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "84bdffd609890bb6a936e1826d537fc4",
+      "sources": [
+        {
+          "source": "NREL National Solar Radiation Database (NSRDB) hourly solar resource data for the NREL site nearest each 10 km CONUS grid point; simulated with NREL reV + SAM PVWatts v8 (1-axis bifacial) into hourly AC capacity-factor profiles for weather years 2007-2013.",
+          "source_url": "https://nsrdb.nrel.gov/"
+        }
+      ],
+      "version": "2024-08-01"
+    },
+    "solar_site_mapping_20240801.parquet": {
+      "history": [],
+      "last_updated": "2024-08-01",
+      "license": "cc-by-4.0",
+      "md5": "bf83512fc11f4ee8409fd6791643f03f",
+      "sources": [
+        {
+          "source": "Maps each Princeton capacity area (CPA_ID) to the NREL resource site used for its profile and the great-circle distance (profile_dist) between them, from a 10 km CONUS grid with nearest-site selection.",
+          "source_url": "https://acee.princeton.edu/princeton-capacity-areas/"
+        }
+      ],
+      "version": "2024-08-01"
+    }
+  },
+  "generated_at_utc": "2026-08-31T00:00:00+00:00",
+  "manifest_version": 1
+}

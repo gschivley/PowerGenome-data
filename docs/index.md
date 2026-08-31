@@ -45,12 +45,23 @@ uv run python build_operational_constraints_reeds.py  # optional --pcm-path <loc
 
 Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above.
 
-## Versioned data-source manifest (`data/manifest.json`)
+## Versioned data-source manifests
 
-`data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
-updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
-This is the provenance + change-detection layer: it drives `publish_zenodo.py` (below), which publishes
-manifest-listed files to Zenodo and can be wired into scheduled update workflows.
+Each Zenodo collection keeps its own versioned manifest at the top of its folder, recording for
+every file where the data came from, when it was last updated, and an MD5 content hash, along with
+a versioned history that advances whenever a file changes. This is the provenance +
+change-detection layer: it drives `publish_zenodo.py` (below), which publishes manifest-listed
+files to Zenodo.
+
+| Collection | Manifest | Data folder |
+| --- | --- | --- |
+| Core input data | `data/manifest.json` | `data/` |
+| Renewable resource profiles | `resource_profiles/manifest.json` | `resource_profiles/` |
+| Existing renewable resource groups | `existing_resource_groups/manifest.json` | `existing_resource_groups/` |
+
+Each collection versions independently (its own `data_version`), so updating one collection never
+bumps another's release version. `publish_zenodo.py` still accepts the older single-file layout
+where extra collections live in a top-level `sections` object of `data/manifest.json`.
 
 ### Read it
 
@@ -78,10 +89,10 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
 ```
 
 - `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
-- `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
+- `data_version` — the **collection** version in calendar-versioning format `YYYY.MM.DD`. It
   advances to the current date whenever a data input is added or its contents change, and is otherwise
   preserved from the previous run. The manifest file itself is excluded from scanning, so it never
-  triggers a `data_version` bump on its own. Use this to tag a dataset release (e.g. on Zenodo).
+  triggers a `data_version` bump on its own. Use this to tag a collection release (e.g. on Zenodo).
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
@@ -92,12 +103,15 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
 
 ### Update it
 
-Run `update_data_manifest.py` from the repo root after any data file changes:
+Run `update_data_manifest.py` from the repo root after any data file changes, pointing it at the
+affected collection's folder:
 
 ```bash
 uv run python update_data_manifest.py            # rescan data/ and bump versions on change
 uv run python update_data_manifest.py --dry-run  # preview changes without writing
 uv run python update_data_manifest.py --date 2026-08-11  # override the change date (reproducible runs)
+uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 ```
 
 Behavior:
@@ -129,23 +143,23 @@ publishing counterpart to the manifest described above.
 
 ### Collections and deposits
 
-The manifest is split into sections; each non-empty section becomes its own Zenodo deposit with its
-own title, description, version history, and DOI:
+Each collection has its own manifest and becomes its own Zenodo deposit with its own title,
+description, version history, and DOI:
 
-| Manifest section | Source folder | Deposit title | Contents |
+| Manifest | Source folder | Deposit title | Contents |
 | --- | --- | --- | --- |
-| `files` (top level, `core`) | `data/` | PowerGenome Input Data | Core input tables (generators, load, fuels, costs, transmission, ...) |
-| `sections.profiles` | `resource_profiles/` | PowerGenome Renewable Resource Profiles | Hourly generation profiles for new-build renewable resources (PowerGenome `RESOURCE_GROUP_PROFILES`) |
-| `sections.existing_resource_groups` | `existing_resource_groups/` | PowerGenome Existing Renewable Resource Groups | Resource group files for existing renewables (PowerGenome `RESOURCE_GROUPS`) |
+| `data/manifest.json` (core) | `data/` | PowerGenome Input Data | Core input tables (generators, load, fuels, costs, transmission, ...) |
+| `resource_profiles/manifest.json` | `resource_profiles/` | PowerGenome Renewable Resource Profiles | Hourly generation profiles for new-build renewable resources (PowerGenome `RESOURCE_GROUP_PROFILES`) |
+| `existing_resource_groups/manifest.json` | `existing_resource_groups/` | PowerGenome Existing Renewable Resource Groups | Resource group files for existing renewables (PowerGenome `RESOURCE_GROUPS`) |
 
-Inside a deposit, file keys are prefixed by collection (`profiles/…`,
-`existing_resource_groups/…`), so downloads self-organize and filenames can never collide across
-collections. Sections with no files are skipped, so a deposit is only created once a collection
-actually has data. The flat top-level `files` object is the core section, which keeps older
-manifests valid.
+Each deposit is versioned from **its own collection's `data_version`**, so updating one collection
+never bumps another deposit's release version. Inside a deposit, file keys are prefixed by
+collection (`profiles/…`, `existing_resource_groups/…`), so downloads self-organize and filenames
+can never collide across collections. Collections with no files are skipped, so a deposit is only
+created once a collection actually has data.
 
-Each section's files use the same entry schema as the core `files` object (`sources`, `version`,
-`last_updated`, `md5`, `license`, `history`).
+Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
+`license`, `history`).
 
 A collection can supply its own methodology prose for the Zenodo description via
 `metadata.sections.<section>.description` in `.zenodo.json`; when present it is prepended to the

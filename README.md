@@ -21,4 +21,5 @@ Data is published to Zenodo as one deposit per collection via `publish_zenodo.py
 - **PowerGenome Renewable Resource Profiles** — hourly new-build renewable profiles from `resource_profiles/`
 - **PowerGenome Existing Renewable Resource Groups** — existing renewable resource group files from `existing_resource_groups/`
 
-Each collection is a section of `data/manifest.json`; deposits are only created once a collection has files. See the docs site for details.
+Each collection keeps its own manifest (`<folder>/manifest.json`) with its own `data_version`, so
+collections version independently and deposits are only created once a collection has files. See the docs site for details.

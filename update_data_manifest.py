@@ -23,13 +23,11 @@ Run from the repo root:
     uv run python update_data_manifest.py --dry-run
     uv run python update_data_manifest.py --date 2026-08-11
 
-The manifest's flat top-level ``files`` object is the *core* collection. Additional
-collections published as their own Zenodo deposits (see publish_zenodo.py) live
-under a top-level ``sections`` object keyed by section name (``profiles`` ->
-``resource_profiles/``, ``existing_resource_groups`` -> ``existing_resource_groups/``)
-with the same per-file entry schema. This tool scans only ``data/``; run it with
-``--data-dir``/``--manifest`` or merge section entries by hand for the other
-collections.
+Each Zenodo collection (see publish_zenodo.py) keeps its own manifest at the
+top of its folder, so update collections independently:
+
+    uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+    uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 """
 
 from __future__ import annotations
@@ -249,6 +247,61 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             "source_url": (
                 "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
                 "transmission/transmission_capacity_init_nonAC_ba.csv"
+            ),
+        },
+    ],
+    # Renewable resource profiles (resource_profiles/) ---------------------------------
+    "offshorewind_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly offshore wind capacity-factor profiles generated with NREL reV/SAM "
+                "(NREL Reference 12 MW turbine) from WTK weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://www.nrel.gov/grid/wind-toolkit.html",
+        },
+    ],
+    "offshorewind_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
+            ),
+        },
+    ],
+    "onshorewind_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly onshore wind capacity-factor profiles generated with NREL reV/SAM "
+                "(NREL Reference 5.5 MW turbine) from WTK weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://www.nrel.gov/grid/wind-toolkit.html",
+        },
+    ],
+    "onshorewind_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
+            ),
+        },
+    ],
+    "solar_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly solar AC capacity-factor profiles generated with NREL reV/SAM "
+                "PVWatts v8 (1-axis bifacial) from NSRDB weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://nsrdb.nrel.gov/",
+        },
+    ],
+    "solar_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
             ),
         },
     ],

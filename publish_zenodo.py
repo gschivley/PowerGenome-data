@@ -12,15 +12,20 @@ deposit:
                                     (resource group files for existing renewables;
                                     PowerGenome ``RESOURCE_GROUPS``)
 
-The flat top-level ``files`` object in the manifest is the core section (this
-keeps older manifests valid); the other sections live under a top-level
-``sections`` object. Sections with no files are skipped, so a deposit is only
-created once a collection actually has data.
+The flat top-level ``files`` object in the core manifest is the core section;
+each other collection keeps its own ``manifest.json`` at the top of its data
+folder (``resource_profiles/manifest.json``,
+``existing_resource_groups/manifest.json``). For backward compatibility, a
+collection without a local manifest falls back to a top-level ``sections``
+object in the core manifest. Sections with no files are skipped, so a deposit
+is only created once a collection actually has data.
 
-Each release is driven by data/manifest.json:
-  * The Zenodo release version is the manifest's top-level "data_version"
-    with a sequential per-day suffix, e.g. "2026.08.24.v1", "2026.08.24.v2",
+Each release is driven by its collection's manifest:
+  * The Zenodo release version is that manifest's "data_version" with a
+    sequential per-day suffix, e.g. "2026.08.24.v1", "2026.08.24.v2",
     so multiple releases on the same date get distinct version numbers.
+    Every collection versions independently, so updating profiles does not
+    bump the core deposit's version (and vice versa).
   * The Zenodo description is generated from the manifest: a change note
     listing files added, updated, and removed in this release, plus one
     file/version/last-updated/sources table per data element, using each
@@ -168,39 +173,76 @@ def git_user_name() -> str:
 # ---------------------------------------------------------------------------
 
 
-def load_manifest(manifest_path: Path) -> dict:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
     if "data_version" not in manifest or not isinstance(manifest.get("files"), dict):
         sys.exit(
             f"Manifest {manifest_path} must have 'data_version' and a 'files' object."
         )
-    sections = manifest.setdefault("sections", {})
-    if not isinstance(sections, dict):
-        sys.exit(f"Manifest {manifest_path}: 'sections' must be an object.")
-    for name, section in sections.items():
-        if name not in COLLECTIONS:
-            sys.exit(
-                f"Manifest {manifest_path}: unknown section {name!r}; "
-                f"known sections: {', '.join(sorted(COLLECTIONS))}."
-            )
-        if not isinstance(section, dict) or not isinstance(section.get("files"), dict):
-            sys.exit(
-                f"Manifest {manifest_path}: section {name!r} must be an object "
-                "with a 'files' object."
-            )
+    sections = manifest.get("sections")
+    if sections is not None:
+        if not isinstance(sections, dict):
+            sys.exit(f"Manifest {manifest_path}: 'sections' must be an object.")
+        for name, section in sections.items():
+            if name not in COLLECTIONS:
+                sys.exit(
+                    f"Manifest {manifest_path}: unknown section {name!r}; "
+                    f"known sections: {', '.join(sorted(COLLECTIONS))}."
+                )
+            if not isinstance(section, dict) or not isinstance(
+                section.get("files"), dict
+            ):
+                sys.exit(
+                    f"Manifest {manifest_path}: section {name!r} must be an object "
+                    "with a 'files' object."
+                )
+
+
+def load_manifest(manifest_path: Path) -> dict:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    _validate_manifest(manifest, manifest_path)
     return manifest
 
 
-def manifest_sections(manifest: dict) -> dict[str, dict]:
-    """Files per collection. The flat top-level ``files`` object is the core
-    section; other collections live under ``sections``."""
-    sections = {CORE_SECTION: manifest["files"]}
+def collection_manifest_path(
+    project_root: Path, section: str, flag_manifest: Path
+) -> Path:
+    """Manifest path for one collection.
+
+    The core collection uses the ``--manifest`` flag (default
+    ``data/manifest.json``). Every other collection has its own
+    ``manifest.json`` at the top of its data folder.
+    """
+    if section == CORE_SECTION:
+        return flag_manifest
+    return project_root / COLLECTIONS[section]["data_dir"] / "manifest.json"
+
+
+def load_manifests(args, project_root: Path) -> dict[str, dict]:
+    """Per-collection manifests: ``{section: {"data_version", "files"}}``.
+
+    Reads ``<folder>/manifest.json`` for each collection. As a fallback for
+    the older single-file layout, a collection without a local manifest is
+    populated from ``sections.<name>`` in the core manifest.
+    """
+    flag_manifest = Path(args.manifest).expanduser()
+    if not flag_manifest.is_absolute():
+        flag_manifest = project_root / flag_manifest
+    core = load_manifest(flag_manifest)
+
+    manifests = {CORE_SECTION: core}
     for name in COLLECTIONS:
         if name == CORE_SECTION:
             continue
-        section = (manifest.get("sections") or {}).get(name) or {}
-        sections[name] = section.get("files") or {}
-    return sections
+        local = collection_manifest_path(project_root, name, flag_manifest)
+        if local.exists():
+            manifests[name] = load_manifest(local)
+        else:
+            section = (core.get("sections") or {}).get(name) or {}
+            manifests[name] = {
+                "data_version": core["data_version"],
+                "files": section.get("files") or {},
+            }
+    return manifests
 
 
 def load_state() -> dict:
@@ -911,13 +953,10 @@ def run_release(args) -> None:
     session = make_session(token)
     base_url = resolve_base(use_production)
 
-    manifest_path = Path(args.manifest).expanduser()
-    if not manifest_path.is_absolute():
-        manifest_path = PROJECT_ROOT / manifest_path
-    manifest = load_manifest(manifest_path)
+    manifests = load_manifests(args, PROJECT_ROOT)
     sections = {
-        section: files
-        for section, files in manifest_sections(manifest).items()
+        section: section_manifest["files"]
+        for section, section_manifest in manifests.items()
         if section in requested_sections(args)
     }
     for section in requested_sections(args):
@@ -944,7 +983,7 @@ def run_release(args) -> None:
                 session,
                 base_url,
                 environment,
-                manifest,
+                manifests[section],
                 section,
                 manifest_files,
                 data_dir,
@@ -993,7 +1032,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--manifest",
         default="data/manifest.json",
-        help="Path to the release manifest (default: data/manifest.json).",
+        help=(
+            "Path to the core collection manifest (default: data/manifest.json). "
+            "The profiles and existing_resource_groups collections are read from "
+            "<folder>/manifest.json."
+        ),
     )
     parser.add_argument(
         "--dotenv-path",
@@ -1048,19 +1091,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def dry_run(manifest_path: Path, sections: list[str]) -> None:
-    manifest = load_manifest(manifest_path)
-    all_sections = manifest_sections(manifest)
+def dry_run(args) -> None:
     project_root = Path.cwd()
-    print(f"data version: {manifest['data_version']}")
+    manifests = load_manifests(args, project_root)
+    sections = requested_sections(args)
+    print(f"data version: {manifests[CORE_SECTION]['data_version']}")
     for section in sections:
-        if section not in all_sections:
+        if section not in manifests:
             print(f"\n[{section}] not present in manifest; skipping")
             continue
-        files = all_sections[section]
+        section_manifest = manifests[section]
+        files = section_manifest["files"]
         config = COLLECTIONS[section]
         data_dir = project_root / config["data_dir"]
-        print(f"\n[{section}] {config['title']} ({config['data_dir']}/)")
+        print(
+            f"\n[{section}] {config['title']} ({config['data_dir']}/) "
+            f"[data version {section_manifest['data_version']}]"
+        )
         if not files:
             print("  (no files in this manifest section; deposit skipped)")
             continue
@@ -1082,8 +1129,7 @@ def dry_run(manifest_path: Path, sections: list[str]) -> None:
 def main() -> None:
     args = build_parser().parse_args()
     if args.dry_run:
-        manifest_path = Path(args.manifest).expanduser()
-        dry_run(manifest_path, requested_sections(args))
+        dry_run(args)
         return
     run_release(args)
 
