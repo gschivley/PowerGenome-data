@@ -16,3 +16,6 @@ site/
 
 # Local secrets (e.g., Zenodo API token). Never commit.
 .env
+# Large generated resource profiles (not committed to git; published to Zenodo
+# via publish_zenodo.py --collection profiles).
+resource_profiles/*.parquet

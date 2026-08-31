@@ -155,6 +155,40 @@ class DescriptionTests(unittest.TestCase):
         self.assertIn("Files removed in this release", description)
         self.assertIn("gone.csv", description)
 
+    def test_release_description_prepends_custom_section_prose(self):
+        files = MANIFEST["sections"]["profiles"]["files"]
+        base = {
+            "description": "<p><strong>Site mapping.</strong> CPA_ID, Site, profile_dist.</p>"
+        }
+        description = MODULE.build_release_description(
+            MANIFEST, "profiles", files, ["wind.parquet"], [], [], True, base
+        )
+        self.assertTrue(description.startswith("<p><strong>Site mapping.</strong>"))
+        self.assertIn("PowerGenome Renewable Resource Profiles", description)
+
+    def test_release_description_without_override_is_unpadded(self):
+        files = MANIFEST["files"]
+        description = MODULE.build_release_description(
+            MANIFEST, "core", files, [], [], [], True, {}
+        )
+        self.assertTrue(description.startswith("<p>PowerGenome Input Data"))
+
+
+class ManifestEntryTests(unittest.TestCase):
+    def test_real_manifest_profiles_section_has_six_files(self):
+        import json as _json
+
+        real = _json.loads(
+            (Path(__file__).parents[1] / "data" / "manifest.json").read_text()
+        )
+        profiles = real["sections"]["profiles"]["files"]
+        self.assertEqual(len(profiles), 6)
+        self.assertIn("solar_site_mapping_20240801.parquet", profiles)
+        for name, entry in profiles.items():
+            self.assertIn("md5", entry)
+            self.assertIn("source", entry["sources"][0])
+            self.assertEqual(entry["license"], "cc-by-4.0")
+
 
 class DryRunTests(unittest.TestCase):
     def test_dry_run_covers_all_sections(self):

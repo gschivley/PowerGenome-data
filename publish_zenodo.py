@@ -593,6 +593,32 @@ def uncommitted_release_files(manifest_files: dict, data_dir: Path) -> list[str]
     return dirty
 
 
+def build_release_description(
+    manifest: dict,
+    section: str,
+    files: dict,
+    added: list[str],
+    updated: list[str],
+    removed: list[str],
+    initial: bool,
+    base_metadata: dict,
+) -> str:
+    """Full Zenodo description for a deposit.
+
+    Starts from the generated per-file description and prepends any custom
+    prose supplied via ``metadata.sections.<section>.description`` (e.g. a
+    methodology paragraph), so a collection can document itself beyond the
+    per-file tables.
+    """
+    description = build_description(
+        manifest, section, files, added, updated, removed, initial
+    )
+    custom_description = base_metadata.get("description")
+    if custom_description:
+        description = f"{custom_description}\n{description}"
+    return description
+
+
 def release_section(
     args,
     session: requests.Session,
@@ -775,10 +801,17 @@ def release_section(
             time.sleep(args.sleep_seconds)
 
     # Build + update metadata.
-    description = build_description(
-        manifest, section, manifest_files, added, updated, removed, initial
-    )
     base_metadata = section_metadata(state, section)
+    description = build_release_description(
+        manifest,
+        section,
+        manifest_files,
+        added,
+        updated,
+        removed,
+        initial,
+        base_metadata,
+    )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
     # Core keeps its long-standing title unless explicitly overridden.

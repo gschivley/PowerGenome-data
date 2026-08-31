@@ -147,6 +147,12 @@ manifests valid.
 Each section's files use the same entry schema as the core `files` object (`sources`, `version`,
 `last_updated`, `md5`, `license`, `history`).
 
+A collection can supply its own methodology prose for the Zenodo description via
+`metadata.sections.<section>.description` in `.zenodo.json`; when present it is prepended to the
+auto-generated per-file description (e.g. the Renewable Resource Profiles deposit documents how the
+WTK/NSRDB weather data were turned into generation profiles and what the site-mapping files
+(`CPA_ID` → `Site` → `profile_dist`) contain).
+
 ### What it does
 
 - Reads `data/manifest.json` and derives each Zenodo `version` from its top-level `data_version`
