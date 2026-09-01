@@ -49,18 +49,6 @@
       ],
       "version": "2026-08-31"
     },
-    "existing_osw_profiles.csv": {
-      "history": [],
-      "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
-      "md5": "9795da32a4e244989cd98ba87aa420de",
-      "sources": [
-        {
-          "source": "Offshore wind generation profiles by ReEDS balancing area (CSV form)."
-        }
-      ],
-      "version": "2026-08-31"
-    },
     "existing_osw_profiles_tidy.parquet": {
       "history": [],
       "last_updated": "2026-08-31",

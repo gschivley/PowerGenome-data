@@ -15,4 +15,3 @@ Resource group files for existing renewable generators, used by PowerGenome via 
 ## Notes
 
 - All resources are keyed by ReEDS balancing area; join to PowerGenome model regions through the balancing-area hierarchy.
-- The offshore wind profiles are available in both a wide CSV and a tidy parquet representation of the same data.
