@@ -63,7 +63,7 @@ NEW_STATE = {
             "data_version": "2026.08.13",
             "deposition_id": "600001",
             "published": False,
-            "files": {"profiles/wind.parquet": "bbb"},
+            "files": {"wind.parquet": "bbb"},
         }
     },
 }
@@ -302,7 +302,7 @@ class ManifestEntryTests(unittest.TestCase):
             self.assertIn("source", entry["sources"][0])
             self.assertEqual(entry["license"], "cc-by-4.0")
 
-    def test_real_existing_resource_groups_manifest_has_fifteen_files(self):
+    def test_real_existing_resource_groups_manifest_has_fourteen_files(self):
         import json as _json
 
         real = _json.loads(
@@ -311,7 +311,8 @@ class ManifestEntryTests(unittest.TestCase):
             ).read_text()
         )
         self.assertIn("data_version", real)
-        self.assertEqual(len(real["files"]), 15)
+        self.assertEqual(len(real["files"]), 14)
+        self.assertNotIn("existing_osw_profiles.csv", real["files"])
         for name, entry in real["files"].items():
             self.assertIn("md5", entry)
             self.assertIn("source", entry["sources"][0])
@@ -394,7 +395,7 @@ class CollectionFilterTests(unittest.TestCase):
         self.assertNotIn("[core]", text)
         self.assertIn("[profiles] PowerGenome Renewable Resource Profiles", text)
         self.assertIn("[data version 2026.08.31]", text)
-        self.assertIn("ok      profiles/wind.parquet", text)
+        self.assertIn("ok      wind.parquet", text)
         self.assertNotIn("existing_resource_groups", text)
 
     def test_unknown_collection_rejected_by_parser(self):

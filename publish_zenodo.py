@@ -84,23 +84,21 @@ PROJECT_ROOT = None
 STATE_PATH = None
 
 # One Zenodo deposit per data collection (manifest section). ``data_dir`` is
-# relative to the repo root; ``key_prefix`` prefixes file keys inside the
-# deposit so filenames can never collide across collections and downloads
-# self-organize by collection.
+# relative to the repo root. Files are uploaded to the deposit bucket with
+# their plain filenames (Zenodo's bucket API only supports flat filenames, no
+# subdirectories); because each collection has its own deposit, filenames can
+# never collide across collections.
 COLLECTIONS = {
     "core": {
         "data_dir": "data",
-        "key_prefix": "",
         "title": "PowerGenome Input Data",
     },
     "profiles": {
         "data_dir": "resource_profiles",
-        "key_prefix": "profiles/",
         "title": "PowerGenome Renewable Resource Profiles",
     },
     "existing_resource_groups": {
         "data_dir": "existing_resource_groups",
-        "key_prefix": "existing_resource_groups/",
         "title": "PowerGenome Existing Renewable Resource Groups",
     },
 }
@@ -530,7 +528,9 @@ def upload_file(
     session: requests.Session, bucket_url: str, path: Path, key: str | None = None
 ) -> dict:
     checksum = md5_for_file(path)
-    key = key or path.name
+    # Zenodo's bucket API only supports flat filenames. URL-encode the name so
+    # spaces / special characters survive the PUT path.
+    key = urllib.parse.quote(key or path.name)
     with path.open("rb") as handle:
         response = session.put(f"{bucket_url}/{key}", data=handle, timeout=3600)
     raise_for_status(response, f"Uploading {key}")
@@ -713,8 +713,6 @@ def release_section(
     Zenodo metadata that was set (or would be set) for the deposit.
     """
     data_version = manifest["data_version"]
-    config = COLLECTIONS[section]
-    key_prefix = config["key_prefix"]
 
     released = section_release(state, section)
     # Release state is environment-specific: deposition ids, DOIs, and the
@@ -754,20 +752,20 @@ def release_section(
         local_paths[filename] = local_path
     validate_constraints(local_paths)
 
-    # Keys used inside the deposit bucket. Prefixed per section so filenames
-    # cannot collide across collections.
-    keys = {name: f"{key_prefix}{name}" for name in manifest_files}
+    # Files are uploaded to the deposit bucket with plain filenames (Zenodo's
+    # bucket API does not support subdirectories); each collection has its own
+    # deposit, so filenames cannot collide across collections.
+    release_keys = set(manifest_files)
 
     # Determine which files were updated in this release.
-    added = [name for name in manifest_files if keys[name] not in released_files]
+    added = [name for name in manifest_files if name not in released_files]
     updated = [
         name
         for name, info in manifest_files.items()
-        if keys[name] in released_files
-        and released_files[keys[name]] != info.get("md5")
+        if name in released_files and released_files[name] != info.get("md5")
     ]
     changed = added + updated
-    removed = [key for key in released_files if key not in set(keys.values())]
+    removed = [key for key in released_files if key not in release_keys]
     initial = not released_files
 
     log(f"[{section}] data version: {data_version}")
@@ -849,10 +847,9 @@ def release_section(
 
     # Remove files no longer part of the manifest (covers released-then-dropped
     # files and any leftovers in a resumed draft / previous version).
-    wanted_keys = set(keys.values())
     present = existing_draft_files(session, deposition)
     for key, (file_id, _checksum) in present.items():
-        if key in wanted_keys:
+        if key in release_keys:
             continue
         file_url = deposition["links"]["files"] + "/" + file_id
         log(f"[{section}] removing {key} (no longer in manifest)")
@@ -862,15 +859,16 @@ def release_section(
     # holds (skips files unchanged since a prior draft copy / new-version).
     uploads = []
     for index, (filename, local_path) in enumerate(local_paths.items()):
-        key = keys[filename]
         local_md5 = local_md5s[filename]
-        _, draft_checksum = present.get(key, (None, None))
+        _, draft_checksum = present.get(filename, (None, None))
         if draft_checksum == local_md5:
-            log(f"[{section}] already up to date in draft, skipping: {key}")
+            log(f"[{section}] already up to date in draft, skipping: {filename}")
             continue
-        log(f"[{section}] uploading {key} ({local_path.stat().st_size / 1e6:.1f} MB)")
-        result = upload_file(session, bucket_url, local_path, key=key)
-        result["filename"] = key
+        log(
+            f"[{section}] uploading {filename} ({local_path.stat().st_size / 1e6:.1f} MB)"
+        )
+        result = upload_file(session, bucket_url, local_path)
+        result["filename"] = filename
         uploads.append(result)
         if index < len(local_paths) - 1 and args.sleep_seconds > 0:
             time.sleep(args.sleep_seconds)
@@ -953,7 +951,7 @@ def release_section(
         "published": published,
         "doi": publish_payload.get("doi") if published else None,
         "versions": versions,
-        "files": {keys[name]: info["md5"] for name, info in manifest_files.items()},
+        "files": {name: info["md5"] for name, info in manifest_files.items()},
     }
 
     return {
@@ -1152,7 +1150,7 @@ def dry_run(args) -> None:
         for name, info in sorted(files.items()):
             missing = not (data_dir / name).exists()
             print(
-                f"  {'MISSING ' if missing else 'ok      '}{config['key_prefix']}{name}  (version {info.get('version')})"
+                f"  {'MISSING ' if missing else 'ok      '}{name}  (version {info.get('version')})"
             )
         total = sum(
             (data_dir / n).stat().st_size for n in files if (data_dir / n).exists()

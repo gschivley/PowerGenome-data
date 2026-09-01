@@ -153,10 +153,10 @@ description, version history, and DOI:
 | `existing_resource_groups/manifest.json` | `existing_resource_groups/` | PowerGenome Existing Renewable Resource Groups | Resource group files for existing renewables (PowerGenome `RESOURCE_GROUPS`) |
 
 Each deposit is versioned from **its own collection's `data_version`**, so updating one collection
-never bumps another deposit's release version. Inside a deposit, file keys are prefixed by
-collection (`profiles/…`, `existing_resource_groups/…`), so downloads self-organize and filenames
-can never collide across collections. Collections with no files are skipped, so a deposit is only
-created once a collection actually has data.
+never bumps another deposit's release version. Files are uploaded with their plain filenames
+(Zenodo's bucket API only supports flat filenames); since each collection has its own deposit,
+filenames can never collide across collections. Collections with no files are skipped, so a deposit
+is only created once a collection actually has data.
 
 Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
 `license`, `history`).
