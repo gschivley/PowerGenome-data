@@ -92,7 +92,7 @@
       "md5": "a1a3d2ce5507293f8f7d0917e7d07877",
       "sources": [
         {
-          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, from PUDL monthly generation data interpolated to hourly."
+          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
         }
       ],
       "version": "2026-08-31"
@@ -104,7 +104,7 @@
       "md5": "31afc0f401c76b47ba02a994fc9f24ec",
       "sources": [
         {
-          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, from PUDL monthly generation data interpolated to hourly."
+          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
         }
       ],
       "version": "2026-08-31"
@@ -112,7 +112,7 @@
     "regional_hydro_True.json": {
       "history": [],
       "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
+      "license": "cc-zero",
       "md5": "931c086cec1d314c2c58fed9ad758833",
       "sources": [
         {
@@ -124,7 +124,7 @@
     "regional_offshorewind_True.json": {
       "history": [],
       "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
+      "license": "cc-zero",
       "md5": "79dd0b7c09fa92a36218270adb21ea9a",
       "sources": [
         {
@@ -136,7 +136,7 @@
     "regional_small_hydro_True.json": {
       "history": [],
       "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
+      "license": "cc-zero",
       "md5": "6dd235fd40cba22e9b21fa9aa5c79fd4",
       "sources": [
         {
@@ -148,7 +148,7 @@
     "regional_solar_photovoltaic_True.json": {
       "history": [],
       "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
+      "license": "cc-zero",
       "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
       "sources": [
         {
@@ -160,7 +160,7 @@
     "regional_wind_True.json": {
       "history": [],
       "last_updated": "2026-08-31",
-      "license": "cc-by-4.0",
+      "license": "cc-zero",
       "md5": "8ef3157cd915e12f3f0e75a149105d54",
       "sources": [
         {

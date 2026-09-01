@@ -10,7 +10,7 @@ Generation profiles for existing wind and solar resources were generated with NR
 - **Existing onshore wind** — Vestas V82-1.65 MW turbine (rotor diameter 82 m, hub height 80 m), representative of the older existing onshore fleet, modeled as a 32-turbine, 52.8 MW farm.
 - **Existing offshore wind** — NREL Reference 12 MW turbine (rotor diameter 214 m, hub height 137 m) modeled as a 32-turbine, 384 MW farm.
 
-**Hydro (conventional and run-of-river)** was not simulated with reV: hourly profiles are derived from PUDL monthly generation data for each region and hydro type, interpolated to hourly and smoothed with a 1-week window.
+**Hydro (conventional and run-of-river)** was not simulated with reV: hourly profiles are based on monthly generation within each balancing area, with resources categorized by ReEDS hydro technology (see `transform_reeds_generators.py`), interpolated to hourly and smoothed with a 1-week window.
 
 All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
