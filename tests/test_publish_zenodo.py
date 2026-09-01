@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import requests
+
 SCRIPT = Path(__file__).parents[1] / "publish_zenodo.py"
 SPEC = importlib.util.spec_from_file_location("publish_zenodo", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -402,6 +404,277 @@ class CollectionFilterTests(unittest.TestCase):
         parser = MODULE.build_parser()
         with self.assertRaises(SystemExit):
             parser.parse_args(["--collection", "bogus"])
+
+
+class DepositionOverrideTests(unittest.TestCase):
+    def test_parser_exposes_deposition_id(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(["--deposition-id", "22233228"])
+        self.assertEqual(args.deposition_id, "22233228")
+
+    def test_deposition_id_overrides_saved_state(self):
+        """--deposition-id must resume the given draft even when saved state
+        points at a different (or published) deposition."""
+        args = mock.Mock()
+        args.deposition_id = "22233228"
+        args.allow_dirty = True
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+
+        session = mock.Mock()
+        # get_deposition for the resumed draft
+        draft = {
+            "id": 22233228,
+            "conceptrecid": 111,
+            "links": {
+                "bucket": "https://bucket.example",
+                "files": "https://files.example",
+            },
+        }
+        draft_response = self._response(200)
+        draft_response.json.return_value = draft
+        records_response = self._response(200)
+        records_response.json.return_value = {"hits": {"hits": []}}
+        files_response = self._response(200)
+        files_response.json.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "core_a.csv").write_text("a")
+            upload_response = self._response(200)
+            upload_response.json.return_value = {
+                "checksum": f"md5:{MODULE.md5_for_file(data_dir / 'core_a.csv')}"
+            }
+            metadata_response = self._response(200)
+            metadata_response.json.return_value = {"metadata": {}}
+            session.request.side_effect = [
+                draft_response,
+                records_response,
+                files_response,
+                upload_response,
+                metadata_response,
+            ]
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "core_a.csv": {
+                        "version": "2026-08-11",
+                        "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    }
+                },
+            }
+            manifest_path = root / "data" / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            state = {
+                "releases": {
+                    "core": {
+                        "environment": "production",
+                        "deposition_id": "999999",
+                        "published": True,
+                    }
+                }
+            }
+            with mock.patch.object(MODULE.time, "sleep"):
+                result = MODULE.release_section(
+                    args,
+                    session,
+                    "https://zenodo.org/api",
+                    "production",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    state,
+                )
+        self.assertEqual(result["summary"]["deposition_id"], "22233228")
+        # The resumed draft must be fetched (not a new version created), then
+        # records search, draft files, upload, and metadata update follow.
+        self.assertEqual(session.request.call_count, 5)
+
+    def _response(self, status=200, checksum="md5:abc"):
+        response = mock.Mock()
+        response.status_code = status
+        response.raise_for_status.side_effect = (
+            None if status < 400 else requests.HTTPError(f"HTTP {status}")
+        )
+        response.json.return_value = {"checksum": checksum}
+        return response
+
+
+class UploadRetryTests(unittest.TestCase):
+    def _session(self, responses):
+        """Session whose request() returns responses in order, then raises."""
+        session = mock.Mock()
+        session.request.side_effect = responses
+        return session
+
+    def _response(self, status=200, checksum="md5:abc"):
+        response = mock.Mock()
+        response.status_code = status
+        response.raise_for_status.side_effect = (
+            None if status < 400 else requests.HTTPError(f"HTTP {status}")
+        )
+        response.json.return_value = {"checksum": checksum}
+        return response
+
+    def _file(self, tmp):
+        p = Path(tmp) / "data.parquet"
+        p.write_bytes(b"data")
+        return p
+
+    def _ok_response(self, path):
+        return self._response(checksum=f"md5:{MODULE.md5_for_file(path)}")
+
+    def test_retries_on_connection_error_then_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._file(tmp)
+            expected_md5 = MODULE.md5_for_file(path)
+            session = self._session(
+                [
+                    requests.exceptions.ConnectionError("EOF occurred"),
+                    self._ok_response(path),
+                ]
+            )
+            with mock.patch.object(MODULE.time, "sleep") as sleep:
+                result = MODULE.upload_file(session, "https://bucket.example", path)
+        self.assertEqual(session.request.call_count, 2)
+        self.assertEqual(result["local_md5"], expected_md5)
+        sleep.assert_called_once_with(10.0)
+
+    def test_retries_on_http_500_then_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._file(tmp)
+            expected_md5 = MODULE.md5_for_file(path)
+            session = self._session([self._response(500), self._ok_response(path)])
+            with mock.patch.object(MODULE.time, "sleep"):
+                result = MODULE.upload_file(session, "https://bucket.example", path)
+        self.assertEqual(session.request.call_count, 2)
+        self.assertEqual(result["local_md5"], expected_md5)
+
+    def test_exhausts_retries_and_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self._session(
+                [requests.exceptions.ConnectionError("EOF occurred")] * 4
+            )
+            with mock.patch.object(MODULE.time, "sleep"):
+                with self.assertRaises(requests.exceptions.ConnectionError):
+                    MODULE.upload_file(
+                        session, "https://bucket.example", self._file(tmp)
+                    )
+        self.assertEqual(session.request.call_count, 4)
+
+    def test_retry_delay_doubles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._file(tmp)
+            session = self._session(
+                [
+                    requests.exceptions.ConnectionError("x"),
+                    requests.exceptions.ConnectionError("x"),
+                    self._ok_response(path),
+                ]
+            )
+            with mock.patch.object(MODULE.time, "sleep") as sleep:
+                MODULE.upload_file(
+                    session,
+                    "https://bucket.example",
+                    path,
+                    retries=3,
+                    retry_delay=2.0,
+                )
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [4.0, 8.0])
+
+    def test_zero_byte_upload_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "empty.parquet"
+            p.write_bytes(b"")
+            session = self._session([])
+            with self.assertRaises(ValueError):
+                MODULE.upload_file(session, "https://bucket.example", p)
+        self.assertEqual(session.request.call_count, 0)
+
+    def test_parser_exposes_retry_flags(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(
+            ["--upload-retries", "5", "--upload-retry-delay", "10"]
+        )
+        self.assertEqual(args.upload_retries, 5)
+        self.assertEqual(args.upload_retry_delay, 10.0)
+
+
+class RetryRequestTests(unittest.TestCase):
+    def test_retryable_status_codes_are_retried(self):
+        for status in MODULE.RETRYABLE_STATUS_CODES:
+            with self.subTest(status=status):
+                session = mock.Mock()
+                session.request.side_effect = [
+                    self._response(status),
+                    self._response(200),
+                ]
+                with mock.patch.object(MODULE.time, "sleep"):
+                    response = MODULE.retry_request(
+                        session, "GET", "https://example.com/api"
+                    )
+                self.assertEqual(session.request.call_count, 2)
+                self.assertEqual(response.status_code, 200)
+
+    def test_non_retryable_status_is_not_retried(self):
+        session = mock.Mock()
+        session.request.side_effect = [self._response(400)]
+        with mock.patch.object(MODULE.time, "sleep"):
+            response = MODULE.retry_request(session, "GET", "https://example.com/api")
+        self.assertEqual(session.request.call_count, 1)
+        self.assertEqual(response.status_code, 400)
+
+    def test_data_factory_reopens_stream_per_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.bin"
+            path.write_bytes(b"data")
+            session = mock.Mock()
+            session.request.side_effect = [
+                requests.exceptions.ConnectionError("EOF"),
+                self._response(200),
+            ]
+            with mock.patch.object(MODULE.time, "sleep"):
+                MODULE.retry_request(
+                    session,
+                    "PUT",
+                    "https://example.com/bucket/data.bin",
+                    data_factory=lambda: path.open("rb"),
+                )
+        # Each attempt must open a fresh handle (the first was consumed).
+        self.assertEqual(session.request.call_count, 2)
+
+    def test_publish_404_checks_deposition_state(self):
+        session = mock.Mock()
+        not_found = self._response(404)
+        submitted = self._response(200, checksum="md5:abc")
+        submitted.json.return_value = {"submitted": True}
+        session.request.side_effect = [not_found, submitted]
+        with mock.patch.object(MODULE.time, "sleep"):
+            result = MODULE.publish_deposition(
+                session, "https://zenodo.org/api", "12345"
+            )
+        self.assertEqual(result["submitted"], True)
+
+    def test_publish_404_when_not_submitted_raises(self):
+        session = mock.Mock()
+        session.request.side_effect = [self._response(404), self._response(404)]
+        with mock.patch.object(MODULE.time, "sleep"):
+            with self.assertRaises(SystemExit):
+                MODULE.publish_deposition(session, "https://zenodo.org/api", "12345")
+
+    def _response(self, status=200, checksum="md5:abc"):
+        response = mock.Mock()
+        response.status_code = status
+        response.raise_for_status.side_effect = (
+            None if status < 400 else requests.HTTPError(f"HTTP {status}")
+        )
+        response.json.return_value = {"checksum": checksum}
+        return response
 
 
 if __name__ == "__main__":

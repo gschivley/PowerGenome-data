@@ -64,7 +64,9 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
+from typing import BinaryIO
 
 try:
     import requests
@@ -82,6 +84,25 @@ MAX_FILES = 100
 MAX_TOTAL_BYTES = 50 * 1024 * 1024 * 1024
 PROJECT_ROOT = None
 STATE_PATH = None
+
+# HTTP status codes that indicate a transient server/proxy problem worth
+# retrying (mirrors PUDL's zenodo_data_release.py).
+RETRYABLE_STATUS_CODES = {
+    408,  # Request Timeout
+    500,  # Internal Server Error
+    502,  # Bad Gateway
+    503,  # Service Unavailable
+    504,  # Gateway Timeout
+    520,  # Web server returned an unknown error (proxy)
+    522,  # Connection timed out (proxy)
+    524,  # A timeout occurred (proxy)
+}
+
+# As of 01/2026 Zenodo rejects Python requests with no custom user agent.
+# Identify this project so Zenodo can see where the requests originate.
+USER_AGENT = (
+    "PowerGenome-data/publish_zenodo.py (https://github.com/gschivley/PowerGenome-data)"
+)
 
 # One Zenodo deposit per data collection (manifest section). ``data_dir`` is
 # relative to the repo root. Files are uploaded to the deposit bucket with
@@ -433,8 +454,74 @@ def build_description(
 
 def make_session(token: str) -> requests.Session:
     session = requests.Session()
-    session.headers.update({"Authorization": f"Bearer {token}"})
+    session.headers.update(
+        {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": USER_AGENT,
+        }
+    )
     return session
+
+
+def retry_request(
+    session: requests.Session,
+    method: str,
+    url: str,
+    *,
+    max_tries: int = 6,
+    request_timeout: float | None = None,
+    retry_delay: float = 1.0,
+    data_factory: Callable[[], BinaryIO] | None = None,
+    **kwargs,
+) -> requests.Response:
+    """Retry a request with exponential backoff.
+
+    Retries transient failures: connection errors, timeouts, and the HTTP
+    status codes in ``RETRYABLE_STATUS_CODES``. ``data_factory`` yields a
+    fresh binary stream for each attempt (used for uploads, where a failed
+    attempt may have consumed part of the stream and the handle cannot be
+    rewound). When ``request_timeout`` is None the timeout grows
+    exponentially (``2**attempt`` seconds). The wait between attempts is
+    ``retry_delay * 2**attempt`` seconds.
+    """
+    response: requests.Response | None = None
+    for attempt in range(1, max_tries + 1):
+        attempt_kwargs = dict(kwargs)
+        payload: BinaryIO | None = None
+        timeout_value = request_timeout if request_timeout is not None else 2**attempt
+        try:
+            if data_factory:
+                payload = data_factory()
+                attempt_kwargs["data"] = payload
+            response = session.request(
+                method=method,
+                url=url,
+                timeout=timeout_value,
+                **attempt_kwargs,
+            )
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                raise requests.HTTPError(
+                    f"Retryable status {response.status_code} from {url}",
+                    response=response,
+                )
+            return response
+        except (requests.RequestException, OSError) as exc:
+            if attempt == max_tries:
+                raise
+            wait = retry_delay * 2**attempt
+            log(
+                f"request {method} {url} failed (attempt {attempt}/{max_tries}): "
+                f"{exc}; retrying in {wait:.0f}s"
+            )
+            time.sleep(wait)
+        finally:
+            if payload:
+                payload.close()
+    if response is None:
+        raise RuntimeError(
+            f"Failed to complete request to {url} after {max_tries} tries"
+        )
+    return response
 
 
 def raise_for_status(response: requests.Response, action: str) -> None:
@@ -476,9 +563,11 @@ def next_release_version(
     remote_count = 0
     if conceptrecid:
         query = urllib.parse.quote(f'conceptrecid:"{conceptrecid}"')
-        response = session.get(
+        response = retry_request(
+            session,
+            "GET",
             f"{base_url}/records/?q={query}&all_versions=true&size=100",
-            timeout=120,
+            request_timeout=120,
         )
         raise_for_status(response, "Listing published versions")
         for hit in response.json().get("hits", {}).get("hits", []):
@@ -489,11 +578,13 @@ def next_release_version(
 
 
 def create_deposition(session: requests.Session, base_url: str) -> dict:
-    response = session.post(
+    response = retry_request(
+        session,
+        "POST",
         f"{base_url}/deposit/depositions",
         json={},
         headers={"Content-Type": "application/json"},
-        timeout=120,
+        request_timeout=120,
     )
     raise_for_status(response, "Creating deposition")
     return response.json()
@@ -502,37 +593,57 @@ def create_deposition(session: requests.Session, base_url: str) -> dict:
 def get_deposition(
     session: requests.Session, base_url: str, deposition_id: str
 ) -> dict:
-    response = session.get(
-        f"{base_url}/deposit/depositions/{deposition_id}", timeout=120
+    response = retry_request(
+        session,
+        "GET",
+        f"{base_url}/deposit/depositions/{deposition_id}",
+        request_timeout=120,
     )
     raise_for_status(response, f"Fetching deposition {deposition_id}")
     return response.json()
 
 
 def create_new_version(session: requests.Session, base_url: str, record: str) -> dict:
-    response = session.post(
+    response = retry_request(
+        session,
+        "POST",
         f"{base_url}/deposit/depositions/{record}/actions/newversion",
-        timeout=120,
+        request_timeout=120,
     )
     raise_for_status(response, "Creating new version draft")
     payload = response.json()
     draft_url = payload.get("links", {}).get("latest_draft")
     if draft_url:
-        draft_response = session.get(draft_url, timeout=120)
+        draft_response = retry_request(session, "GET", draft_url, request_timeout=120)
         raise_for_status(draft_response, "Fetching new draft deposition")
         return draft_response.json()
     return payload
 
 
 def upload_file(
-    session: requests.Session, bucket_url: str, path: Path, key: str | None = None
+    session: requests.Session,
+    bucket_url: str,
+    path: Path,
+    key: str | None = None,
+    retries: int = 3,
+    retry_delay: float = 5.0,
 ) -> dict:
     checksum = md5_for_file(path)
     # Zenodo's bucket API only supports flat filenames. URL-encode the name so
     # spaces / special characters survive the PUT path.
     key = urllib.parse.quote(key or path.name)
-    with path.open("rb") as handle:
-        response = session.put(f"{bucket_url}/{key}", data=handle, timeout=3600)
+    url = f"{bucket_url}/{key}"
+    if path.stat().st_size == 0:
+        raise ValueError(f"Upload source for {path.name} has zero bytes")
+    response = retry_request(
+        session,
+        "PUT",
+        url,
+        max_tries=retries + 1,
+        request_timeout=3600,
+        retry_delay=retry_delay,
+        data_factory=lambda: path.open("rb"),
+    )
     raise_for_status(response, f"Uploading {key}")
 
     payload = response.json()
@@ -552,18 +663,20 @@ def upload_file(
 
 
 def delete_file(session: requests.Session, file_url: str, filename: str) -> None:
-    response = session.delete(file_url, timeout=120)
+    response = retry_request(session, "DELETE", file_url, request_timeout=120)
     raise_for_status(response, f"Deleting {filename} from draft")
 
 
 def set_metadata(
     session: requests.Session, base_url: str, deposition_id: str, metadata: dict
 ) -> dict:
-    response = session.put(
+    response = retry_request(
+        session,
+        "PUT",
         f"{base_url}/deposit/depositions/{deposition_id}",
         json={"metadata": metadata},
         headers={"Content-Type": "application/json"},
-        timeout=120,
+        request_timeout=120,
     )
     raise_for_status(response, "Updating metadata")
     return response.json()
@@ -572,10 +685,27 @@ def set_metadata(
 def publish_deposition(
     session: requests.Session, base_url: str, deposition_id: str
 ) -> dict:
-    response = session.post(
+    response = retry_request(
+        session,
+        "POST",
         f"{base_url}/deposit/depositions/{deposition_id}/actions/publish",
-        timeout=120,
+        request_timeout=120,
     )
+    # The publish action isn't safely retriable: if a request times out after
+    # Zenodo already processed it server-side, a retried POST to the same
+    # actions/publish URL 404s, since a deposition that's already published no
+    # longer has a pending publish action -- even though the publish itself
+    # succeeded. Rather than fail on that specific 404, check whether the
+    # deposition is actually already published before giving up.
+    if response.status_code == 404:
+        log(
+            f"publish action for {deposition_id} returned 404 -- an earlier "
+            "attempt's response may have been lost (e.g. to a timeout) after "
+            "the publish actually succeeded. Checking current deposition state..."
+        )
+        deposition = get_deposition(session, base_url, deposition_id)
+        if deposition.get("submitted"):
+            return deposition
     raise_for_status(response, "Publishing deposition")
     return response.json()
 
@@ -602,7 +732,9 @@ def existing_draft_files(
     (a UUID present in each file object); deleting by filename returns 500.
     A filename fallback is kept for API variants without an explicit ``id``.
     """
-    response = session.get(deposition["links"]["files"], timeout=120)
+    response = retry_request(
+        session, "GET", deposition["links"]["files"], request_timeout=120
+    )
     raise_for_status(response, "Listing draft files")
     mapping: dict[str, tuple[str, str]] = {}
     for item in response.json():
@@ -731,6 +863,12 @@ def release_section(
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
     released_files = released.get("files", {}) if previously_published else {}
     deposition_id = released.get("deposition_id")
+    # Allow resuming a specific draft (e.g. one created by an earlier run that
+    # died mid-upload before state was saved). Files already in the draft with
+    # a matching checksum are skipped, so this only uploads what's missing.
+    override = getattr(args, "deposition_id", None)
+    if override:
+        deposition_id = str(override)
 
     # Local file existence + manifest md5 verification.
     local_paths: dict[str, Path] = {}
@@ -867,7 +1005,13 @@ def release_section(
         log(
             f"[{section}] uploading {filename} ({local_path.stat().st_size / 1e6:.1f} MB)"
         )
-        result = upload_file(session, bucket_url, local_path)
+        result = upload_file(
+            session,
+            bucket_url,
+            local_path,
+            retries=args.upload_retries,
+            retry_delay=args.upload_retry_delay,
+        )
         result["filename"] = filename
         uploads.append(result)
         if index < len(local_paths) - 1 and args.sleep_seconds > 0:
@@ -1038,9 +1182,18 @@ def run_release(args) -> None:
         # shared fields (creators, license, access_right, ...) only.
         for per_release_field in ("title", "description", "version"):
             project_metadata.pop(per_release_field, None)
+        # Merge with existing release state so a run limited to one collection
+        # (e.g. --collection core) does not clobber other collections' state.
+        existing_releases = state.get("releases", {}) if isinstance(state, dict) else {}
+        if not isinstance(existing_releases, dict):
+            existing_releases = {}
+        merged_releases = dict(existing_releases)
+        merged_releases.update(
+            {result["section"]: result["release"] for result in results}
+        )
         new_state = {
             "metadata": project_metadata,
-            "releases": {result["section"]: result["release"] for result in results},
+            "releases": merged_releases,
         }
         STATE_PATH.write_text(
             json.dumps(new_state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -1093,10 +1246,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write .zenodo.json even when only creating a draft. Always written on publish.",
     )
     parser.add_argument(
+        "--deposition-id",
+        help=(
+            "Resume this specific Zenodo deposition id instead of creating a new "
+            "one (or using the id from saved state). Useful when a previous run "
+            "died mid-upload before state was saved; files already in the draft "
+            "with a matching checksum are skipped."
+        ),
+    )
+    parser.add_argument(
         "--sleep-seconds",
         type=float,
         default=1.0,
         help="Delay between file uploads (default 1.0).",
+    )
+    parser.add_argument(
+        "--upload-retries",
+        type=int,
+        default=3,
+        help=(
+            "Number of retries for a failed file upload (default 3). Transient "
+            "failures (connection errors, timeouts, HTTP 5xx) are retried with "
+            "exponential backoff."
+        ),
+    )
+    parser.add_argument(
+        "--upload-retry-delay",
+        type=float,
+        default=5.0,
+        help="Base delay in seconds between upload retries (default 5.0; doubles each retry).",
     )
     parser.add_argument(
         "--allow-dirty",

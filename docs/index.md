@@ -188,6 +188,11 @@ whole description.
   were released before but are no longer in the manifest are removed from the draft.
 - Creates a **new version** of each existing record on subsequent releases, so Zenodo keeps the full file
   history. The first release of a collection creates a new deposition.
+- Retries transient failures (connection errors, timeouts, and HTTP 408/5xx proxy errors) with
+  exponential backoff on **every** API call, including file uploads. Uploads reopen the file for each
+  attempt so a dropped connection on a multi-GB file can be resumed. Pass `--upload-retries` and
+  `--upload-retry-delay` to tune upload retries. If a publish request times out after Zenodo already
+  processed it, the script checks the deposition state and treats an already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
   a committed state of the repository); pass `--allow-dirty` to override.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
