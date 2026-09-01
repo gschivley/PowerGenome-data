@@ -161,15 +161,19 @@ created once a collection actually has data.
 Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
 `license`, `history`).
 
-A collection can supply its own methodology prose for the Zenodo description via
+If a collection folder contains a `README.md`, it is rendered to HTML (via the `markdown` package)
+and used as the **body of the Zenodo description**, placed below the file-change note and above the
+licensing and per-file sections — so `resource_profiles/README.md` and
+`existing_resource_groups/README.md` document those datasets on Zenodo directly.
+
+A collection can additionally supply leading methodology prose via
 `metadata.sections.<section>.description` in `.zenodo.json`; when present it is prepended to the
-auto-generated per-file description (e.g. the Renewable Resource Profiles deposit documents how the
-WTK/NSRDB weather data were turned into generation profiles and what the site-mapping files
-(`CPA_ID` → `Site` → `profile_dist`) contain).
+whole description.
 
 ### What it does
 
-- Reads `data/manifest.json` and derives each Zenodo `version` from its top-level `data_version`
+- Reads each collection's manifest (see the table above) and derives each Zenodo `version` from that
+  collection's own `data_version`
   (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
   that multiple releases on the same date never share a version number. The suffix is computed by
   combining the already-published versions of the dataset's concept carrying the same `data_version`

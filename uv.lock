@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -1013,6 +1013,7 @@ dependencies = [
     { name = "geopy" },
     { name = "h5py" },
     { name = "ipykernel" },
+    { name = "markdown" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "networkx" },
@@ -1036,6 +1037,7 @@ requires-dist = [
     { name = "geopy", specifier = ">=2.4.1" },
     { name = "h5py", specifier = ">=3.15.1" },
     { name = "ipykernel", specifier = ">=7.1.0" },
+    { name = "markdown", specifier = ">=3.10" },
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mkdocs-material", specifier = ">=9.7.0" },
     { name = "networkx", specifier = ">=3.6.1" },

@@ -233,6 +233,38 @@ class DescriptionTests(unittest.TestCase):
         self.assertIn("Files removed in this release", description)
         self.assertIn("gone.csv", description)
 
+    def test_readme_body_sits_below_change_note(self):
+        import tempfile as _tempfile
+
+        files = MANIFEST["files"]
+        with _tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp)
+            (data_dir / "README.md").write_text(
+                "# Collection docs\n\nA table:\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+            )
+            readme_html = MODULE.readme_to_html(data_dir)
+            description = MODULE.build_description(
+                MANIFEST, "core", files, ["core_a.csv"], [], [], False, readme_html
+            )
+        body = "<h1>Collection docs</h1>" if MODULE.markdown else "<pre>"
+        self.assertIn(body, description)
+        # README body appears after the change note ("Files added...") ...
+        self.assertLess(
+            description.index("Files added in this release"),
+            description.index("Collection docs"),
+        )
+        # ... and before the licensing/per-file sections.
+        self.assertLess(
+            description.index("Collection docs"),
+            description.index("Licensing"),
+        )
+
+    def test_readme_to_html_empty_without_readme(self):
+        import tempfile as _tempfile
+
+        with _tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(MODULE.readme_to_html(Path(tmp)), "")
+
     def test_release_description_prepends_custom_section_prose(self):
         files = MANIFEST["sections"]["profiles"]["files"]
         base = {

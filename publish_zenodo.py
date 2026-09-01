@@ -71,6 +71,11 @@ try:
 except ImportError:  # pragma: no cover - depends on environment
     sys.exit("This script requires the 'requests' package: pip install requests")
 
+try:
+    import markdown
+except ImportError:  # pragma: no cover - depends on environment
+    markdown = None
+
 SANDBOX_BASE = "https://sandbox.zenodo.org/api"
 PRODUCTION_BASE = "https://zenodo.org/api"
 MAX_FILES = 100
@@ -343,6 +348,23 @@ def describe_file(filename: str, info: dict) -> str:
     )
 
 
+def readme_to_html(data_dir: Path) -> str:
+    """Render a collection's ``README.md`` as HTML for the Zenodo description.
+
+    Returns ``""`` when the collection has no README. The rendered HTML is the
+    descriptive body of the record, shown below the file-change note.
+    """
+    readme_path = data_dir / "README.md"
+    if not readme_path.is_file():
+        return ""
+    if markdown is None:
+        return f"<pre>{html.escape(readme_path.read_text(encoding='utf-8'))}</pre>"
+    return markdown.markdown(
+        readme_path.read_text(encoding="utf-8"),
+        extensions=["tables", "fenced_code", "sane_lists"],
+    )
+
+
 def build_description(
     manifest: dict,
     section: str,
@@ -351,6 +373,7 @@ def build_description(
     updated: list[str],
     removed: list[str],
     initial: bool,
+    readme_html: str = "",
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
@@ -365,21 +388,21 @@ def build_description(
             f"All {len(files)} files are new in this version.</p>"
         )
     else:
-        sections_html = []
+        changes_html = []
         if added:
-            sections_html.append(
+            changes_html.append(
                 f"<p><strong>Files added in this release:</strong></p><ul>{names_html(added)}</ul>"
             )
         if updated:
-            sections_html.append(
+            changes_html.append(
                 f"<p><strong>Files updated in this release:</strong></p><ul>{names_html(updated)}</ul>"
             )
         if removed:
-            sections_html.append(
+            changes_html.append(
                 f"<p><strong>Files removed in this release:</strong></p><ul>{names_html(removed)}</ul>"
             )
         change_note = (
-            "".join(sections_html) or "<p><em>No file changes in this release.</em></p>"
+            "".join(changes_html) or "<p><em>No file changes in this release.</em></p>"
         )
 
     file_sections = "\n".join(
@@ -388,9 +411,10 @@ def build_description(
 
     return (
         f"<p>{esc(title)}: PowerGenome input data assembled from public sources. "
-        "This release corresponds to <code>data/manifest.json</code> data version "
+        "This release corresponds to a PowerGenome-data manifest at data version "
         f"<code>{esc(data_version)}</code>.</p>"
         f"{change_note}"
+        f"{readme_html}"
         "<p><strong>Licensing:</strong> this compilation as a whole is released under "
         "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
         "public data from a variety of sources, each file retains the license of its "
@@ -644,16 +668,25 @@ def build_release_description(
     removed: list[str],
     initial: bool,
     base_metadata: dict,
+    readme_html: str = "",
 ) -> str:
     """Full Zenodo description for a deposit.
 
-    Starts from the generated per-file description and prepends any custom
-    prose supplied via ``metadata.sections.<section>.description`` (e.g. a
-    methodology paragraph), so a collection can document itself beyond the
-    per-file tables.
+    Layout: generated title + file-change note, then the collection's
+    ``README.md`` rendered as HTML (the descriptive body, if present), then
+    the licensing paragraph and per-file tables. Any custom prose supplied via
+    ``metadata.sections.<section>.description`` is prepended as a leading
+    paragraph.
     """
     description = build_description(
-        manifest, section, files, added, updated, removed, initial
+        manifest,
+        section,
+        files,
+        added,
+        updated,
+        removed,
+        initial,
+        readme_html,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -853,6 +886,7 @@ def release_section(
         removed,
         initial,
         base_metadata,
+        readme_html=readme_to_html(data_dir),
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
