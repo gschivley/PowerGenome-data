@@ -20,6 +20,7 @@ REMOTE_FILES_URL = (
     "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
     "inputs/remote_files.csv"
 )
+DEMAND_H5_FILENAME = "demand_EER2025_IRAlow.h5"
 COUNTY_STATE_LPF_URL = (
     "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
     "inputs/disaggregation/county_state_lpf.csv"
@@ -125,7 +126,7 @@ def resolve_demand_h5_url(remote_files_url=REMOTE_FILES_URL):
         remote_files_url: URL of ReEDS remote_files.csv
 
     Returns:
-        str: URL of demand_EER2023_IRAlow.h5 on Zenodo
+        str: URL of demand_EER2025_IRAlow.h5 on Zenodo
 
     Raises:
         ValueError: if the demand file is not listed in remote_files.csv
@@ -134,17 +135,17 @@ def resolve_demand_h5_url(remote_files_url=REMOTE_FILES_URL):
     remote = pd.read_csv(
         StringIO(requests.get(remote_files_url).text), dtype={"record_id": str}
     )
-    matches = remote[remote["filename"] == "demand_EER2023_IRAlow.h5"]
+    matches = remote[remote["filename"] == DEMAND_H5_FILENAME]
     if matches.empty:
         raise ValueError(
-            "demand_EER2023_IRAlow.h5 not found in "
+            f"{DEMAND_H5_FILENAME} not found in "
             f"ReEDS remote_files.csv at {remote_files_url}"
         )
     row = matches.iloc[0]
     url = row["url_base"].format(
         record_id=row["record_id"], filename=row["filename"]
     )
-    print(f"  Resolved demand_EER2023_IRAlow.h5: record {row['record_id']}")
+    print(f"  Resolved {DEMAND_H5_FILENAME}: record {row['record_id']}")
     return url
 
 
