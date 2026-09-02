@@ -253,7 +253,8 @@ string published in this environment, used to keep same-day suffixes unique even
 search index lags), and the per-file `md5`s that were released. The legacy single-deposit
 `zenodo_release` block is migrated into `releases.core` on load. The metadata block carries the fields
 shared by every deposit — `creators`, `access_right`, and the compilation `license` (e.g. `cc-zero`) —
-plus per-deposit title overrides under `metadata.sections.<section>`; each file's source license is
+plus per-deposit overrides under `metadata.sections.<section>` (e.g. `title` and `creators`, so a
+collection can list additional authors); each file's source license is
 recorded in `data/manifest.json` and surfaced in the description. `.zenodo.json` contains no secrets
 and is committed to the repo so later runs know what changed and can create new versions against the
 same records.

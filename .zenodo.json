@@ -13,10 +13,30 @@
         "title": "PowerGenome Input Data"
       },
       "existing_resource_groups": {
-        "title": "PowerGenome Existing Renewable Resource Groups"
+        "title": "PowerGenome Existing Renewable Resource Groups",
+        "creators": [
+          {
+            "name": "Schivley, Greg",
+            "orcid": "0000-0002-8947-694X"
+          },
+          {
+            "name": "Mantegna, Gabe",
+            "orcid": "0000-0002-7707-0221"
+          }
+        ]
       },
       "profiles": {
-        "title": "PowerGenome Renewable Resource Profiles"
+        "title": "PowerGenome Renewable Resource Profiles",
+        "creators": [
+          {
+            "name": "Schivley, Greg",
+            "orcid": "0000-0002-8947-694X"
+          },
+          {
+            "name": "Mantegna, Gabe",
+            "orcid": "0000-0002-7707-0221"
+          }
+        ]
       }
     },
     "upload_type": "dataset"
