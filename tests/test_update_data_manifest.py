@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -184,6 +185,54 @@ class ManifestTests(unittest.TestCase):
         for bad in ("2026-13-45", "08-11-2026", "not-a-date", "2026-02-30", "", "20260811"):
             with self.assertRaises(Exception):
                 MODULE._validated_iso_date(bad)
+
+
+class GitTrackedTests(unittest.TestCase):
+    def _make_git_collection(self, directory):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        data_dir = root / directory
+        data_dir.mkdir()
+        (data_dir / SINGLE_SOURCE_FILE).write_text("a")
+        (data_dir / "scratch.csv").write_text("b")
+        subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+        subprocess.run(
+            ["git", "-C", str(root), "add", f"{directory}/{SINGLE_SOURCE_FILE}"],
+            check=True,
+        )
+        return data_dir
+
+    def test_new_untracked_file_is_skipped_per_collection(self):
+        data_dir = self._make_git_collection("resource_profiles")
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11")
+        manifest = json.loads(manifest_path.read_text())
+        self.assertIn(SINGLE_SOURCE_FILE, manifest["files"])
+        self.assertNotIn("scratch.csv", manifest["files"])
+
+    def test_include_untracked_restores_scan_all(self):
+        data_dir = self._make_git_collection("existing_resource_groups")
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(
+            data_dir, manifest_path, "2026-08-11", include_untracked=True
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertIn("scratch.csv", manifest["files"])
+
+    def test_manifested_untracked_file_remains_managed(self):
+        data_dir = self._make_git_collection("data")
+        manifest_path = data_dir / "manifest.json"
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11")
+        subprocess.run(
+            ["git", "-C", str(data_dir.parent), "rm", "--cached", "data/" + SINGLE_SOURCE_FILE],
+            check=True,
+            capture_output=True,
+        )
+        (data_dir / SINGLE_SOURCE_FILE).write_text("changed")
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["files"][SINGLE_SOURCE_FILE]["version"], "2026-08-12")
 
 
 if __name__ == "__main__":

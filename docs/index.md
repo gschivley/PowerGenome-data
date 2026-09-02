@@ -45,12 +45,23 @@ uv run python build_operational_constraints_reeds.py  # optional --pcm-path <loc
 
 Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above.
 
-## Versioned data-source manifest (`data/manifest.json`)
+## Versioned data-source manifests
 
-`data/manifest.json` records, for every file in `data/`, where the data came from, when it was last
-updated, and an MD5 content hash, along with a versioned history that advances whenever a file changes.
-This is the provenance + change-detection layer: it drives `publish_zenodo.py` (below), which publishes
-manifest-listed files to Zenodo and can be wired into scheduled update workflows.
+Each Zenodo collection keeps its own versioned manifest at the top of its folder, recording for
+every file where the data came from, when it was last updated, and an MD5 content hash, along with
+a versioned history that advances whenever a file changes. This is the provenance +
+change-detection layer: it drives `publish_zenodo.py` (below), which publishes manifest-listed
+files to Zenodo.
+
+| Collection | Manifest | Data folder |
+| --- | --- | --- |
+| Core input data | `data/manifest.json` | `data/` |
+| Renewable resource profiles | `resource_profiles/manifest.json` | `resource_profiles/` |
+| Existing renewable resource groups | `existing_resource_groups/manifest.json` | `existing_resource_groups/` |
+
+Each collection versions independently (its own `data_version`), so updating one collection never
+bumps another's release version. `publish_zenodo.py` still accepts the older single-file layout
+where extra collections live in a top-level `sections` object of `data/manifest.json`.
 
 ### Read it
 
@@ -78,10 +89,10 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
 ```
 
 - `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
-- `data_version` — the **overall dataset** version in calendar-versioning format `YYYY.MM.DD`. It
+- `data_version` — the **collection** version in calendar-versioning format `YYYY.MM.DD`. It
   advances to the current date whenever a data input is added or its contents change, and is otherwise
   preserved from the previous run. The manifest file itself is excluded from scanning, so it never
-  triggers a `data_version` bump on its own. Use this to tag a dataset release (e.g. on Zenodo).
+  triggers a `data_version` bump on its own. Use this to tag a collection release (e.g. on Zenodo).
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
@@ -92,12 +103,15 @@ manifest-listed files to Zenodo and can be wired into scheduled update workflows
 
 ### Update it
 
-Run `update_data_manifest.py` from the repo root after any data file changes:
+Run `update_data_manifest.py` from the repo root after any data file changes, pointing it at the
+affected collection's folder:
 
 ```bash
 uv run python update_data_manifest.py            # rescan data/ and bump versions on change
 uv run python update_data_manifest.py --dry-run  # preview changes without writing
 uv run python update_data_manifest.py --date 2026-08-11  # override the change date (reproducible runs)
+uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 ```
 
 Behavior:
@@ -123,13 +137,43 @@ python -m unittest discover -s tests
 
 ## Publishing to Zenodo
 
-`publish_zenodo.py` publishes the manifest-listed files in `data/` to a Zenodo deposition and keeps
-the Zenodo record in sync with the manifest across releases. It is the publishing counterpart to the
-manifest described above.
+`publish_zenodo.py` publishes the manifest-listed files to Zenodo, **one deposit per data
+collection**, and keeps each Zenodo record in sync with the manifest across releases. It is the
+publishing counterpart to the manifest described above.
+
+### Collections and deposits
+
+Each collection has its own manifest and becomes its own Zenodo deposit with its own title,
+description, version history, and DOI:
+
+| Manifest | Source folder | Deposit title | Contents |
+| --- | --- | --- | --- |
+| `data/manifest.json` (core) | `data/` | PowerGenome Input Data | Core input tables (generators, load, fuels, costs, transmission, ...) |
+| `resource_profiles/manifest.json` | `resource_profiles/` | PowerGenome Renewable Resource Profiles | Hourly generation profiles for new-build renewable resources (PowerGenome `RESOURCE_GROUP_PROFILES`) |
+| `existing_resource_groups/manifest.json` | `existing_resource_groups/` | PowerGenome Existing Renewable Resource Groups | Resource group files for existing renewables (PowerGenome `RESOURCE_GROUPS`) |
+
+Each deposit is versioned from **its own collection's `data_version`**, so updating one collection
+never bumps another deposit's release version. Files are uploaded with their plain filenames
+(Zenodo's bucket API only supports flat filenames); since each collection has its own deposit,
+filenames can never collide across collections. Collections with no files are skipped, so a deposit
+is only created once a collection actually has data.
+
+Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
+`license`, `history`).
+
+If a collection folder contains a `README.md`, it is rendered to HTML (via the `markdown` package)
+and used as the **body of the Zenodo description**, placed below the file-change note and above the
+licensing and per-file sections — so `resource_profiles/README.md` and
+`existing_resource_groups/README.md` document those datasets on Zenodo directly.
+
+A collection can additionally supply leading methodology prose via
+`metadata.sections.<section>.description` in `.zenodo.json`; when present it is prepended to the
+whole description.
 
 ### What it does
 
-- Reads `data/manifest.json` and derives the Zenodo `version` from its top-level `data_version`
+- Reads each collection's manifest (see the table above) and derives each Zenodo `version` from that
+  collection's own `data_version`
   (CalVer `YYYY.MM.DD`) with a sequential per-day suffix (`2026.08.14.v1`, `2026.08.14.v2`, ...) so
   that multiple releases on the same date never share a version number. The suffix is computed by
   combining the already-published versions of the dataset's concept carrying the same `data_version`
@@ -142,8 +186,13 @@ manifest described above.
 - Uploads **only files that changed** since the last published release (compared by `md5`), so the
   initial release uploads everything and later releases upload just the new/updated files. Files that
   were released before but are no longer in the manifest are removed from the draft.
-- Creates a **new version** of the existing record on subsequent releases, so Zenodo keeps the full file
-  history. The first release creates a new deposition.
+- Creates a **new version** of each existing record on subsequent releases, so Zenodo keeps the full file
+  history. The first release of a collection creates a new deposition.
+- Retries transient failures (connection errors, timeouts, and HTTP 408/5xx proxy errors) with
+  exponential backoff on **every** API call, including file uploads. Uploads reopen the file for each
+  attempt so a dropped connection on a multi-GB file can be resumed. Pass `--upload-retries` and
+  `--upload-retry-delay` to tune upload retries. If a publish request times out after Zenodo already
+  processed it, the script checks the deposition state and treats an already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
   a committed state of the repository); pass `--allow-dirty` to override.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
@@ -162,8 +211,14 @@ manifest described above.
 # Show what the release would contain (no API calls)
 uv run python publish_zenodo.py --dry-run
 
+# Show only one collection's release plan
+uv run python publish_zenodo.py --dry-run --collection profiles
+
 # Create/update the Zenodo draft (sandbox) and print the draft URL + DOI.
 uv run python publish_zenodo.py
+
+# Resolve just one collection's draft (repeat --collection for several)
+uv run python publish_zenodo.py --collection profiles
 
 # Publish the draft (irreversible in production) and record release state.
 uv run python publish_zenodo.py --publish
@@ -175,7 +230,11 @@ uv run python publish_zenodo.py --publish --production
 uv run python publish_zenodo.py --publish --allow-dirty
 ```
 
-Without `--publish` the script leaves the deposition as a draft. If a draft already exists it is resumed
+By default every collection with files in the manifest is released. Pass `--collection`
+(repeatable; choices: `core`, `profiles`, `existing_resource_groups`) to limit the run to a
+single deposit or a subset.
+
+Without `--publish` the script leaves each deposition as a draft. If a draft already exists it is resumed
 (no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
 `--publish` after an identical release is a no-op.
 
@@ -185,16 +244,20 @@ pass `--allow-dirty`. This keeps each Zenodo record reproducible from the reposi
 
 ### Release state (`.zenodo.json`)
 
-On the first publish the script writes `.zenodo.json` in the repo root with the Zenodo metadata plus a
-`zenodo_release` block tracking the environment (`sandbox` or `production`), the published `data_version`,
-the `release_version` (the version string actually recorded on Zenodo, suffix included), the
-`deposition_id`, the resolved `doi`, the `versions` history (every release version string published in
-this environment, used to keep same-day suffixes unique even while Zenodo's search index lags), and the
-per-file `md5`s that were released. The metadata block carries
-the fields applied to every release — `title`, `creators`, `access_right`, and the compilation `license`
-(e.g. `cc-zero`) — while each file's source license is recorded in `data/manifest.json` and surfaced in the
-description. `.zenodo.json` contains no secrets and is committed to the repo so later runs know what
-changed and can create new versions against the same record.
+On the first publish the script writes `.zenodo.json` in the repo root with shared Zenodo metadata plus
+a `releases` object keyed by collection section (`core`, `profiles`, `existing_resource_groups`).
+Each `releases.<section>` block tracks the environment (`sandbox` or `production`), the published
+`data_version`, the `release_version` (the version string actually recorded on Zenodo, suffix
+included), the `deposition_id`, the resolved `doi`, the `versions` history (every release version
+string published in this environment, used to keep same-day suffixes unique even while Zenodo's
+search index lags), and the per-file `md5`s that were released. The legacy single-deposit
+`zenodo_release` block is migrated into `releases.core` on load. The metadata block carries the fields
+shared by every deposit — `creators`, `access_right`, and the compilation `license` (e.g. `cc-zero`) —
+plus per-deposit overrides under `metadata.sections.<section>` (e.g. `title` and `creators`, so a
+collection can list additional authors); each file's source license is
+recorded in `data/manifest.json` and surfaced in the description. `.zenodo.json` contains no secrets
+and is committed to the repo so later runs know what changed and can create new versions against the
+same records.
 
 The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
 suffix counters are independent, so the script records which environment a release belongs to and ignores

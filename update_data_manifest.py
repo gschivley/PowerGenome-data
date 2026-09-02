@@ -22,6 +22,12 @@ Run from the repo root:
     uv run python update_data_manifest.py
     uv run python update_data_manifest.py --dry-run
     uv run python update_data_manifest.py --date 2026-08-11
+
+Each Zenodo collection (see publish_zenodo.py) keeps its own manifest at the
+top of its folder, so update collections independently:
+
+    uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+    uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -244,6 +251,61 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             ),
         },
     ],
+    # Renewable resource profiles (resource_profiles/) ---------------------------------
+    "offshorewind_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly offshore wind capacity-factor profiles generated with NREL reV/SAM "
+                "(NREL Reference 12 MW turbine) from WTK weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://www.nrel.gov/grid/wind-toolkit.html",
+        },
+    ],
+    "offshorewind_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
+            ),
+        },
+    ],
+    "onshorewind_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly onshore wind capacity-factor profiles generated with NREL reV/SAM "
+                "(NREL Reference 5.5 MW turbine) from WTK weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://www.nrel.gov/grid/wind-toolkit.html",
+        },
+    ],
+    "onshorewind_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
+            ),
+        },
+    ],
+    "solar_rev_profiles_20240801_tidy.parquet": [
+        {
+            "source": (
+                "Hourly solar AC capacity-factor profiles generated with NREL reV/SAM "
+                "PVWatts v8 (1-axis bifacial) from NSRDB weather data at the nearest site to "
+                "each 10 km CONUS grid point (Princeton CPA assignment), weather years 2007-2013."
+            ),
+            "source_url": "https://nsrdb.nrel.gov/",
+        },
+    ],
+    "solar_site_mapping_20240801.parquet": [
+        {
+            "source": (
+                "Maps each Princeton capacity area (CPA_ID) to the NREL resource site (Site) "
+                "used for its profile and the great-circle distance (profile_dist) between them."
+            ),
+        },
+    ],
 }
 
 
@@ -259,6 +321,20 @@ def md5_of(path: Path) -> str:
 def calver(date_str: str) -> str:
     """Convert an ISO date (YYYY-MM-DD) to CalVer (YYYY.MM.DD)."""
     return date_str.replace("-", ".")
+
+
+def git_tracked_filenames(data_dir: Path) -> set[str] | None:
+    """Return files tracked in this collection, or None outside a git worktree."""
+    try:
+        output = subprocess.check_output(
+            ["git", "ls-files", "--", "."],
+            cwd=data_dir,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return {Path(line).name for line in output.splitlines() if line.strip()}
 
 
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
@@ -387,10 +463,15 @@ def write_manifest(manifest_path: Path, manifest: dict) -> None:
 
 
 def update_manifest(
-    data_dir: Path, manifest_path: Path, date_str: str, dry_run: bool = False
+    data_dir: Path,
+    manifest_path: Path,
+    date_str: str,
+    dry_run: bool = False,
+    include_untracked: bool = False,
 ) -> None:
     existing = load_existing(manifest_path)
     old_files = existing.get("files", {})
+    tracked = None if include_untracked else git_tracked_filenames(data_dir)
 
     files: dict[str, dict] = {}
     changed_any = False
@@ -398,6 +479,12 @@ def update_manifest(
         if not path.is_file() or path.name == manifest_path.name:
             continue
         filename = path.name
+        if tracked is not None and filename not in tracked and filename not in old_files:
+            print(
+                f"[skipped]  {filename} (not tracked by git; commit it first or "
+                "pass --include-untracked)"
+            )
+            continue
         md5 = md5_of(path)
         prior = old_files.get(filename)
 
@@ -481,12 +568,23 @@ def parse_args(argv=None) -> argparse.Namespace:
         action="store_true",
         help="Print what would change without writing the manifest",
     )
+    parser.add_argument(
+        "--include-untracked",
+        action="store_true",
+        help="Include newly discovered files that git does not track.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = parse_args(argv)
-    update_manifest(args.data_dir, args.manifest, args.date, dry_run=args.dry_run)
+    update_manifest(
+        args.data_dir,
+        args.manifest,
+        args.date,
+        dry_run=args.dry_run,
+        include_untracked=args.include_untracked,
+    )
 
 
 if __name__ == "__main__":
