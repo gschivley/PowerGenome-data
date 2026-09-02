@@ -6,7 +6,7 @@ Hourly generation profiles for new-build renewable resources, used by PowerGenom
 
 Profiles were generated with NREL's **reV** framework and the **SAM** (System Advisor Model) engine using wind resource data from the Wind Integration National Dataset Toolkit (WTK) and solar resource data from the National Solar Radiation Database (NSRDB).
 
-**Site selection.** A 10 km × 10 km grid was generated over the contiguous United States and each grid point was assigned to its Princeton capacity area (CPA). For every grid point the nearest NREL WTK (wind) or NSRDB (solar) weather site was identified, and multi-year hourly weather data were retrieved for those sites for weather years 2007–2013.
+**Site selection.** A 10 km × 10 km grid was generated over the contiguous United States. Princeton solar capacity areas (CPAs) were assigned to the nearest grid point, and each grid point was matched to the nearest NSRDB weather site (GID); hourly weather data were retrieved for those sites. For wind, each wind CPA was matched to the nearest WTK weather site (GID); hourly weather data were retrieved for those sites. Weather years span 2007–2013.
 
 **Simulation.** For each weather year and site, reV executed SAM's PVWatts v8 model (solar) or wind power model (wind) to produce an hourly capacity-factor profile per site:
 
