@@ -13,7 +13,6 @@
         "title": "PowerGenome Input Data"
       },
       "existing_resource_groups": {
-        "title": "PowerGenome Existing Renewable Resource Groups",
         "creators": [
           {
             "name": "Schivley, Greg",
@@ -23,10 +22,10 @@
             "name": "Mantegna, Gabe",
             "orcid": "0000-0002-7707-0221"
           }
-        ]
+        ],
+        "title": "PowerGenome Existing Renewable Resource Groups"
       },
       "profiles": {
-        "title": "PowerGenome Renewable Resource Profiles",
         "creators": [
           {
             "name": "Schivley, Greg",
@@ -36,7 +35,8 @@
             "name": "Mantegna, Gabe",
             "orcid": "0000-0002-7707-0221"
           }
-        ]
+        ],
+        "title": "PowerGenome Renewable Resource Profiles"
       }
     },
     "upload_type": "dataset"
@@ -44,9 +44,9 @@
   "releases": {
     "core": {
       "data_version": "2026.08.14",
-      "deposition_id": "590994",
-      "doi": "10.5072/zenodo.590994",
-      "environment": "sandbox",
+      "deposition_id": "22233228",
+      "doi": "10.5281/zenodo.22233228",
+      "environment": "production",
       "files": {
         "cpi_data.csv": "0dcf40c82a204b361f9da0fdc7070550",
         "distributed_capacity.parquet": "d8c206063044ea93edb80e8cae100357",
@@ -54,7 +54,6 @@
         "dollar_year_adjustment.csv": "2e819d4d7f465d8d273b2da57f0a2fd1",
         "fuel_prices.parquet": "a5393175e8eabda1134e849ceeb6f5e1",
         "nerc_reserve_margins.csv": "b8ac4f0a59127c9e483d9b59aaad78b4",
-        "nerc_reserve_margins_vintage.json": "f10aef2af51faa5d227ec513262077c2",
         "operational_constraints_reeds.csv": "75b7e22488de8048e56c1e1f81c359f9",
         "plant_region_map.csv": "0d8a6f43695c230a418827820f071dd8",
         "reeds_generators_transformed.csv": "1dfff9c035410c487687ee9da9c85395",
@@ -65,7 +64,57 @@
         "technology_heat_rates_nrelatb.csv": "356c16b73d98fd6ac2dcf95510701630",
         "transmission_capacity_reeds.csv": "afed76f028868aae1d68c095bca01f24"
       },
-      "published": true
+      "published": true,
+      "release_version": "2026.08.14.v1",
+      "versions": [
+        "2026.08.14.v1"
+      ]
+    },
+    "existing_resource_groups": {
+      "data_version": "2026.08.31",
+      "deposition_id": "22235662",
+      "doi": "10.5281/zenodo.22235662",
+      "environment": "production",
+      "files": {
+        "existing_hydro_reeds_ba_metadata.csv": "b1a20e05842fda1981a09c4b6c6b6ef9",
+        "existing_offshorewind_reeds_ba_metadata.csv": "b0999fa2d364df9fcaf4b66faa65b5d3",
+        "existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet": "a7a027f6b129ccf7b6515d6bc122dbd3",
+        "existing_onshorewind_reeds_ba_metadata.csv": "463324ce80672d53403b88c4d4280822",
+        "existing_osw_profiles_tidy.parquet": "8fdd420cca0818afe38d978ee8fb12f7",
+        "existing_solar_reeds_ba_metadata.csv": "becd05df8595259008ad19fb2e95ce33",
+        "existing_solar_reeds_ba_profiles_20250513_tidy.parquet": "e379a8228a779290122285276a8b760b",
+        "hydro_conventional_2007_2013.parquet": "a1a3d2ce5507293f8f7d0917e7d07877",
+        "hydro_run_of_river_2007_2013.parquet": "31afc0f401c76b47ba02a994fc9f24ec",
+        "regional_hydro_True.json": "931c086cec1d314c2c58fed9ad758833",
+        "regional_offshorewind_True.json": "79dd0b7c09fa92a36218270adb21ea9a",
+        "regional_small_hydro_True.json": "6dd235fd40cba22e9b21fa9aa5c79fd4",
+        "regional_solar_photovoltaic_True.json": "ac2ec864509fb2b7211ec0dcf3f53a3b",
+        "regional_wind_True.json": "8ef3157cd915e12f3f0e75a149105d54"
+      },
+      "published": true,
+      "release_version": "2026.08.31.v1",
+      "versions": [
+        "2026.08.31.v1"
+      ]
+    },
+    "profiles": {
+      "data_version": "2026.08.31",
+      "deposition_id": "22235855",
+      "doi": "10.5281/zenodo.22235855",
+      "environment": "production",
+      "files": {
+        "offshorewind_rev_profiles_20240801_tidy.parquet": "145cc41943fae1e31a4c80b0ef262d87",
+        "offshorewind_site_mapping_20240801.parquet": "bd38633e490fe647ab78ed4fa6d08e5b",
+        "onshorewind_rev_profiles_20240801_tidy.parquet": "84129006615a73d2a119ef386f179d6a",
+        "onshorewind_site_mapping_20240801.parquet": "a66a01d5226e1bead37b4419f455a3d2",
+        "solar_rev_profiles_20240801_tidy.parquet": "84bdffd609890bb6a936e1826d537fc4",
+        "solar_site_mapping_20240801.parquet": "bf83512fc11f4ee8409fd6791643f03f"
+      },
+      "published": true,
+      "release_version": "2026.08.31.v1",
+      "versions": [
+        "2026.08.31.v1"
+      ]
     }
   }
 }
