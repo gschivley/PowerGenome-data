@@ -22,6 +22,13 @@ Pass the token as an HTTP header:
 Authorization: Bearer <ACCESS_TOKEN>
 ```
 
+Token environment variables:
+
+- Generic helper (`scripts/zenodo_upload.py`) and manual `curl`: `ZENODO_TOKEN`.
+- Project release script (`publish_zenodo.py`): `ZENODO_SANDBOX_API_KEY` for the
+  sandbox and `ZENODO_API_KEY` for production. Both may be loaded from a local
+  `.env` file (git-ignored, never committed).
+
 ## Core Workflow
 
 ### 1. Create an empty deposition
