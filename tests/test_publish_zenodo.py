@@ -285,6 +285,72 @@ class DescriptionTests(unittest.TestCase):
         )
         self.assertTrue(description.startswith("<p>PowerGenome Input Data"))
 
+    def test_updated_file_shows_version_transition(self):
+        files = {
+            "wind.parquet": {
+                "version": "2026-08-20",
+                "last_updated": "2026-08-20",
+                "md5": "new",
+                "history": [{"version": "2026-08-12", "md5": "old"}],
+            }
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.20", "files": files},
+            "profiles",
+            files,
+            [],
+            ["wind.parquet"],
+            [],
+            False,
+        )
+        self.assertIn("2026-08-12 &rarr; 2026-08-20", description)
+
+    def test_removed_file_retains_last_release_details_and_note(self):
+        details = {
+            "gone.csv": {
+                "version": "2026-07-01",
+                "license": "cc-by-4.0",
+                "sources": [{"source": "Prior source", "source_url": "https://example.com"}],
+                "md5": "old",
+            }
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.20", "files": {}},
+            "core",
+            {},
+            [],
+            [],
+            ["gone.csv"],
+            False,
+            removed_details=details,
+            removal_notes={"gone.csv": "Superseded by replacement.csv"},
+        )
+        self.assertIn("Removed files, last released state", description)
+        self.assertIn("2026-07-01", description)
+        self.assertIn("Creative Commons Attribution", description)
+        self.assertIn("Prior source", description)
+        self.assertIn("Superseded by replacement.csv", description)
+
+    def test_metadata_hash_covers_sources_license_and_readme(self):
+        manifest = {
+            "data_version": "2026.08.20",
+            "files": {"a.csv": {"md5": "same", "version": "v1", "sources": []}},
+        }
+        original = MODULE.manifest_meta_hash(manifest, "<p>README one</p>")
+        manifest["files"]["a.csv"]["license"] = "cc-zero"
+        self.assertNotEqual(original, MODULE.manifest_meta_hash(manifest, "<p>README one</p>"))
+        self.assertNotEqual(
+            MODULE.manifest_meta_hash(manifest, "<p>README one</p>"),
+            MODULE.manifest_meta_hash(manifest, "<p>README two</p>"),
+        )
+
+    def test_released_file_state_normalizes_legacy_and_preserves_details(self):
+        normalized = MODULE.normalize_released_files(
+            {"old.csv": "abc", "new.csv": {"md5": "def", "version": "2026-08-01"}}
+        )
+        self.assertEqual(normalized["old.csv"], {"md5": "abc"})
+        self.assertEqual(normalized["new.csv"]["version"], "2026-08-01")
+
 
 class ManifestEntryTests(unittest.TestCase):
     def test_real_profiles_manifest_has_six_files(self):

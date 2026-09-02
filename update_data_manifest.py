@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -322,6 +323,20 @@ def calver(date_str: str) -> str:
     return date_str.replace("-", ".")
 
 
+def git_tracked_filenames(data_dir: Path) -> set[str] | None:
+    """Return files tracked in this collection, or None outside a git worktree."""
+    try:
+        output = subprocess.check_output(
+            ["git", "ls-files", "--", "."],
+            cwd=data_dir,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return {Path(line).name for line in output.splitlines() if line.strip()}
+
+
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
     """Return a clean list of {source[, source_url]} objects.
 
@@ -448,10 +463,15 @@ def write_manifest(manifest_path: Path, manifest: dict) -> None:
 
 
 def update_manifest(
-    data_dir: Path, manifest_path: Path, date_str: str, dry_run: bool = False
+    data_dir: Path,
+    manifest_path: Path,
+    date_str: str,
+    dry_run: bool = False,
+    include_untracked: bool = False,
 ) -> None:
     existing = load_existing(manifest_path)
     old_files = existing.get("files", {})
+    tracked = None if include_untracked else git_tracked_filenames(data_dir)
 
     files: dict[str, dict] = {}
     changed_any = False
@@ -459,6 +479,12 @@ def update_manifest(
         if not path.is_file() or path.name == manifest_path.name:
             continue
         filename = path.name
+        if tracked is not None and filename not in tracked and filename not in old_files:
+            print(
+                f"[skipped]  {filename} (not tracked by git; commit it first or "
+                "pass --include-untracked)"
+            )
+            continue
         md5 = md5_of(path)
         prior = old_files.get(filename)
 
@@ -542,12 +568,23 @@ def parse_args(argv=None) -> argparse.Namespace:
         action="store_true",
         help="Print what would change without writing the manifest",
     )
+    parser.add_argument(
+        "--include-untracked",
+        action="store_true",
+        help="Include newly discovered files that git does not track.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = parse_args(argv)
-    update_manifest(args.data_dir, args.manifest, args.date, dry_run=args.dry_run)
+    update_manifest(
+        args.data_dir,
+        args.manifest,
+        args.date,
+        dry_run=args.dry_run,
+        include_untracked=args.include_untracked,
+    )
 
 
 if __name__ == "__main__":

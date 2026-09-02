@@ -333,7 +333,7 @@ LICENSE_LABELS = {
 }
 
 
-def describe_file(filename: str, info: dict) -> str:
+def describe_file(filename: str, info: dict, note: str | None = None) -> str:
     esc = html.escape
     sources = info.get("sources") or []
     source_items = []
@@ -355,6 +355,7 @@ def describe_file(filename: str, info: dict) -> str:
     license_label = (
         LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
     )
+    note_html = f"<p><strong>Note:</strong> {esc(note)}</p>" if note else ""
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
@@ -363,8 +364,32 @@ def describe_file(filename: str, info: dict) -> str:
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
         f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
         f"</table>"
-        f"{sources_html}"
+        f"{note_html}{sources_html}"
     )
+
+
+def manifest_meta_hash(manifest: dict, readme_html: str = "") -> str:
+    """Stable hash of all description-relevant collection metadata."""
+    relevant = {
+        "files": {
+            name: {
+                key: info.get(key)
+                for key in ("version", "last_updated", "license", "sources", "md5")
+            }
+            for name, info in manifest["files"].items()
+        },
+        "readme_html": readme_html,
+    }
+    payload = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def normalize_released_files(raw: dict) -> dict[str, dict]:
+    """Normalize legacy md5-only state to full per-file release entries."""
+    return {
+        name: dict(value) if isinstance(value, dict) else {"md5": value}
+        for name, value in (raw or {}).items()
+    }
 
 
 def readme_to_html(data_dir: Path) -> str:
@@ -393,10 +418,14 @@ def build_description(
     removed: list[str],
     initial: bool,
     readme_html: str = "",
+    removed_details: dict[str, dict] | None = None,
+    removal_notes: dict[str, str] | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
     esc = html.escape
+    removed_details = removed_details or {}
+    removal_notes = removal_notes or {}
 
     def names_html(names: list[str]) -> str:
         return "".join(f"<li><code>{esc(name)}</code></li>" for name in names)
@@ -413,8 +442,21 @@ def build_description(
                 f"<p><strong>Files added in this release:</strong></p><ul>{names_html(added)}</ul>"
             )
         if updated:
+            updated_items = []
+            for name in updated:
+                info = files[name]
+                history = info.get("history") or []
+                previous = history[-1].get("version") if history else None
+                suffix = (
+                    f" ({esc(previous)} &rarr; {esc(info.get('version') or 'Unknown')})"
+                    if previous
+                    else ""
+                )
+                updated_items.append(f"<li><code>{esc(name)}</code>{suffix}</li>")
             changes_html.append(
-                f"<p><strong>Files updated in this release:</strong></p><ul>{names_html(updated)}</ul>"
+                "<p><strong>Files updated in this release:</strong></p><ul>"
+                + "".join(updated_items)
+                + "</ul>"
             )
         if removed:
             changes_html.append(
@@ -426,6 +468,15 @@ def build_description(
 
     file_sections = "\n".join(
         describe_file(filename, info) for filename, info in sorted(files.items())
+    )
+    removed_sections = "\n".join(
+        describe_file(name, removed_details.get(name, {}), removal_notes.get(name))
+        for name in removed
+    )
+    removed_block = (
+        "<p><strong>Removed files, last released state:</strong></p>" + removed_sections
+        if removed_sections
+        else ""
     )
 
     return (
@@ -441,6 +492,7 @@ def build_description(
         "domain, and data derived from ReEDS / NREL (including the NREL ATB and PUDL) is "
         "Creative Commons Attribution 4.0 International (CC BY 4.0). See each file's "
         "License row below.</p>"
+        f"{removed_block}"
         "<p>Each data element's own version key records when that element was "
         "last updated; the per-file sources below document where it came from.</p>"
         f"{file_sections}"
@@ -801,6 +853,8 @@ def build_release_description(
     initial: bool,
     base_metadata: dict,
     readme_html: str = "",
+    removed_details: dict[str, dict] | None = None,
+    removal_notes: dict[str, str] | None = None,
 ) -> str:
     """Full Zenodo description for a deposit.
 
@@ -819,6 +873,8 @@ def build_release_description(
         removed,
         initial,
         readme_html,
+        removed_details,
+        removal_notes,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -861,7 +917,9 @@ def release_section(
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
-    released_files = released.get("files", {}) if previously_published else {}
+    released_files = (
+        normalize_released_files(released.get("files", {})) if previously_published else {}
+    )
     deposition_id = released.get("deposition_id")
     # Allow resuming a specific draft (e.g. one created by an earlier run that
     # died mid-upload before state was saved). Files already in the draft with
@@ -900,11 +958,14 @@ def release_section(
     updated = [
         name
         for name, info in manifest_files.items()
-        if name in released_files and released_files[name] != info.get("md5")
+        if name in released_files and released_files[name].get("md5") != info.get("md5")
     ]
     changed = added + updated
     removed = [key for key in released_files if key not in release_keys]
     initial = not released_files
+    readme_html = readme_to_html(data_dir)
+    metadata_hash = manifest_meta_hash(manifest, readme_html)
+    metadata_changed = released.get("manifest_meta_hash") != metadata_hash
 
     log(f"[{section}] data version: {data_version}")
     if added:
@@ -927,6 +988,7 @@ def release_section(
         and data_version == released.get("data_version")
         and not changed
         and not removed
+        and not metadata_changed
     ):
         log(
             f"[{section}] version {data_version} is already published on Zenodo "
@@ -1028,7 +1090,9 @@ def release_section(
         removed,
         initial,
         base_metadata,
-        readme_html=readme_to_html(data_dir),
+        readme_html=readme_html,
+        removed_details={name: released_files[name] for name in removed},
+        removal_notes=released.get("removal_notes") or base_metadata.get("removal_notes"),
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
@@ -1095,7 +1159,16 @@ def release_section(
         "published": published,
         "doi": publish_payload.get("doi") if published else None,
         "versions": versions,
-        "files": {name: info["md5"] for name, info in manifest_files.items()},
+        "manifest_meta_hash": metadata_hash,
+        "removal_notes": released.get("removal_notes", {}),
+        "files": {
+            name: {
+                key: info.get(key)
+                for key in ("md5", "version", "last_updated", "license", "sources")
+                if info.get(key) is not None
+            }
+            for name, info in manifest_files.items()
+        },
     }
 
     return {
