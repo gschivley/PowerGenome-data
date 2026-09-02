@@ -215,6 +215,19 @@ class MetadataTests(unittest.TestCase):
         self.assertNotIn("title", meta)  # per-release field, not shared
 
 
+class CreatorResolutionTests(unittest.TestCase):
+    def test_default_creators_from_git_user_name(self):
+        with mock.patch.object(MODULE, "git_user_name", return_value="Greg Schivley"):
+            self.assertEqual(
+                MODULE.default_creators(), [{"name": "Schivley, Greg"}]
+            )
+
+    def test_default_creators_exits_without_git_user_name(self):
+        with mock.patch.object(MODULE, "git_user_name", return_value=""):
+            with self.assertRaises(SystemExit):
+                MODULE.default_creators()
+
+
 class DescriptionTests(unittest.TestCase):
     def test_description_uses_section_title_and_files(self):
         files = MANIFEST["sections"]["profiles"]["files"]
@@ -536,13 +549,14 @@ class DepositionOverrideTests(unittest.TestCase):
             manifest_path = root / "data" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
             state = {
+                "metadata": {"creators": [{"name": "Schivley, Greg"}]},
                 "releases": {
                     "core": {
                         "environment": "production",
                         "deposition_id": "999999",
                         "published": True,
                     }
-                }
+                },
             }
             with mock.patch.object(MODULE.time, "sleep"):
                 result = MODULE.release_section(
