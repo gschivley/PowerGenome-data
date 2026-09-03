@@ -246,6 +246,10 @@ SOURCES: dict[str, list[dict[str, str]]] = {
                 "prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
             ),
         },
+        {
+            "source": "NREL Annual Technology Baseline 2025 release page and data documentation",
+            "source_url": "https://atb.nrel.gov/electricity/2025/data",
+        },
     ],
     "transmission_capacity_reeds.csv": [
         {
