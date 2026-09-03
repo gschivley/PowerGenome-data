@@ -322,19 +322,14 @@ def build_distributed_profiles(
         except OSError:
             pass
 
-    # Adjust for UTC offset (assume 0 if index is tz-naive)
-    if (
-        county_cf.index.tz is not None
-        and county_cf.index[0].utcoffset() is not None
-    ):
-        utc_offset_hours = int(county_cf.index[0].utcoffset().total_seconds() / 3600)
-    else:
-        utc_offset_hours = 0
+    # ReEDS stores county distpv profiles in fixed CST (UTC-6), without DST.
+    # Shift the clock-forward sequence six hours so time_index is UTC.
+    utc_offset_hours = -6
 
     # Build tidy dataframe
     df_list = []
     for region in tqdm(regional_cf.columns, desc="Processing regions"):
-        # Roll the profile to adjust for the UTC offset
+        # Convert the fixed CST sequence to UTC.
         gen_profile = np.roll(regional_cf[region].values, -utc_offset_hours)
 
         _df = pd.DataFrame(
