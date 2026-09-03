@@ -22,6 +22,7 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | `build_emission_policies.py` | `emission_policies_wecc.csv` (path hard-coded) | ESR Excel workbook (`ESR_Inputs_ReEDS_WECC.xlsx`); `settings/model_definition.yml` for model years and aggregations | Pop-weighted ESR values by region/year; enforces CES ≥ RPS when both apply. |
 | `fetch_gdp_ipd_data.py` | `data/dollar_year_adjustment.csv` | FRED (series `A191RD3A086NBEA`); BEA NIPA API (fallback, requires `BEA_API_KEY` env var) | Fetches annual GDP Implicit Price Deflator (GDP-IPD, index 2017=100) from 1980 onward. GDP-IPD is used by AEO and ATB for dollar-year adjustments. Intended to supersede `cpi_data.csv`; some configs/consumers may still reference the older file until migration is complete. Run weekly via GitHub Actions. |
 | `build_operational_constraints_reeds.py` | `data/operational_constraints_reeds.csv` | ReEDS `pcm_defaults.json` (`inputs/plant_characteristics/` from NREL GitHub) | Builds PowerGenome operational constraints from ReEDS PCM defaults: drops all CSP technologies, maps ReEDS tech names to ATB/EIA new-build names (see `TECH_MAP` in the script), applies battery/pumped-storage efficiency and duration overrides, and appends curated existing-technology rows preserved from the historical file. |
+| `build_atb_data.py` | `data/technology_costs_atb.parquet`, `data/technology_heat_rates_nrelatb.csv` | NREL ATB electricity tidy parquet (OEDI data lake: 2023, 2024 v4.0.0, 2025 v1.0.0) and ATB Excel workbooks for utility-scale battery costs | Rebuilds NREL ATB technology costs and heat rates for data years 2023-2025 with the conventions of the historical build scripts (technology naming, $/kW→$/MW, construction-finance handling from 2024 on, `dollar_year = atb_year - 2`). Battery power ($/kW) and energy ($/kWh) capital costs are extracted from the Excel workbooks because the tidy data does not separate them; battery fixed O&M is 2.5% of capex. ATB 2025 contributes only the R&D financial case (tax-credit and experience-curve cases are dropped). Downloads are cached under `cache_data/atb/`. If a historical year (2023/2024) can no longer be reproduced from the official sources, the committed rows for that year are reused and a warning names the year and artifacts; 2023 currently falls back because the hosted tidy file was revised in place and no longer contains the original pumped-storage hydropower CAPEX records. ATB 2025 is required and never falls back. |
 
 ## Running the builders
 
@@ -37,13 +38,14 @@ uv run python merge_transmission_capacity.py
 uv run python build_emission_policies.py
 uv run python fetch_gdp_ipd_data.py
 uv run python build_operational_constraints_reeds.py  # optional --pcm-path <local pcm_defaults.json> to avoid downloading
+uv run python build_atb_data.py            # rebuild ATB costs + heat rates (2023-2025); --years to limit
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
 
 ## Data files not regenerated here
 
-Files such as `fuel_prices.csv`, `technology_heat_rates_nrelatb.csv`, and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above.
+Files such as `fuel_prices.csv` and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above. `technology_costs_atb.parquet` and `technology_heat_rates_nrelatb.csv` are the exception: they are rebuilt by `build_atb_data.py` (see the table above), including a fallback that reuses committed rows for any historical ATB year whose official source can no longer reproduce them.
 
 ## Versioned data-source manifests
 
