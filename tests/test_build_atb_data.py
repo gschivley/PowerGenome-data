@@ -235,6 +235,10 @@ class FixtureTestCase(unittest.TestCase):
 
 
 class LoadTidyTests(FixtureTestCase):
+    def test_source_year_must_match_requested_year(self):
+        with self.assertRaisesRegex(ValueError, "unexpected source years"):
+            MODULE.load_tidy(self.parquet_2024, 2025)
+
     def test_techdetail2_fills_empty_details(self):
         tidy = MODULE.load_tidy(self.parquet_2023, 2023)
         details = tidy.loc[tidy["technology"].eq("NaturalGas_FE"), "techdetail"]
@@ -565,6 +569,84 @@ class BuildOutputTests(FixtureTestCase):
             check_exact=True,
         )
         shutil.rmtree(second, ignore_errors=True)
+
+    def test_subset_build_preserves_unrequested_years(self):
+        sources = {2025: (self.parquet_2025, self.workbook)}
+        historical = [
+            MODULE.build_year(self.parquet_2023, self.workbook, 2023),
+            MODULE.build_year(self.parquet_2024, self.workbook, 2024),
+        ]
+        existing_costs = pd.concat(
+            [costs for costs, _ in historical], ignore_index=True
+        )
+        existing_heat_rates = pd.concat(
+            [heat_rates for _, heat_rates in historical], ignore_index=True
+        )
+        existing_costs.to_parquet(self.tmp / MODULE.COST_OUTPUT_NAME, index=False)
+        existing_heat_rates.to_csv(self.tmp / MODULE.HEAT_RATE_OUTPUT_NAME, index=False)
+
+        with self.patch_sources(sources):
+            costs, heat_rates = MODULE.build(years=(2025,), output_dir=self.tmp)
+
+        self.assertEqual(set(costs["data_year"]), {2023, 2024, 2025})
+        self.assertEqual(set(heat_rates["data_year"]), {2023, 2024, 2025})
+        preserved = costs.loc[costs["data_year"].isin({2023, 2024})]
+        expected = existing_costs.astype(
+                {
+                    "data_year": int,
+                    "basis_year": int,
+                    "cap_recovery_years": int,
+                    "dollar_year": int,
+                }
+            )
+        pd.testing.assert_frame_equal(
+            preserved.sort_values(MODULE.COST_KEY_COLUMNS).reset_index(drop=True),
+            expected.sort_values(MODULE.COST_KEY_COLUMNS).reset_index(drop=True),
+        )
+
+    def test_failed_write_removes_temporary_files(self):
+        sources = {
+            year: (getattr(self, f"parquet_{year}"), self.workbook)
+            for year in (2023, 2024, 2025)
+        }
+        with self.patch_sources(sources), mock.patch.object(
+            pd.DataFrame, "to_csv", side_effect=OSError("disk full")
+        ):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                MODULE.build(years=(2023, 2024, 2025), output_dir=self.tmp)
+
+        self.assertEqual(sorted(path.name for path in self.tmp.glob("*.tmp*")), [])
+
+    def test_failed_second_replace_restores_existing_output_pair(self):
+        sources = {
+            year: (getattr(self, f"parquet_{year}"), self.workbook)
+            for year in (2023, 2024, 2025)
+        }
+        cost_path = self.tmp / MODULE.COST_OUTPUT_NAME
+        heat_rate_path = self.tmp / MODULE.HEAT_RATE_OUTPUT_NAME
+        old_costs, old_heat_rates = MODULE.build_year(
+            self.parquet_2023, self.workbook, 2023
+        )
+        old_costs.to_parquet(cost_path, index=False)
+        old_heat_rates.to_csv(heat_rate_path, index=False)
+        old_cost_bytes = cost_path.read_bytes()
+        old_heat_rate_bytes = heat_rate_path.read_bytes()
+        original_replace = Path.replace
+
+        def fail_heat_rate_replace(path, target):
+            if path.name.endswith(".tmp.csv"):
+                raise OSError("replace failed")
+            return original_replace(path, target)
+
+        with self.patch_sources(sources), mock.patch.object(
+            Path, "replace", autospec=True, side_effect=fail_heat_rate_replace
+        ):
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                MODULE.build(years=(2023, 2024, 2025), output_dir=self.tmp)
+
+        self.assertEqual(cost_path.read_bytes(), old_cost_bytes)
+        self.assertEqual(heat_rate_path.read_bytes(), old_heat_rate_bytes)
+        self.assertEqual(sorted(path.name for path in self.tmp.glob("*.tmp*")), [])
 
 
 if __name__ == "__main__":

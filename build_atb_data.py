@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Final
 from urllib.request import urlopen
@@ -110,6 +111,7 @@ REQUIRED_BATTERY_PARAMETERS: Final = {
 # Years whose committed rows may be reused when the official source can no
 # longer reproduce them. ATB 2025 is the new release and is always required.
 FALLBACK_YEARS: Final = {2023, 2024}
+DOWNLOAD_TIMEOUT_SECONDS: Final = 60
 
 YEAR_SETTINGS: Final = {
     2023: {
@@ -173,7 +175,9 @@ def download(url: str, destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
     try:
-        with urlopen(url) as response, temporary.open("wb") as file:
+        with urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, temporary.open(
+            "wb"
+        ) as file:
             shutil.copyfileobj(response, file)
         temporary.replace(destination)
     except Exception:
@@ -209,6 +213,11 @@ def load_tidy(parquet: Path, year: int) -> pd.DataFrame:
     if missing:
         raise ValueError(f"ATB {year} tidy data is missing columns: {missing}")
     data = raw.loc[:, required].copy()
+    source_years = set(pd.to_numeric(data["atb_year"], errors="raise").astype(int))
+    if source_years != {year}:
+        raise ValueError(
+            f"ATB {year} tidy data reports unexpected source years: {sorted(source_years)}"
+        )
     if "techdetail2" in raw.columns:
         empty = data["techdetail"].eq("")
         data.loc[empty, "techdetail"] = raw.loc[empty, "techdetail2"]
@@ -586,6 +595,15 @@ def build(
         costs_by_year.append(costs)
         heat_rates_by_year.append(heat_rates)
 
+    requested_years = set(years)
+    if requested_years != set(YEAR_SETTINGS):
+        costs_by_year.append(
+            existing_costs.loc[~existing_costs["data_year"].isin(requested_years)]
+        )
+        heat_rates_by_year.append(
+            existing_heat_rates.loc[~existing_heat_rates["data_year"].isin(requested_years)]
+        )
+
     costs = pd.concat(costs_by_year, ignore_index=True)
     heat_rates = pd.concat(heat_rates_by_year, ignore_index=True)
     for frame, columns in ((costs, COST_COLUMNS), (heat_rates, HEAT_RATE_COLUMNS)):
@@ -598,15 +616,38 @@ def build(
         costs["dollar_year"] = costs["dollar_year"].astype(int)
     costs = costs.sort_values(COST_COLUMNS[:-1], kind="mergesort").reset_index(drop=True)
     heat_rates = heat_rates.sort_values(HEAT_RATE_COLUMNS, kind="mergesort").reset_index(drop=True)
-    validate_outputs(costs, heat_rates, set(years))
+    validate_outputs(costs, heat_rates, set(costs["data_year"]))
 
     output_dir.mkdir(parents=True, exist_ok=True)
     cost_tmp = output_dir / Path(COST_OUTPUT_NAME).with_suffix(".tmp.parquet").name
     heat_rate_tmp = output_dir / Path(HEAT_RATE_OUTPUT_NAME).with_suffix(".tmp.csv").name
-    costs.to_parquet(cost_tmp, index=False)
-    heat_rates.to_csv(heat_rate_tmp, index=False)
-    cost_tmp.replace(output_dir / COST_OUTPUT_NAME)
-    heat_rate_tmp.replace(output_dir / HEAT_RATE_OUTPUT_NAME)
+    cost_path = output_dir / COST_OUTPUT_NAME
+    heat_rate_path = output_dir / HEAT_RATE_OUTPUT_NAME
+    backup_dir = Path(tempfile.mkdtemp(prefix="atb-backup-", dir=output_dir))
+    cost_backup = backup_dir / COST_OUTPUT_NAME
+    heat_rate_backup = backup_dir / HEAT_RATE_OUTPUT_NAME
+    try:
+        costs.to_parquet(cost_tmp, index=False)
+        heat_rates.to_csv(heat_rate_tmp, index=False)
+        if cost_path.exists():
+            shutil.copy2(cost_path, cost_backup)
+        if heat_rate_path.exists():
+            shutil.copy2(heat_rate_path, heat_rate_backup)
+        cost_tmp.replace(cost_path)
+        try:
+            heat_rate_tmp.replace(heat_rate_path)
+        except Exception:
+            if cost_backup.exists():
+                cost_backup.replace(cost_path)
+            else:
+                cost_path.unlink(missing_ok=True)
+            if heat_rate_backup.exists():
+                heat_rate_backup.replace(heat_rate_path)
+            raise
+    finally:
+        cost_tmp.unlink(missing_ok=True)
+        heat_rate_tmp.unlink(missing_ok=True)
+        shutil.rmtree(backup_dir)
     return costs, heat_rates
 
 
