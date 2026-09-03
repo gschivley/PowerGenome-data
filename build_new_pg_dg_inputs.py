@@ -233,7 +233,9 @@ def _county_weights(
     elif weight_by == "population":
         population = pd.read_csv(
             str(county_population_path), dtype={"FIPS": str}
-        ).set_index("FIPS")["value"]
+        )
+        population["FIPS"] = population["FIPS"].str.removeprefix("p")
+        population = population.set_index("FIPS")["value"]
         weights = population.loc[counties].clip(lower=cap_min)
     else:  # pragma: no cover - guarded by argparse choices
         raise ValueError(f"Unknown weight_by: {weight_by}")
