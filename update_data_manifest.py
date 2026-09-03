@@ -219,14 +219,36 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "technology_costs_atb.parquet": [
         {
-            "source": ("NREL ATB 2024 v4"),
-            "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50",
+            "source": (
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "OEDI data lake (rebuilt by build_atb_data.py)"
+            ),
+            "source_url": (
+                "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&"
+                "prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+            ),
+        },
+        {
+            "source": (
+                "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs)"
+            ),
+            "source_url": "https://atb.nrel.gov/electricity/2025/data",
         },
     ],
     "technology_heat_rates_nrelatb.csv": [
         {
-            "source": ("NREL ATB 2024 v4"),
-            "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fcsv%2F2024%2Fv4.0.0%2F&limit=50",
+            "source": (
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "OEDI data lake (rebuilt by build_atb_data.py)"
+            ),
+            "source_url": (
+                "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&"
+                "prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+            ),
+        },
+        {
+            "source": "NREL Annual Technology Baseline 2025 release page and data documentation",
+            "source_url": "https://atb.nrel.gov/electricity/2025/data",
         },
     ],
     "transmission_capacity_reeds.csv": [
