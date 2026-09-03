@@ -235,6 +235,7 @@ def _county_weights(
             str(county_population_path), dtype={"FIPS": str}
         )
         population["FIPS"] = population["FIPS"].str.removeprefix("p")
+        population["FIPS"] = "p" + population["FIPS"].str.zfill(5)
         population = population.set_index("FIPS")["value"]
         weights = population.loc[counties].clip(lower=cap_min)
     else:  # pragma: no cover - guarded by argparse choices
