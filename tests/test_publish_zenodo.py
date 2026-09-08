@@ -434,6 +434,36 @@ class DryRunTests(unittest.TestCase):
             "[existing_resource_groups] PowerGenome Existing Renewable Resource Groups",
             text,
         )
+        self.assertIn("ships with deposit: manifest.json", text)
+
+    def test_dry_run_warns_when_a_collection_manifest_is_missing(self):
+        """Legacy layout: files come from the core manifest's ``sections``, so
+        the collection has no manifest of its own to ship."""
+        import io
+        from contextlib import redirect_stdout
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data").mkdir()
+            (root / "resource_profiles").mkdir()
+            (root / "resource_profiles" / "wind.parquet").write_text("w")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {},
+                "sections": {
+                    "profiles": {
+                        "files": {"wind.parquet": {"version": "2026-08-12", "md5": "y"}}
+                    }
+                },
+            }
+            manifest_path = root / "data" / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            with mock.patch.object(MODULE.Path, "cwd", return_value=root):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    MODULE.dry_run(_mkargs(manifest_path, ["profiles"]))
+            text = out.getvalue()
+        self.assertIn("no per-file provenance", text)
 
 
 class CollectionFilterTests(unittest.TestCase):
@@ -583,6 +613,200 @@ class DepositionOverrideTests(unittest.TestCase):
         )
         response.json.return_value = {"checksum": checksum}
         return response
+
+
+class ManifestShippedWithDepositTests(unittest.TestCase):
+    """Each deposit carries its own ``manifest.json``.
+
+    Provenance (per-file data version, license, upstream sources) only reaches
+    a user if the manifest travels with the data; PowerGenome's
+    ``download_zenodo`` reads the copy inside the deposit before falling back to
+    GitHub.
+    """
+
+    def _args(self):
+        args = mock.Mock()
+        args.deposition_id = "22233228"
+        args.allow_dirty = True
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+        return args
+
+    def _response(self, status=200, payload=None):
+        response = mock.Mock()
+        response.status_code = status
+        response.raise_for_status.side_effect = (
+            None if status < 400 else requests.HTTPError(f"HTTP {status}")
+        )
+        response.json.return_value = payload if payload is not None else {}
+        return response
+
+    def _setup(self, root):
+        data_dir = root / "data"
+        data_dir.mkdir()
+        (data_dir / "core_a.csv").write_text("a")
+        manifest = {
+            "data_version": "2026.08.14",
+            "files": {
+                "core_a.csv": {
+                    "version": "2026-08-11",
+                    "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                }
+            },
+        }
+        manifest_path = data_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+        return manifest, manifest_path, data_dir
+
+    def _draft(self):
+        return {
+            "id": 22233228,
+            "conceptrecid": 111,
+            "links": {
+                "bucket": "https://bucket.example",
+                "files": "https://files.example",
+            },
+        }
+
+    def _state(self):
+        return {
+            "metadata": {"creators": [{"name": "Schivley, Greg"}]},
+            "releases": {
+                "core": {
+                    "environment": "production",
+                    "deposition_id": "999999",
+                    "published": True,
+                }
+            },
+        }
+
+    def _run(self, draft_files):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, manifest_path, data_dir = self._setup(root)
+            manifest_md5 = MODULE.md5_for_file(manifest_path)
+            data_md5 = MODULE.md5_for_file(data_dir / "core_a.csv")
+
+            responses = [
+                self._response(payload=self._draft()),
+                self._response(payload={"hits": {"hits": []}}),
+                self._response(payload=draft_files),
+            ]
+            for key, md5 in (("core_a.csv", data_md5), ("manifest.json", manifest_md5)):
+                if key not in {item["key"] for item in draft_files}:
+                    responses.append(self._response(payload={"checksum": f"md5:{md5}"}))
+            responses.append(self._response(payload={"metadata": {}}))
+
+            session = mock.Mock()
+            session.request.side_effect = responses
+            with mock.patch.object(MODULE.time, "sleep"):
+                MODULE.release_section(
+                    self._args(),
+                    session,
+                    "https://zenodo.org/api",
+                    "production",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    self._state(),
+                    manifest_path=manifest_path,
+                )
+            return self._calls(session)
+
+    def _calls(self, session):
+        """(method, url) pairs in call order; retry_request passes both by name."""
+        return [
+            (call.kwargs.get("method"), call.kwargs.get("url"))
+            for call in session.request.call_args_list
+        ]
+
+    def test_manifest_is_uploaded_alongside_the_data(self):
+        calls = self._run([])
+        puts = [url for method, url in calls if method == "PUT"]
+        self.assertIn("https://bucket.example/core_a.csv", puts)
+        self.assertIn("https://bucket.example/manifest.json", puts)
+
+    def test_manifest_in_the_draft_is_kept_and_not_re_uploaded(self):
+        """Being absent from the manifest's file list must not mark it removed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest_path, _ = self._setup(Path(tmp))
+            md5 = MODULE.md5_for_file(manifest_path)
+        calls = self._run(
+            [{"key": "manifest.json", "id": "uuid-1", "checksum": f"md5:{md5}"}]
+        )
+        self.assertNotIn("https://bucket.example/manifest.json", [u for m, u in calls if m == "PUT"])
+        self.assertEqual([url for method, url in calls if method == "DELETE"], [])
+
+    def test_no_manifest_path_uploads_only_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, _, data_dir = self._setup(root)
+            session = mock.Mock()
+            session.request.side_effect = [
+                self._response(payload=self._draft()),
+                self._response(payload={"hits": {"hits": []}}),
+                self._response(payload=[]),
+                self._response(
+                    payload={
+                        "checksum": f"md5:{MODULE.md5_for_file(data_dir / 'core_a.csv')}"
+                    }
+                ),
+                self._response(payload={"metadata": {}}),
+            ]
+            with mock.patch.object(MODULE.time, "sleep"):
+                MODULE.release_section(
+                    self._args(),
+                    session,
+                    "https://zenodo.org/api",
+                    "production",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    self._state(),
+                )
+        self.assertNotIn(
+            "https://bucket.example/manifest.json",
+            [url for _method, url in self._calls(session)],
+        )
+
+    def test_release_state_does_not_track_the_manifest(self):
+        """The manifest is not a data file; it must not appear in release diffs."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, manifest_path, data_dir = self._setup(root)
+            session = mock.Mock()
+            session.request.side_effect = [
+                self._response(payload=self._draft()),
+                self._response(payload={"hits": {"hits": []}}),
+                self._response(payload=[]),
+                self._response(
+                    payload={
+                        "checksum": f"md5:{MODULE.md5_for_file(data_dir / 'core_a.csv')}"
+                    }
+                ),
+                self._response(
+                    payload={"checksum": f"md5:{MODULE.md5_for_file(manifest_path)}"}
+                ),
+                self._response(payload={"metadata": {}}),
+            ]
+            with mock.patch.object(MODULE.time, "sleep"):
+                result = MODULE.release_section(
+                    self._args(),
+                    session,
+                    "https://zenodo.org/api",
+                    "production",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    self._state(),
+                    manifest_path=manifest_path,
+                )
+        self.assertEqual(list(result["release"]["files"]), ["core_a.csv"])
 
 
 class UploadRetryTests(unittest.TestCase):
