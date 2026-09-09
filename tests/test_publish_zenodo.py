@@ -218,9 +218,7 @@ class MetadataTests(unittest.TestCase):
 class CreatorResolutionTests(unittest.TestCase):
     def test_default_creators_from_git_user_name(self):
         with mock.patch.object(MODULE, "git_user_name", return_value="Greg Schivley"):
-            self.assertEqual(
-                MODULE.default_creators(), [{"name": "Schivley, Greg"}]
-            )
+            self.assertEqual(MODULE.default_creators(), [{"name": "Schivley, Greg"}])
 
     def test_default_creators_exits_without_git_user_name(self):
         with mock.patch.object(MODULE, "git_user_name", return_value=""):
@@ -323,7 +321,9 @@ class DescriptionTests(unittest.TestCase):
             "gone.csv": {
                 "version": "2026-07-01",
                 "license": "cc-by-4.0",
-                "sources": [{"source": "Prior source", "source_url": "https://example.com"}],
+                "sources": [
+                    {"source": "Prior source", "source_url": "https://example.com"}
+                ],
                 "md5": "old",
             }
         }
@@ -351,7 +351,9 @@ class DescriptionTests(unittest.TestCase):
         }
         original = MODULE.manifest_meta_hash(manifest, "<p>README one</p>")
         manifest["files"]["a.csv"]["license"] = "cc-zero"
-        self.assertNotEqual(original, MODULE.manifest_meta_hash(manifest, "<p>README one</p>"))
+        self.assertNotEqual(
+            original, MODULE.manifest_meta_hash(manifest, "<p>README one</p>")
+        )
         self.assertNotEqual(
             MODULE.manifest_meta_hash(manifest, "<p>README one</p>"),
             MODULE.manifest_meta_hash(manifest, "<p>README two</p>"),
@@ -363,6 +365,138 @@ class DescriptionTests(unittest.TestCase):
         )
         self.assertEqual(normalized["old.csv"], {"md5": "abc"})
         self.assertEqual(normalized["new.csv"]["version"], "2026-08-01")
+
+
+class ReleaseSafetyTests(unittest.TestCase):
+    def test_undocumented_files_flags_missing_license(self):
+        files = {
+            "a.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+            "b.csv": {"sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), ["b.csv"])
+
+    def test_undocumented_files_flags_placeholder_sources(self):
+        files = {
+            "a.csv": {
+                "license": "cc-zero",
+                "sources": [{"source": "Unknown - document me"}],
+            },
+            "b.csv": {"license": "cc-zero", "sources": []},
+            "c.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), ["a.csv", "b.csv"])
+
+    def test_undocumented_files_ok_when_documented(self):
+        files = {
+            "a.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), [])
+
+    def test_production_refuses_undocumented_files(self):
+        args = mock.Mock()
+        args.deposition_id = None
+        args.allow_dirty = True
+        args.allow_undocumented = False
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+        session = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "core_a.csv").write_text("a")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "core_a.csv": {
+                        "version": "2026-08-11",
+                        "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    }
+                },
+            }
+            with self.assertRaises(SystemExit):
+                MODULE.release_section(
+                    args,
+                    session,
+                    "https://zenodo.org/api",
+                    "production",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    {},
+                )
+        # Refusal happens before any Zenodo API call.
+        session.request.assert_not_called()
+
+    def test_parser_exposes_allow_undocumented(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(["--allow-undocumented"])
+        self.assertTrue(args.allow_undocumented)
+        self.assertFalse(parser.parse_args([]).allow_undocumented)
+
+
+class LicensingAndProvenanceTests(unittest.TestCase):
+    def test_licensing_paragraph_groups_files_by_license(self):
+        files = {
+            "a.csv": {"license": "cc-zero"},
+            "b.csv": {"license": "cc-by-4.0"},
+            "c.csv": {"license": "cc-zero"},
+        }
+        paragraph = MODULE.licensing_paragraph(files)
+        self.assertIn(
+            "Creative Commons Zero (CC0, public domain dedication)", paragraph
+        )
+        self.assertIn("CC0 (public domain dedication)", paragraph)
+        self.assertIn(
+            "Creative Commons Attribution 4.0 International (CC BY 4.0)", paragraph
+        )
+        self.assertIn("<code>a.csv</code>", paragraph)
+        self.assertIn("<code>c.csv</code>", paragraph)
+        self.assertIn("<code>b.csv</code>", paragraph)
+
+    def test_licensing_paragraph_handles_missing_license(self):
+        paragraph = MODULE.licensing_paragraph({"a.csv": {}})
+        self.assertIn("Not specified", paragraph)
+
+    def test_describe_file_omits_redundant_last_updated_row(self):
+        html = MODULE.describe_file(
+            "a.csv", {"version": "2026-08-11", "last_updated": "2026-08-11"}
+        )
+        self.assertNotIn("Last updated", html)
+
+    def test_describe_file_shows_last_updated_when_divergent(self):
+        html = MODULE.describe_file(
+            "a.csv", {"version": "2026-08-11", "last_updated": "2026-08-12"}
+        )
+        self.assertIn("Last updated", html)
+        self.assertIn("2026-08-12", html)
+
+    def test_description_includes_provenance_when_passed(self):
+        files = MANIFEST["files"]
+        description = MODULE.build_description(
+            MANIFEST,
+            "core",
+            files,
+            [],
+            [],
+            [],
+            False,
+            published_at="2026-09-09",
+            git_sha="abc1234",
+        )
+        self.assertIn("published 2026-09-09", description)
+        self.assertIn("git commit <code>abc1234</code>", description)
+
+    def test_description_omits_provenance_by_default(self):
+        files = MANIFEST["files"]
+        description = MODULE.build_description(
+            MANIFEST, "core", files, [], [], [], False
+        )
+        self.assertNotIn("published", description)
+        self.assertNotIn("git commit", description)
 
 
 class ManifestEntryTests(unittest.TestCase):
