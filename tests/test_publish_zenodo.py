@@ -492,6 +492,19 @@ class ScriptProvenanceTests(unittest.TestCase):
             self._commit_all(root, "second")
             self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
 
+    def test_script_changed_since_tag_detects_staged_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "a.py"
+            script.write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            script.write_text("print('b')\n")
+            subprocess.run(["git", "add", "a.py"], cwd=root, check=True)
+            script.write_text("print('a')\n")
+            self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+
     def test_check_script_provenance_missing_tag(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
