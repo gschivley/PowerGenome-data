@@ -895,15 +895,7 @@ def uncommitted_release_files(manifest_files: dict, data_dir: Path) -> list[str]
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
-    dirty = []
-    for line in out.splitlines():
-        if not line.strip():
-            continue
-        # porcelain format: XY <path>; X = staged, Y = worktree. '', M, D, A,
-        # or '?' (untracked) all mean the file differs from HEAD.
-        if line[0] in "MAD?" or line[1:2] in "MD":
-            dirty.append(line)
-    return dirty
+    return [line for line in out.splitlines() if line.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -1040,18 +1032,19 @@ def latest_reachable_tag(project_root: Path) -> str | None:
 def script_changed_since_tag(script: str, tag: str, project_root: Path) -> bool:
     """True when the tracked script differs from its state at ``tag``.
 
-    Compares the working tree (including uncommitted edits) against the tag,
-    so a script that was modified but not yet committed is also flagged.
+    Compares both the index and working tree against the tag, so staged and
+    unstaged edits are both flagged.
     """
     try:
-        subprocess.check_output(
-            ["git", "diff", "--quiet", tag, "--", script],
-            cwd=project_root,
-            stderr=subprocess.DEVNULL,
-        )
+        for extra_args in ((), ("--cached",)):
+            result = subprocess.run(
+                ["git", "diff", "--quiet", *extra_args, tag, "--", script],
+                cwd=project_root,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return True
         return False
-    except subprocess.CalledProcessError:
-        return True
     except FileNotFoundError:
         return False
 
