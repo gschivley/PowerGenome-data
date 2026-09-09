@@ -1187,7 +1187,7 @@ def release_section(
         published_at=(
             datetime.now(timezone.utc).date().isoformat() if args.publish else None
         ),
-        git_sha=git_short_sha(),
+        git_sha=git_short_sha() if args.publish else None,
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)

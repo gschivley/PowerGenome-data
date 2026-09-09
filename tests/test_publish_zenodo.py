@@ -498,6 +498,10 @@ class LicensingAndProvenanceTests(unittest.TestCase):
         self.assertNotIn("published", description)
         self.assertNotIn("git commit", description)
 
+    def test_draft_metadata_omits_git_provenance(self):
+        source = SCRIPT.read_text()
+        self.assertIn("git_sha=git_short_sha() if args.publish else None", source)
+
 
 class ManifestEntryTests(unittest.TestCase):
     def test_real_profiles_manifest_has_six_files(self):
