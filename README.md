@@ -23,3 +23,8 @@ Data is published to Zenodo as one deposit per collection via `publish_zenodo.py
 
 Each collection keeps its own manifest (`<folder>/manifest.json`) with its own `data_version`, so
 collections version independently and deposits are only created once a collection has files. See the docs site for details.
+
+Before releasing, `publish_zenodo.py` requires a git tag reachable from HEAD and checks that every
+Python script referenced in the manifest's source descriptions is unchanged since that tag (pass
+`--allow-script-drift` to override). The tag is recorded in each Zenodo description next to the
+scripts that produced the data, so readers can see which code version generated each file.
