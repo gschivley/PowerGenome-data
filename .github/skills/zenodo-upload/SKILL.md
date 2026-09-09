@@ -69,6 +69,10 @@ Recommended defaults if the user does not specify:
 - Refuse to proceed if the required token is missing.
 - The script refuses to run when any release file differs from git HEAD; commit
   first or pass `--allow-dirty` (not recommended).
+- The script refuses to run when no git tag is reachable from HEAD or when a
+  Python script referenced in the manifest's source descriptions has changed
+  since that tag; tag the code first or pass `--allow-script-drift` (not
+  recommended).
 - The script verifies manifest md5s against the files on disk; run
   `update_data_manifest.py` before releasing if they mismatch.
 - Zenodo limits: at most 100 files and 50 GB per record (checked by the script).
@@ -89,7 +93,9 @@ uv run python update_data_manifest.py --data-dir existing_resource_groups --mani
 
 ### 2. Dry run
 
-Show what the release would contain without calling the Zenodo API:
+Show what the release would contain without calling the Zenodo API. The dry
+run also reports the code tag and any referenced scripts that changed since it,
+and exits non-zero if the release would be blocked:
 
 ```bash
 uv run python publish_zenodo.py --dry-run
@@ -151,6 +157,13 @@ Re-running `--publish` after an identical release is a no-op.
   already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD; pass
   `--allow-dirty` to override.
+- Checks script provenance before releasing: it finds the Python scripts named
+  in each file's `sources` prose, resolves them to tracked repository files,
+  and requires a git tag reachable from HEAD. If any referenced script changed
+  since that tag (or no tag exists), the release is blocked unless
+  `--allow-script-drift` is passed. The tag is recorded in the Zenodo
+  description next to each script, and drifted scripts are marked as changed
+  since the tag.
 
 ## CLI reference
 
@@ -164,6 +177,7 @@ Re-running `--publish` after an identical release is a no-op.
 | `--deposition-id` | Resume a specific draft deposition id (e.g. after a run died mid-upload before state was saved). |
 | `--collection` | Only release this collection; repeatable. Choices: `core`, `profiles`, `existing_resource_groups`. |
 | `--allow-dirty` | Publish even when release files differ from git HEAD. |
+| `--allow-script-drift` | Publish even when referenced scripts changed since the latest git tag (a reachable tag is still required; the description marks the drift). |
 | `--sleep-seconds` | Delay between file uploads (default 1.0). |
 | `--upload-retries` | Retries for a failed file upload (default 3). |
 | `--upload-retry-delay` | Base delay in seconds between upload retries (default 5.0; doubles each retry). |

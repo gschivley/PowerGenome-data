@@ -197,6 +197,11 @@ whole description.
   processed it, the script checks the deposition state and treats an already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
   a committed state of the repository); pass `--allow-dirty` to override.
+- Checks **script provenance** before releasing: it finds the Python scripts named in each file's
+  `sources` prose, resolves them to tracked repository files, and requires a git tag reachable from
+  HEAD. If any referenced script has changed since that tag (or no tag exists), the release is blocked
+  unless `--allow-script-drift` is passed. The tag is recorded in the Zenodo description next to each
+  script, and scripts that drifted are marked as changed since the tag.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
 
 ### Requirements
@@ -230,6 +235,10 @@ uv run python publish_zenodo.py --publish --production
 
 # Publish anyway even though release files are uncommitted (not recommended).
 uv run python publish_zenodo.py --publish --allow-dirty
+
+# Publish even though referenced scripts changed since the latest git tag
+# (not recommended; the description marks the drift).
+uv run python publish_zenodo.py --publish --allow-script-drift
 ```
 
 By default every collection with files in the manifest is released. Pass `--collection`
@@ -243,6 +252,11 @@ Without `--publish` the script leaves each deposition as a draft. If a draft alr
 The script verifies that every file listed in the manifest is committed to git before it contacts Zenodo.
 If any release file differs from HEAD it prints the offending paths and exits; commit the changes first or
 pass `--allow-dirty`. This keeps each Zenodo record reproducible from the repository history.
+
+It also requires a git tag reachable from HEAD and that every Python script referenced in the manifest's
+source descriptions is unchanged since that tag; tag the code (e.g. `git tag v1.0.0`) after changing a
+referenced script, or pass `--allow-script-drift` to release anyway. The tag is shown in the Zenodo
+description next to each script so readers can see exactly which code version produced each file.
 
 ### Release state (`.zenodo.json`)
 
