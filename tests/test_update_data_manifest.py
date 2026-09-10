@@ -90,6 +90,49 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(sources[1]["source"], "A hand-added second source")
         self.assertEqual(sources[1]["source_url"], "https://example.com/x")
 
+    def test_scripts_are_seeded_for_known_files_only(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "unknown.csv": "b"})
+        manifest = self._run(data_dir, "2026-08-11")
+        self.assertEqual(
+            manifest["files"][SINGLE_SOURCE_FILE]["scripts"],
+            MODULE.SCRIPTS[SINGLE_SOURCE_FILE],
+        )
+        self.assertNotIn("scripts", manifest["files"]["unknown.csv"])
+
+    def test_script_edits_are_preserved_on_change(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        manifest["files"][SINGLE_SOURCE_FILE]["scripts"] = ["custom_builder.py"]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        (data_dir / SINGLE_SOURCE_FILE).write_text("different")
+        result = self._run(data_dir, "2026-10-01")
+        self.assertEqual(
+            result["files"][SINGLE_SOURCE_FILE]["scripts"], ["custom_builder.py"]
+        )
+
+    def test_scripts_are_backfilled_onto_unchanged_entries(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        del manifest["files"][SINGLE_SOURCE_FILE]["scripts"]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        result = self._run(data_dir, "2026-08-11")
+        self.assertEqual(
+            result["files"][SINGLE_SOURCE_FILE]["scripts"],
+            MODULE.SCRIPTS[SINGLE_SOURCE_FILE],
+        )
+
+    def test_seeded_scripts_exist_in_the_repository(self):
+        repo_root = SCRIPT.parent
+        for filename, scripts in MODULE.SCRIPTS.items():
+            self.assertTrue(scripts, f"SCRIPTS[{filename}] is empty")
+            for script in scripts:
+                self.assertTrue(
+                    (repo_root / script).is_file(),
+                    f"SCRIPTS[{filename}] names a missing file: {script}",
+                )
+
     def test_no_change_preserves_data_version_and_versions(self):
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
         self._run(data_dir, "2026-08-11")

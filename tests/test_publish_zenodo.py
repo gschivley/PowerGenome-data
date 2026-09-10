@@ -460,6 +460,93 @@ class ScriptProvenanceTests(unittest.TestCase):
                 {"gen.csv": ["transform_reeds_generators.py"]},
             )
 
+    def test_referenced_scripts_prefers_declared_list_over_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            (root / "b.py").write_text("print('b')\n")
+            self._commit_all(root, "add scripts")
+            files = {
+                "x.csv": {
+                    "scripts": ["b.py"],
+                    "sources": [{"source": "legacy prose naming a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {"x.csv": ["b.py"]})
+
+    def test_referenced_scripts_falls_back_to_prose_when_undeclared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            for scripts in (None, [], [""]):
+                info = {"sources": [{"source": "built by a.py."}]}
+                if scripts is not None:
+                    info["scripts"] = scripts
+                self.assertEqual(
+                    MODULE.referenced_scripts({"x.csv": info}, root),
+                    {"x.csv": ["a.py"]},
+                )
+
+    def test_referenced_scripts_resolves_declared_basename_to_tracked_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "sub" / "build_x.py"
+            script.parent.mkdir()
+            script.write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {"x.csv": {"scripts": ["build_x.py"]}}
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root), {"x.csv": ["sub/build_x.py"]}
+            )
+
+    def test_unresolved_declared_scripts_reports_unknown_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {"scripts": ["typo.py"]},
+                "y.csv": {"scripts": ["a.py"]},
+            }
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_unresolvable_declaration_does_not_fall_back_to_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {
+                    "scripts": ["typo.py"],
+                    "sources": [{"source": "built by a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {})
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_check_script_provenance_records_missing_declarations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            files = {"x.csv": {"scripts": ["typo.py"]}}
+            provenance = MODULE.check_script_provenance(files, root)
+            self.assertEqual(provenance["missing"], {"x.csv": ["typo.py"]})
+            self.assertIsNotNone(MODULE.provenance_block_reason(provenance, False))
+            self.assertIsNone(MODULE.provenance_block_reason(provenance, True))
+
     def test_latest_reachable_tag_returns_nearest_tag(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -627,6 +714,51 @@ class ScriptProvenanceTests(unittest.TestCase):
             manifest, "", {"tag": "v1.1.0", "scripts": {}, "files": {}}
         )
         self.assertNotEqual(base, changed)
+
+    def test_manifest_meta_hash_includes_declared_scripts(self):
+        provenance = {"tag": "v1.0.0", "scripts": {}, "files": {}}
+        before = MODULE.manifest_meta_hash(
+            {"data_version": "2026.08.20", "files": {"a.csv": {"md5": "x"}}},
+            "",
+            provenance,
+        )
+        after = MODULE.manifest_meta_hash(
+            {
+                "data_version": "2026.08.20",
+                "files": {"a.csv": {"md5": "x", "scripts": ["a.py"]}},
+            },
+            "",
+            provenance,
+        )
+        self.assertNotEqual(before, after)
+
+    def test_description_notes_unverified_script_paths(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "scripts": ["typo.py"],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {},
+            "files": {},
+            "missing": {"costs.csv": ["typo.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("not found in the repository", description)
+        self.assertIn("<code>typo.py</code>", description)
 
     def test_parser_exposes_allow_script_drift(self):
         parser = MODULE.build_parser()
