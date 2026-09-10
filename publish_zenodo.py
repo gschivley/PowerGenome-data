@@ -35,10 +35,12 @@ Each release is driven by its collection's manifest:
     previously released but no longer in the manifest are removed from the
     draft so Zenodo mirrors the manifest.
   * Before releasing, the script checks that a git tag is reachable from HEAD
-    and that every Python script referenced in the manifest's source
-    descriptions is unchanged since that tag. The tag is recorded in the
-    Zenodo description next to each script. Releases are blocked when the tag
-    is missing or a script drifted, unless --allow-script-drift is passed.
+    and that every Python script declared in each manifest file's "scripts"
+    list (or named in its source descriptions, for undeclared files) is
+    unchanged since that tag. The tag is recorded in the Zenodo description
+    next to each script. Releases are blocked when the tag is missing, a
+    script drifted, or a declared script path is not tracked, unless
+    --allow-script-drift is passed.
 
 Release state (per-section data_version, deposition id, per-file md5s, publish
 status) is stored in .zenodo.json in the project root, under a "releases"
@@ -403,7 +405,14 @@ def manifest_meta_hash(
         "files": {
             name: {
                 key: info.get(key)
-                for key in ("version", "last_updated", "license", "sources", "md5")
+                for key in (
+                    "version",
+                    "last_updated",
+                    "license",
+                    "sources",
+                    "scripts",
+                    "md5",
+                )
             }
             for name, info in manifest["files"].items()
         },
@@ -518,6 +527,20 @@ def build_description(
             + ".</p>"
         )
 
+    missing_scripts = {
+        path
+        for paths in (provenance.get("missing") or {}).values()
+        for path in paths
+    }
+    missing_note = ""
+    if missing_scripts:
+        missing_note = (
+            "<p><strong>Note:</strong> these declared script paths were not found "
+            "in the repository, so their version could not be verified: "
+            + ", ".join(f"<code>{esc(s)}</code>" for s in sorted(missing_scripts))
+            + ".</p>"
+        )
+
     file_sections = "\n".join(
         describe_file(
             filename,
@@ -547,6 +570,7 @@ def build_description(
         f"<code>{esc(data_version)}</code>{code_note}.</p>"
         f"{change_note}"
         f"{drift_note}"
+        f"{missing_note}"
         f"{readme_html}"
         "<p><strong>Licensing:</strong> this compilation as a whole is released under "
         "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
@@ -987,12 +1011,78 @@ def _resolve_script_token(
     return []
 
 
-def referenced_scripts(manifest_files: dict, project_root: Path) -> dict[str, list[str]]:
-    """Map manifest filename -> repo-relative paths of scripts it names.
+def _declared_scripts(info: dict) -> list[str]:
+    """Repo-relative script paths explicitly declared on a manifest entry.
 
-    Scripts are discovered from the prose in each file's ``sources`` (or the
-    legacy ``source`` field). Only tracked repository Python files are
-    considered, so upstream paths in prose are ignored.
+    The ``scripts`` field is the authoritative provenance source; an absent or
+    empty list means the entry has not been declared and prose is used instead.
+    """
+    raw = info.get("scripts")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text.startswith("./"):
+            text = text[2:]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _resolve_declared_script(
+    token: str, tracked: list[Path], by_basename: dict[str, list[str]]
+) -> list[str]:
+    """Resolve a declared script path to tracked repo-relative paths.
+
+    An exact tracked path wins; otherwise a bare basename is accepted when it is
+    unambiguous. A declaration that matches nothing is left unresolved so the
+    caller can report it rather than silently skipping the check.
+    """
+    tracked_set = {str(p) for p in tracked}
+    if token in tracked_set:
+        return [token]
+    if "/" not in token:
+        matches = by_basename.get(Path(token).name, [])
+        if len(matches) == 1:
+            return matches
+    return []
+
+
+def unresolved_declared_scripts(
+    manifest_files: dict, project_root: Path
+) -> dict[str, list[str]]:
+    """Map filename -> declared script paths that are not tracked in the repo.
+
+    A typo in a ``scripts`` declaration would otherwise disable the provenance
+    check for that file without any signal, so callers treat these as errors.
+    """
+    tracked = _tracked_python_files(project_root)
+    by_basename: dict[str, list[str]] = {}
+    for path in tracked:
+        by_basename.setdefault(path.name, []).append(str(path))
+    result: dict[str, list[str]] = {}
+    for filename, info in manifest_files.items():
+        declared = _declared_scripts(info)
+        if not declared:
+            continue
+        missing = [
+            token
+            for token in declared
+            if not _resolve_declared_script(token, tracked, by_basename)
+        ]
+        if missing:
+            result[filename] = missing
+    return result
+
+
+def referenced_scripts(manifest_files: dict, project_root: Path) -> dict[str, list[str]]:
+    """Map manifest filename -> repo-relative paths of scripts that built it.
+
+    Each file's declared ``scripts`` list is authoritative when non-empty.
+    Otherwise the prose in ``sources`` (or the legacy ``source`` field) is
+    scanned, so older manifests keep working. Only tracked repository Python
+    files are considered, so upstream paths in prose are ignored.
     """
     tracked = _tracked_python_files(project_root)
     by_basename: dict[str, list[str]] = {}
@@ -1001,6 +1091,17 @@ def referenced_scripts(manifest_files: dict, project_root: Path) -> dict[str, li
     result: dict[str, list[str]] = {}
     for filename, info in manifest_files.items():
         scripts: list[str] = []
+        declared = _declared_scripts(info)
+        if declared:
+            # A non-empty declaration is authoritative even when nothing
+            # resolves; falling back to prose would mask the bad path.
+            for token in declared:
+                for script in _resolve_declared_script(token, tracked, by_basename):
+                    if script not in scripts:
+                        scripts.append(script)
+            if scripts:
+                result[filename] = scripts
+            continue
         for text in _source_texts(info):
             for token in _script_tokens(text):
                 for script in _resolve_script_token(token, tracked, by_basename):
@@ -1053,8 +1154,9 @@ def check_script_provenance(manifest_files: dict, project_root: Path) -> dict:
     """Check referenced scripts against the latest reachable git tag.
 
     Returns ``{"tag": str | None, "scripts": {script: {"changed": bool}},
-    "files": {filename: [scripts]}}``. ``changed`` is False when no tag exists
-    (callers must still block on the missing tag).
+    "files": {filename: [scripts]}, "missing": {filename: [declared paths]}}``.
+    ``changed`` is False when no tag exists (callers must still block on the
+    missing tag).
     """
     files = referenced_scripts(manifest_files, project_root)
     tag = latest_reachable_tag(project_root)
@@ -1066,7 +1168,12 @@ def check_script_provenance(manifest_files: dict, project_root: Path) -> dict:
                     "changed": bool(tag)
                     and script_changed_since_tag(script, tag, project_root)
                 }
-    return {"tag": tag, "scripts": scripts, "files": files}
+    return {
+        "tag": tag,
+        "scripts": scripts,
+        "files": files,
+        "missing": unresolved_declared_scripts(manifest_files, project_root),
+    }
 
 
 def provenance_block_reason(provenance: dict, allow_drift: bool) -> str | None:
@@ -1076,6 +1183,15 @@ def provenance_block_reason(provenance: dict, allow_drift: bool) -> str | None:
         return (
             "no git tag is reachable from HEAD; create a version tag "
             "(e.g. `git tag v1.0.0`) before releasing"
+        )
+    missing = provenance.get("missing") or {}
+    if missing and not allow_drift:
+        details = "; ".join(
+            f"{filename}: {', '.join(paths)}" for filename, paths in sorted(missing.items())
+        )
+        return (
+            "manifest 'scripts' entries do not match any tracked file "
+            f"({details}); fix the paths or re-run with --allow-script-drift"
         )
     changed = [
         script
@@ -1622,8 +1738,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Allow releasing when referenced scripts have changed since the "
-            "latest git tag. The description marks those scripts as changed "
-            "since the tag. A reachable tag is still required."
+            "latest git tag or a declared script path is not tracked. The "
+            "description marks those scripts. A reachable tag is still required."
         ),
     )
     parser.add_argument(
@@ -1686,6 +1802,9 @@ def dry_run(args) -> None:
         for script, info in sorted(provenance["scripts"].items()):
             status = "changed since tag" if info["changed"] else "unchanged"
             print(f"    {script} @ {tag or 'NONE'} ({status})")
+        for filename, paths in sorted((provenance.get("missing") or {}).items()):
+            for path in paths:
+                print(f"    {path} @ {tag or 'NONE'} (not tracked, declared by {filename})")
         block_reason = provenance_block_reason(
             provenance, getattr(args, "allow_script_drift", False)
         )
