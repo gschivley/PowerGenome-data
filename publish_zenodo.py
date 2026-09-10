@@ -34,6 +34,13 @@ Each release is driven by its collection's manifest:
     first release (no prior state) uploads all manifest files. Files
     previously released but no longer in the manifest are removed from the
     draft so Zenodo mirrors the manifest.
+  * Before releasing, the script checks that a git tag is reachable from HEAD
+    and that every Python script declared in each manifest file's "scripts"
+    list (or named in its source descriptions, for undeclared files) is
+    unchanged since that tag. The tag is recorded in the Zenodo description
+    next to each script. Releases are blocked when the tag is missing, a
+    script drifted, or a declared script path is not tracked, unless
+    --allow-script-drift is passed.
 
 Release state (per-section data_version, deposition id, per-file md5s, publish
 status) is stored in .zenodo.json in the project root, under a "releases"
@@ -60,6 +67,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -333,7 +341,14 @@ LICENSE_LABELS = {
 }
 
 
-def describe_file(filename: str, info: dict, note: str | None = None) -> str:
+def describe_file(
+    filename: str,
+    info: dict,
+    note: str | None = None,
+    scripts: list[str] | None = None,
+    code_tag: str | None = None,
+    changed_scripts: set[str] | None = None,
+) -> str:
     esc = html.escape
     sources = info.get("sources") or []
     source_items = []
@@ -356,6 +371,19 @@ def describe_file(filename: str, info: dict, note: str | None = None) -> str:
         LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
     )
     note_html = f"<p><strong>Note:</strong> {esc(note)}</p>" if note else ""
+    script_rows = ""
+    if scripts:
+        items = []
+        for script in scripts:
+            label = f"<code>{esc(script)}</code>"
+            if code_tag:
+                label += f" @ <code>{esc(code_tag)}</code>"
+            if changed_scripts and script in changed_scripts:
+                label += " <strong>(changed since tag)</strong>"
+            items.append(f"<li>{label}</li>")
+        script_rows = (
+            "<tr><th>Scripts</th><td><ul>" + "".join(items) + "</ul></td></tr>"
+        )
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
@@ -363,22 +391,37 @@ def describe_file(filename: str, info: dict, note: str | None = None) -> str:
         f"<tr><th>Last updated</th><td>{esc(info.get('last_updated') or 'Unknown')}</td></tr>"
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
         f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
+        f"{script_rows}"
         f"</table>"
         f"{note_html}{sources_html}"
     )
 
 
-def manifest_meta_hash(manifest: dict, readme_html: str = "") -> str:
+def manifest_meta_hash(
+    manifest: dict, readme_html: str = "", provenance: dict | None = None
+) -> str:
     """Stable hash of all description-relevant collection metadata."""
     relevant = {
         "files": {
             name: {
                 key: info.get(key)
-                for key in ("version", "last_updated", "license", "sources", "md5")
+                for key in (
+                    "version",
+                    "last_updated",
+                    "license",
+                    "sources",
+                    "scripts",
+                    "md5",
+                )
             }
             for name, info in manifest["files"].items()
         },
         "readme_html": readme_html,
+        "code_tag": (provenance or {}).get("tag"),
+        "scripts": {
+            script: info.get("changed")
+            for script, info in (provenance or {}).get("scripts", {}).items()
+        },
     }
     payload = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -420,12 +463,20 @@ def build_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
+    provenance: dict | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
     esc = html.escape
     removed_details = removed_details or {}
     removal_notes = removal_notes or {}
+    provenance = provenance or {}
+    code_tag = provenance.get("tag")
+    changed_scripts = {
+        script
+        for script, info in provenance.get("scripts", {}).items()
+        if info.get("changed")
+    }
 
     def names_html(names: list[str]) -> str:
         return "".join(f"<li><code>{esc(name)}</code></li>" for name in names)
@@ -466,8 +517,39 @@ def build_description(
             "".join(changes_html) or "<p><em>No file changes in this release.</em></p>"
         )
 
+    drift_note = ""
+    if changed_scripts:
+        drift_note = (
+            "<p><strong>Note:</strong> the following scripts have changed since "
+            f"code tag <code>{esc(code_tag)}</code> and were used to build this "
+            "release: "
+            + ", ".join(f"<code>{esc(s)}</code>" for s in sorted(changed_scripts))
+            + ".</p>"
+        )
+
+    missing_scripts = {
+        path
+        for paths in (provenance.get("missing") or {}).values()
+        for path in paths
+    }
+    missing_note = ""
+    if missing_scripts:
+        missing_note = (
+            "<p><strong>Note:</strong> these declared script paths were not found "
+            "in the repository, so their version could not be verified: "
+            + ", ".join(f"<code>{esc(s)}</code>" for s in sorted(missing_scripts))
+            + ".</p>"
+        )
+
     file_sections = "\n".join(
-        describe_file(filename, info) for filename, info in sorted(files.items())
+        describe_file(
+            filename,
+            info,
+            scripts=provenance.get("files", {}).get(filename),
+            code_tag=code_tag,
+            changed_scripts=changed_scripts,
+        )
+        for filename, info in sorted(files.items())
     )
     removed_sections = "\n".join(
         describe_file(name, removed_details.get(name, {}), removal_notes.get(name))
@@ -479,11 +561,16 @@ def build_description(
         else ""
     )
 
+    code_note = (
+        f" and code tag <code>{esc(code_tag)}</code>" if code_tag else ""
+    )
     return (
         f"<p>{esc(title)}: PowerGenome input data assembled from public sources. "
         "This release corresponds to a PowerGenome-data manifest at data version "
-        f"<code>{esc(data_version)}</code>.</p>"
+        f"<code>{esc(data_version)}</code>{code_note}.</p>"
         f"{change_note}"
+        f"{drift_note}"
+        f"{missing_note}"
         f"{readme_html}"
         "<p><strong>Licensing:</strong> this compilation as a whole is released under "
         "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
@@ -832,15 +919,291 @@ def uncommitted_release_files(manifest_files: dict, data_dir: Path) -> list[str]
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
-    dirty = []
-    for line in out.splitlines():
-        if not line.strip():
+    return [line for line in out.splitlines() if line.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Script provenance (git tag checks)
+# ---------------------------------------------------------------------------
+
+SCRIPT_TOKEN_RE = re.compile(r"[\w./-]+")
+
+
+def _source_texts(info: dict) -> list[str]:
+    """Prose strings from a manifest file entry that may name scripts."""
+    texts = []
+    for source in info.get("sources") or []:
+        if isinstance(source, dict):
+            text = source.get("source")
+            if text:
+                texts.append(str(text))
+    if not texts and info.get("source"):
+        texts.append(str(info["source"]))
+    return texts
+
+
+def _tracked_python_files(project_root: Path) -> list[Path]:
+    """Repo-relative paths of all tracked ``.py`` files."""
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return [Path(line) for line in out.splitlines() if line.strip().endswith(".py")]
+
+
+def _script_tokens(text: str) -> list[str]:
+    """Candidate script/path tokens in prose.
+
+    Only tokens that look like a ``.py`` file or a path (contains ``/``) are
+    returned; URL fragments are ignored.
+    """
+    tokens = []
+    for token in SCRIPT_TOKEN_RE.findall(text):
+        token = token.rstrip(".,;:()[]\"'")
+        if not token:
             continue
-        # porcelain format: XY <path>; X = staged, Y = worktree. '', M, D, A,
-        # or '?' (untracked) all mean the file differs from HEAD.
-        if line[0] in "MAD?" or line[1:2] in "MD":
-            dirty.append(line)
-    return dirty
+        if "://" in token or token.startswith("http"):
+            continue
+        if token.endswith(".py") or "/" in token:
+            tokens.append(token)
+    return tokens
+
+
+def _is_test_script(path: str) -> bool:
+    """True for test/helper files that are not data-generation scripts."""
+    p = Path(path)
+    return (
+        "tests" in p.parts
+        or p.name.startswith("test_")
+        or p.name == "conftest.py"
+    )
+
+
+def _resolve_script_token(
+    token: str, tracked: list[Path], by_basename: dict[str, list[str]]
+) -> list[str]:
+    """Resolve a prose token to tracked repo-relative script paths.
+
+    Returns ``[]`` when the token does not clearly name a tracked script. A
+    bare basename must be unambiguous; a path-like token may name a file or a
+    directory (in which case all tracked scripts under it are returned, minus
+    test files).
+    """
+    if token.startswith("./"):
+        token = token[2:]
+    if token.endswith(".py"):
+        if "/" in token:
+            return [token] if token in {str(p) for p in tracked} else []
+        matches = by_basename.get(Path(token).name, [])
+        return matches if len(matches) == 1 else []
+    if "/" in token:
+        prefix = token.rstrip("/") + "/"
+        return sorted(
+            str(p)
+            for p in tracked
+            if str(p).startswith(prefix) and not _is_test_script(str(p))
+        )
+    return []
+
+
+def _declared_scripts(info: dict) -> list[str]:
+    """Repo-relative script paths explicitly declared on a manifest entry.
+
+    The ``scripts`` field is the authoritative provenance source; an absent or
+    empty list means the entry has not been declared and prose is used instead.
+    """
+    raw = info.get("scripts")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text.startswith("./"):
+            text = text[2:]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _resolve_declared_script(
+    token: str, tracked: list[Path], by_basename: dict[str, list[str]]
+) -> list[str]:
+    """Resolve a declared script path to tracked repo-relative paths.
+
+    An exact tracked path wins; otherwise a bare basename is accepted when it is
+    unambiguous. A declaration that matches nothing is left unresolved so the
+    caller can report it rather than silently skipping the check.
+    """
+    tracked_set = {str(p) for p in tracked}
+    if token in tracked_set:
+        return [token]
+    if "/" not in token:
+        matches = by_basename.get(Path(token).name, [])
+        if len(matches) == 1:
+            return matches
+    return []
+
+
+def unresolved_declared_scripts(
+    manifest_files: dict, project_root: Path
+) -> dict[str, list[str]]:
+    """Map filename -> declared script paths that are not tracked in the repo.
+
+    A typo in a ``scripts`` declaration would otherwise disable the provenance
+    check for that file without any signal, so callers treat these as errors.
+    """
+    tracked = _tracked_python_files(project_root)
+    by_basename: dict[str, list[str]] = {}
+    for path in tracked:
+        by_basename.setdefault(path.name, []).append(str(path))
+    result: dict[str, list[str]] = {}
+    for filename, info in manifest_files.items():
+        declared = _declared_scripts(info)
+        if not declared:
+            continue
+        missing = [
+            token
+            for token in declared
+            if not _resolve_declared_script(token, tracked, by_basename)
+        ]
+        if missing:
+            result[filename] = missing
+    return result
+
+
+def referenced_scripts(manifest_files: dict, project_root: Path) -> dict[str, list[str]]:
+    """Map manifest filename -> repo-relative paths of scripts that built it.
+
+    Each file's declared ``scripts`` list is authoritative when non-empty.
+    Otherwise the prose in ``sources`` (or the legacy ``source`` field) is
+    scanned, so older manifests keep working. Only tracked repository Python
+    files are considered, so upstream paths in prose are ignored.
+    """
+    tracked = _tracked_python_files(project_root)
+    by_basename: dict[str, list[str]] = {}
+    for path in tracked:
+        by_basename.setdefault(path.name, []).append(str(path))
+    result: dict[str, list[str]] = {}
+    for filename, info in manifest_files.items():
+        scripts: list[str] = []
+        declared = _declared_scripts(info)
+        if declared:
+            # A non-empty declaration is authoritative even when nothing
+            # resolves; falling back to prose would mask the bad path.
+            for token in declared:
+                for script in _resolve_declared_script(token, tracked, by_basename):
+                    if script not in scripts:
+                        scripts.append(script)
+            if scripts:
+                result[filename] = scripts
+            continue
+        for text in _source_texts(info):
+            for token in _script_tokens(text):
+                for script in _resolve_script_token(token, tracked, by_basename):
+                    if script not in scripts:
+                        scripts.append(script)
+        if scripts:
+            result[filename] = scripts
+    return result
+
+
+def latest_reachable_tag(project_root: Path) -> str | None:
+    """Name of the nearest git tag reachable from HEAD, or ``None``.
+
+    Uses ``git describe --tags --abbrev=0``, which returns the closest
+    reachable tag by commit distance (the "latest version" of the code).
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return out or None
+
+
+def script_changed_since_tag(script: str, tag: str, project_root: Path) -> bool:
+    """True when the tracked script differs from its state at ``tag``.
+
+    Compares both the index and working tree against the tag, so staged and
+    unstaged edits are both flagged.
+    """
+    try:
+        for extra_args in ((), ("--cached",)):
+            result = subprocess.run(
+                ["git", "diff", "--quiet", *extra_args, tag, "--", script],
+                cwd=project_root,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return True
+        return False
+    except FileNotFoundError:
+        return False
+
+
+def check_script_provenance(manifest_files: dict, project_root: Path) -> dict:
+    """Check referenced scripts against the latest reachable git tag.
+
+    Returns ``{"tag": str | None, "scripts": {script: {"changed": bool}},
+    "files": {filename: [scripts]}, "missing": {filename: [declared paths]}}``.
+    ``changed`` is False when no tag exists (callers must still block on the
+    missing tag).
+    """
+    files = referenced_scripts(manifest_files, project_root)
+    tag = latest_reachable_tag(project_root)
+    scripts: dict[str, dict] = {}
+    for script_list in files.values():
+        for script in script_list:
+            if script not in scripts:
+                scripts[script] = {
+                    "changed": bool(tag)
+                    and script_changed_since_tag(script, tag, project_root)
+                }
+    return {
+        "tag": tag,
+        "scripts": scripts,
+        "files": files,
+        "missing": unresolved_declared_scripts(manifest_files, project_root),
+    }
+
+
+def provenance_block_reason(provenance: dict, allow_drift: bool) -> str | None:
+    """Reason a release must be blocked by the script-provenance check, or None."""
+    tag = provenance.get("tag")
+    if not tag:
+        return (
+            "no git tag is reachable from HEAD; create a version tag "
+            "(e.g. `git tag v1.0.0`) before releasing"
+        )
+    missing = provenance.get("missing") or {}
+    if missing and not allow_drift:
+        details = "; ".join(
+            f"{filename}: {', '.join(paths)}" for filename, paths in sorted(missing.items())
+        )
+        return (
+            "manifest 'scripts' entries do not match any tracked file "
+            f"({details}); fix the paths or re-run with --allow-script-drift"
+        )
+    changed = [
+        script
+        for script, info in provenance.get("scripts", {}).items()
+        if info.get("changed")
+    ]
+    if changed and not allow_drift:
+        return (
+            f"referenced scripts changed since tag {tag}: {', '.join(changed)}. "
+            "Tag the new code version, or re-run with --allow-script-drift."
+        )
+    return None
 
 
 def build_release_description(
@@ -855,6 +1218,7 @@ def build_release_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
+    provenance: dict | None = None,
 ) -> str:
     """Full Zenodo description for a deposit.
 
@@ -875,6 +1239,7 @@ def build_release_description(
         readme_html,
         removed_details,
         removal_notes,
+        provenance,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -891,6 +1256,7 @@ def release_section(
     section: str,
     manifest_files: dict,
     data_dir: Path,
+    project_root: Path,
     state: dict,
 ) -> dict:
     """Create/update/publish the Zenodo deposit for one manifest section.
@@ -964,7 +1330,8 @@ def release_section(
     removed = [key for key in released_files if key not in release_keys]
     initial = not released_files
     readme_html = readme_to_html(data_dir)
-    metadata_hash = manifest_meta_hash(manifest, readme_html)
+    provenance = check_script_provenance(manifest_files, project_root)
+    metadata_hash = manifest_meta_hash(manifest, readme_html, provenance)
     metadata_changed = released.get("manifest_meta_hash") != metadata_hash
 
     log(f"[{section}] data version: {data_version}")
@@ -1022,6 +1389,16 @@ def release_section(
             "re-run with --allow-dirty. Publishing an uncommitted release leaves "
             "no reproducible commit for the Zenodo record."
         )
+
+    # Referenced scripts must be traceable to a tagged code version. Refuse
+    # when no tag exists or a script changed since the tag, unless
+    # --allow-script-drift is passed (the description then marks the drift).
+    block_reason = provenance_block_reason(
+        provenance, getattr(args, "allow_script_drift", False)
+    )
+    if block_reason:
+        log(f"[{section}] script provenance check failed: {block_reason}")
+        sys.exit(f"[{section}] {block_reason}")
 
     # Resolve the target draft.
     if deposition_id and not previously_published:
@@ -1093,6 +1470,7 @@ def release_section(
         readme_html=readme_html,
         removed_details={name: released_files[name] for name in removed},
         removal_notes=released.get("removal_notes") or base_metadata.get("removal_notes"),
+        provenance=provenance,
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
@@ -1236,6 +1614,7 @@ def run_release(args) -> None:
                 section,
                 manifest_files,
                 data_dir,
+                PROJECT_ROOT,
                 state,
             )
         )
@@ -1355,6 +1734,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Publish even when release files differ from git HEAD.",
     )
     parser.add_argument(
+        "--allow-script-drift",
+        action="store_true",
+        help=(
+            "Allow releasing when referenced scripts have changed since the "
+            "latest git tag or a declared script path is not tracked. The "
+            "description marks those scripts. A reachable tag is still required."
+        ),
+    )
+    parser.add_argument(
         "--collection",
         action="append",
         choices=list(COLLECTIONS),
@@ -1379,6 +1767,7 @@ def dry_run(args) -> None:
     manifests = load_manifests(args, project_root)
     sections = requested_sections(args)
     print(f"data version: {manifests[CORE_SECTION]['data_version']}")
+    blocked = False
     for section in sections:
         if section not in manifests:
             print(f"\n[{section}] not present in manifest; skipping")
@@ -1407,6 +1796,23 @@ def dry_run(args) -> None:
             (data_dir / n).stat().st_size for n in files if (data_dir / n).exists()
         )
         print(f"  total bytes: {total / 1e6:.1f} MB")
+        provenance = check_script_provenance(files, project_root)
+        tag = provenance.get("tag")
+        print(f"  code tag: {tag or 'NONE (no reachable git tag)'}")
+        for script, info in sorted(provenance["scripts"].items()):
+            status = "changed since tag" if info["changed"] else "unchanged"
+            print(f"    {script} @ {tag or 'NONE'} ({status})")
+        for filename, paths in sorted((provenance.get("missing") or {}).items()):
+            for path in paths:
+                print(f"    {path} @ {tag or 'NONE'} (not tracked, declared by {filename})")
+        block_reason = provenance_block_reason(
+            provenance, getattr(args, "allow_script_drift", False)
+        )
+        if block_reason:
+            print(f"  ERROR: {block_reason}")
+            blocked = True
+    if blocked:
+        sys.exit("script provenance check failed; see errors above")
 
 
 def main() -> None:
