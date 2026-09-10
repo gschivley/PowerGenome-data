@@ -30,8 +30,7 @@ Each release is driven by its collection's manifest:
     listing files added, updated, and removed in this release, plus one
     file/version/last-updated/sources table per data element, using each
     file's own "version" key (the date that data element was last updated).
-    Files are grouped by license, and published releases record the publish
-    date and git commit in the description.
+    Files are grouped by license.
   * Only files whose md5 changed since the last release are uploaded. The
     first release (no prior state) uploads all manifest files. Files
     previously released but no longer in the manifest are removed from the
@@ -71,7 +70,6 @@ import sys
 import time
 import urllib.parse
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
@@ -194,18 +192,6 @@ def git_user_name() -> str:
     try:
         return subprocess.check_output(
             ["git", "config", "user.name"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
-    except Exception:
-        return ""
-
-
-def git_short_sha() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            text=True,
-            cwd=PROJECT_ROOT if PROJECT_ROOT is not None else Path.cwd(),
-            stderr=subprocess.DEVNULL,
         ).strip()
     except Exception:
         return ""
@@ -485,8 +471,6 @@ def build_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
-    published_at: str | None = None,
-    git_sha: str | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
@@ -546,17 +530,10 @@ def build_description(
         else ""
     )
 
-    provenance_bits = []
-    if published_at:
-        provenance_bits.append(f"published {esc(published_at)}")
-    if git_sha:
-        provenance_bits.append(f"git commit <code>{esc(git_sha)}</code>")
-    provenance = f" ({', '.join(provenance_bits)})" if provenance_bits else ""
-
     return (
         f"<p>{esc(title)}: PowerGenome input data assembled from public sources. "
         "This release corresponds to a PowerGenome-data manifest at data version "
-        f"<code>{esc(data_version)}</code>{provenance}.</p>"
+        f"<code>{esc(data_version)}</code>.</p>"
         f"{change_note}"
         f"{readme_html}"
         f"{licensing_paragraph(files)}"
@@ -923,8 +900,6 @@ def build_release_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
-    published_at: str | None = None,
-    git_sha: str | None = None,
 ) -> str:
     """Full Zenodo description for a deposit.
 
@@ -945,8 +920,6 @@ def build_release_description(
         readme_html,
         removed_details,
         removal_notes,
-        published_at,
-        git_sha,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -1084,8 +1057,8 @@ def release_section(
             "metadata": section_metadata(state, section),
         }
 
-    # Refuse to publish files whose provenance is undocumented (production
-    # only; sandbox warns).
+    # Refuse to publish files whose source documentation is incomplete
+    # (production only; sandbox warns).
     undocumented = undocumented_files(manifest_files)
     if undocumented:
         message = "files missing a license or with placeholder sources: " + ", ".join(
@@ -1184,10 +1157,6 @@ def release_section(
         removed_details={name: released_files[name] for name in removed},
         removal_notes=released.get("removal_notes")
         or base_metadata.get("removal_notes"),
-        published_at=(
-            datetime.now(timezone.utc).date().isoformat() if args.publish else None
-        ),
-        git_sha=git_short_sha() if args.publish else None,
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)

@@ -438,7 +438,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         self.assertFalse(parser.parse_args([]).allow_undocumented)
 
 
-class LicensingAndProvenanceTests(unittest.TestCase):
+class LicensingAndDescriptionTests(unittest.TestCase):
     def test_licensing_paragraph_groups_files_by_license(self):
         files = {
             "a.csv": {"license": "cc-zero"},
@@ -473,34 +473,6 @@ class LicensingAndProvenanceTests(unittest.TestCase):
         )
         self.assertIn("Last updated", html)
         self.assertIn("2026-08-12", html)
-
-    def test_description_includes_provenance_when_passed(self):
-        files = MANIFEST["files"]
-        description = MODULE.build_description(
-            MANIFEST,
-            "core",
-            files,
-            [],
-            [],
-            [],
-            False,
-            published_at="2026-09-09",
-            git_sha="abc1234",
-        )
-        self.assertIn("published 2026-09-09", description)
-        self.assertIn("git commit <code>abc1234</code>", description)
-
-    def test_description_omits_provenance_by_default(self):
-        files = MANIFEST["files"]
-        description = MODULE.build_description(
-            MANIFEST, "core", files, [], [], [], False
-        )
-        self.assertNotIn("published", description)
-        self.assertNotIn("git commit", description)
-
-    def test_draft_metadata_omits_git_provenance(self):
-        source = SCRIPT.read_text()
-        self.assertIn("git_sha=git_short_sha() if args.publish else None", source)
 
 
 class ManifestEntryTests(unittest.TestCase):
