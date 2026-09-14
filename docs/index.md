@@ -84,6 +84,9 @@ where extra collections live in a top-level `sections` object of `data/manifest.
       "version": "2026-08-11",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
       "license": "public-domain",
+      "scripts": [
+        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+      ],
       "history": []
     }
   }
@@ -100,7 +103,9 @@ where extra collections live in a top-level `sections` object of `data/manifest.
   the ReEDS generator database and `county2zone.csv`). `source_url` is optional per source. `version` /
   `last_updated` are the ISO date (`YYYY-MM-DD`) the file last changed, `md5` is the content hash,
   `license` is a human-maintained identifier for the file's underlying-source license
-  (`public-domain`, `cc-by-4.0`, or `cc-zero`), and `history` holds prior
+  (`public-domain`, `cc-by-4.0`, or `cc-zero`), `scripts` is the optional list of repo-relative
+  paths of the repository scripts that build the file (declared so releases can be pinned to a
+  code version), and `history` holds prior
   `{version, last_updated, md5}` entries for every change that has been seen.
 
 ### Update it
@@ -126,6 +131,9 @@ Behavior:
   `"Unknown - document me"` so they can be filled in). If an entry still carries the
   `"Unknown - document me"` placeholder and a real seed now exists for that file, a later run upgrades the
   placeholder to the seed, so provenance backfills automatically once it has been documented.
+- Hand-edited `scripts` lists are preserved across runs and backfilled from a built-in seed map
+  when missing. Declare the scripts that build each file so `publish_zenodo.py` can pin the data to
+  the code version that produced it; omit the field for files no repository script generates.
 - Hand-maintained `license` values are preserved when a file changes (only `version`/`last_updated`/`md5`
   are rewritten); files that carry no `license` are flagged with a warning so the attribution can be
   added.
@@ -184,7 +192,9 @@ whole description.
 - Builds the Zenodo description from the manifest: a change note listing the files **added**,
   **updated**, and **removed** in this release, a licensing paragraph (the compilation is CC0 while
   individual files retain their underlying-source license), plus a per-file table of each data element's own
-  `version` (the date that element was last updated), `last_updated`, `md5`, its `license`, and its `sources`.
+  `version` (the date that element was last updated), `last_updated`, `md5`, its `license`, its
+  `sources`, and its `scripts` (each rendered as `script @ <code tag>`, where the code tag is the
+  git tag the release was built from).
 - Uploads **only files that changed** since the last published release (compared by `md5`), so the
   initial release uploads everything and later releases upload just the new/updated files. Files that
   were released before but are no longer in the manifest are removed from the draft.
@@ -197,6 +207,13 @@ whole description.
   processed it, the script checks the deposition state and treats an already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD (so the Zenodo record always corresponds to
   a committed state of the repository); pass `--allow-dirty` to override.
+- Checks **script provenance** before releasing: it reads each file's declared `scripts` list,
+  falling back to the Python scripts named in the `sources` prose for files that have not been
+  declared, and resolves them to tracked repository files. A git tag reachable from HEAD is
+  required. If any script has changed since that tag, a declared path is not tracked, or no tag
+  exists, the release is blocked unless `--allow-script-drift` is passed. The tag is recorded in
+  the Zenodo description next to each script, and scripts that drifted are marked as changed since
+  the tag.
 - Defaults to the **Zenodo sandbox**; pass `--production` (or set `USE_PRODUCTION=true`) for production.
 
 ### Requirements
@@ -230,6 +247,10 @@ uv run python publish_zenodo.py --publish --production
 
 # Publish anyway even though release files are uncommitted (not recommended).
 uv run python publish_zenodo.py --publish --allow-dirty
+
+# Publish even though referenced scripts changed since the latest git tag
+# (not recommended; the description marks the drift).
+uv run python publish_zenodo.py --publish --allow-script-drift
 ```
 
 By default every collection with files in the manifest is released. Pass `--collection`
@@ -243,6 +264,11 @@ Without `--publish` the script leaves each deposition as a draft. If a draft alr
 The script verifies that every file listed in the manifest is committed to git before it contacts Zenodo.
 If any release file differs from HEAD it prints the offending paths and exits; commit the changes first or
 pass `--allow-dirty`. This keeps each Zenodo record reproducible from the repository history.
+
+It also requires a git tag reachable from HEAD and that every Python script referenced in the manifest's
+source descriptions is unchanged since that tag; tag the code (e.g. `git tag v1.0.0`) after changing a
+referenced script, or pass `--allow-script-drift` to release anyway. The tag is shown in the Zenodo
+description next to each script so readers can see exactly which code version produced each file.
 
 ### Release state (`.zenodo.json`)
 

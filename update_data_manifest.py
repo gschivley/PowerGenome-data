@@ -7,6 +7,9 @@ The manifest (``data/manifest.json``) records, for every file in ``data/``:
   came from. A file may rely on one or many upstream sources (e.g. the ReEDS generator
   database *and* ``county2zone.csv``). Human-maintained; the tool preserves edits made
   here across runs.
+* ``scripts`` -- repo-relative paths of the repository scripts that build the file
+  (e.g. ``build_atb_data.py``). Optional; declare it alongside ``sources`` so
+  ``publish_zenodo.py`` can pin the data to the code version that produced it.
 * ``md5`` -- content hash of the file.
 * ``version`` and ``last_updated`` -- ISO date (``YYYY-MM-DD``) of the last change.
 * ``history`` -- append-only record of prior ``{version, last_updated, md5}`` entries.
@@ -331,6 +334,34 @@ SOURCES: dict[str, list[dict[str, str]]] = {
 }
 
 
+# Seed generating-script paths for files that have never been seen before, keyed by
+# filename like :data:`SOURCES`. Paths are repo-relative so ``publish_zenodo.py`` can
+# compare each script against the release's git tag. Omit a file when no repository
+# script builds it (manual or externally generated data).
+SCRIPTS: dict[str, list[str]] = {
+    "distributed_capacity.parquet": ["build_new_pg_dg_inputs.py"],
+    "distributed_profiles.parquet": ["build_new_pg_dg_inputs.py"],
+    "fuel_prices.parquet": [
+        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+    ],
+    "nerc_reserve_margins.csv": [
+        ".github/skills/nerc-reserve-margins/scripts/extract_nerc_reserve_margins.py"
+    ],
+    "operational_constraints_reeds.csv": ["build_operational_constraints_reeds.py"],
+    "plant_region_map.csv": ["transform_reeds_generators.py"],
+    "reeds_generators_transformed.csv": ["transform_reeds_generators.py"],
+    "reeds_load_transformed.parquet": ["transform_reeds_load.py"],
+    "regional_cost_multipliers.csv": ["extract_location_variation.py"],
+    "reserve_margins.csv": ["build_reserve_margins.py"],
+    "technology_costs_atb.parquet": ["build_atb_data.py"],
+    "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
+    "transmission_capacity_reeds.csv": ["merge_transmission_capacity.py"],
+    # Existing resource groups (existing_resource_groups/) ---------------------------
+    "hydro_conventional_2007_2013.parquet": ["transform_reeds_generators.py"],
+    "hydro_run_of_river_2007_2013.parquet": ["transform_reeds_generators.py"],
+}
+
+
 def md5_of(path: Path) -> str:
     """Return the lowercase hex MD5 of a file's contents."""
     h = hashlib.md5()
@@ -389,18 +420,46 @@ def _prior_sources(prior: dict) -> list[dict]:
     return _normalize_sources([item])
 
 
+def _normalize_scripts(raw_scripts: list) -> list[str]:
+    """Return a clean, de-duplicated list of repo-relative script paths."""
+    out: list[str] = []
+    for script in raw_scripts or []:
+        text = str(script).strip()
+        if text.startswith("./"):
+            text = text[2:]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _resolve_scripts(filename: str, prior: dict) -> list[str]:
+    """Declared scripts to keep for an entry, backfilling from :data:`SCRIPTS`.
+
+    A human-maintained ``scripts`` list is preserved verbatim; an absent or empty
+    one is seeded so reruns converge on the declared provenance.
+    """
+    scripts = _normalize_scripts(prior.get("scripts") or [])
+    if not scripts:
+        scripts = _normalize_scripts(SCRIPTS.get(filename) or [])
+    return scripts
+
+
 def build_new_entry(filename: str, md5: str, date_str: str) -> dict:
     """Create a fresh manifest entry for a file never seen before."""
     seed = SOURCES.get(filename)
     if seed is None:
         seed = [{"source": "Unknown - document me"}]
-    return {
+    entry = {
         "sources": _normalize_sources(seed),
         "last_updated": date_str,
         "version": date_str,
         "md5": md5,
         "history": [],
     }
+    scripts = _resolve_scripts(filename, {})
+    if scripts:
+        entry["scripts"] = scripts
+    return entry
 
 
 def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
@@ -424,13 +483,18 @@ def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
     # survive a data update, unlike version/last_updated/md5.
     if prior.get("license"):
         entry["license"] = prior["license"]
+    if prior.get("scripts"):
+        entry["scripts"] = _normalize_scripts(prior["scripts"])
     return entry
 
 
 def _advance_entry(filename: str, prior: dict, md5: str, date_str: str) -> dict:
-    """Like :func:`advance_entry` but applies placeholder source backfill."""
+    """Like :func:`advance_entry` but applies placeholder source and script backfill."""
     entry = advance_entry(prior, md5, date_str)
     entry["sources"] = _resolve_sources(filename, prior)
+    scripts = _resolve_scripts(filename, prior)
+    if scripts:
+        entry["scripts"] = scripts
     return entry
 
 
@@ -442,6 +506,16 @@ def _migrate_entry(prior: dict) -> dict:
     entry["sources"] = _prior_sources(prior)
     entry.pop("source", None)
     entry.pop("source_url", None)
+    return entry
+
+
+def _with_declared_scripts(filename: str, entry: dict) -> dict:
+    """Attach the declared ``scripts`` list to an entry, backfilling from the seed."""
+    scripts = _resolve_scripts(filename, entry)
+    if scripts:
+        entry["scripts"] = scripts
+    else:
+        entry.pop("scripts", None)
     return entry
 
 
@@ -517,6 +591,7 @@ def update_manifest(
         elif prior.get("md5") == md5:
             entry = _migrate_entry(prior)
             entry["sources"] = _resolve_sources(filename, prior)
+            entry = _with_declared_scripts(filename, entry)
             files[filename] = entry
             print(f"[unchanged] {filename}")
         else:

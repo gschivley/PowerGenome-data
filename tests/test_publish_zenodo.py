@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -365,6 +366,406 @@ class DescriptionTests(unittest.TestCase):
         self.assertEqual(normalized["new.csv"]["version"], "2026-08-01")
 
 
+class ScriptProvenanceTests(unittest.TestCase):
+    def _init_repo(self, root: Path) -> None:
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=root, check=True
+        )
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "commit.gpgsign", "false"], cwd=root, check=True
+        )
+
+    def _commit_all(self, root: Path, message: str) -> None:
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", message], cwd=root, check=True)
+
+    def test_referenced_scripts_extracts_bare_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "build_atb_data.py").write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "costs.csv": {
+                    "sources": [{"source": "rebuilt by build_atb_data.py."}]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {"costs.csv": ["build_atb_data.py"]},
+            )
+
+    def test_referenced_scripts_resolves_directory_to_scripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = (
+                root
+                / ".github"
+                / "skills"
+                / "eia-fuel-prices"
+                / "scripts"
+                / "fetch_eia_fuel_prices.py"
+            )
+            script.parent.mkdir(parents=True)
+            script.write_text("print('x')\n")
+            test_script = (
+                root
+                / ".github"
+                / "skills"
+                / "eia-fuel-prices"
+                / "tests"
+                / "test_fetch_eia_fuel_prices.py"
+            )
+            test_script.parent.mkdir(parents=True)
+            test_script.write_text("print('test')\n")
+            self._commit_all(root, "add skill")
+            files = {
+                "fuel_prices.parquet": {
+                    "sources": [{"source": "mapped by .github/skills/eia-fuel-prices."}]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {
+                    "fuel_prices.parquet": [
+                        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+                    ]
+                },
+            )
+
+    def test_referenced_scripts_ignores_upstream_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "transform_reeds_generators.py").write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "gen.csv": {
+                    "sources": [
+                        {
+                            "source": (
+                                "ReEDS-2.0/inputs/capacity_exogenous/"
+                                "ReEDS_generator_database_final_EIA-NEMS.csv joined by "
+                                "transform_reeds_generators.py."
+                            )
+                        }
+                    ]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {"gen.csv": ["transform_reeds_generators.py"]},
+            )
+
+    def test_referenced_scripts_prefers_declared_list_over_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            (root / "b.py").write_text("print('b')\n")
+            self._commit_all(root, "add scripts")
+            files = {
+                "x.csv": {
+                    "scripts": ["b.py"],
+                    "sources": [{"source": "legacy prose naming a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {"x.csv": ["b.py"]})
+
+    def test_referenced_scripts_falls_back_to_prose_when_undeclared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            for scripts in (None, [], [""]):
+                info = {"sources": [{"source": "built by a.py."}]}
+                if scripts is not None:
+                    info["scripts"] = scripts
+                self.assertEqual(
+                    MODULE.referenced_scripts({"x.csv": info}, root),
+                    {"x.csv": ["a.py"]},
+                )
+
+    def test_referenced_scripts_resolves_declared_basename_to_tracked_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "sub" / "build_x.py"
+            script.parent.mkdir()
+            script.write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {"x.csv": {"scripts": ["build_x.py"]}}
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root), {"x.csv": ["sub/build_x.py"]}
+            )
+
+    def test_unresolved_declared_scripts_reports_unknown_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {"scripts": ["typo.py"]},
+                "y.csv": {"scripts": ["a.py"]},
+            }
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_unresolvable_declaration_does_not_fall_back_to_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {
+                    "scripts": ["typo.py"],
+                    "sources": [{"source": "built by a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {})
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_check_script_provenance_records_missing_declarations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            files = {"x.csv": {"scripts": ["typo.py"]}}
+            provenance = MODULE.check_script_provenance(files, root)
+            self.assertEqual(provenance["missing"], {"x.csv": ["typo.py"]})
+            self.assertIsNotNone(MODULE.provenance_block_reason(provenance, False))
+            self.assertIsNone(MODULE.provenance_block_reason(provenance, True))
+
+    def test_latest_reachable_tag_returns_nearest_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            (root / "a.py").write_text("print('b')\n")
+            self._commit_all(root, "second")
+            subprocess.run(["git", "tag", "v1.1.0"], cwd=root, check=True)
+            self.assertEqual(MODULE.latest_reachable_tag(root), "v1.1.0")
+
+    def test_latest_reachable_tag_none_without_tags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            self.assertIsNone(MODULE.latest_reachable_tag(root))
+
+    def test_script_changed_since_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            self.assertFalse(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+            (root / "a.py").write_text("print('b')\n")
+            self._commit_all(root, "second")
+            self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+
+    def test_script_changed_since_tag_detects_staged_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "a.py"
+            script.write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            script.write_text("print('b')\n")
+            subprocess.run(["git", "add", "a.py"], cwd=root, check=True)
+            script.write_text("print('a')\n")
+            self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+
+    def test_check_script_provenance_missing_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            files = {"x.csv": {"sources": [{"source": "by a.py."}]}}
+            provenance = MODULE.check_script_provenance(files, root)
+            self.assertIsNone(provenance["tag"])
+            self.assertFalse(provenance["scripts"]["a.py"]["changed"])
+
+    def test_provenance_block_reason(self):
+        ok = {"tag": "v1.0.0", "scripts": {"a.py": {"changed": False}}, "files": {}}
+        self.assertIsNone(MODULE.provenance_block_reason(ok, False))
+        drifted = {"tag": "v1.0.0", "scripts": {"a.py": {"changed": True}}, "files": {}}
+        self.assertIsNotNone(MODULE.provenance_block_reason(drifted, False))
+        self.assertIsNone(MODULE.provenance_block_reason(drifted, True))
+        no_tag = {"tag": None, "scripts": {}, "files": {}}
+        self.assertIsNotNone(MODULE.provenance_block_reason(no_tag, True))
+
+    def test_release_section_blocks_without_tag(self):
+        args = mock.Mock()
+        args.deposition_id = None
+        args.allow_dirty = True
+        args.allow_script_drift = False
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+        session = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "core_a.csv").write_text("a")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "core_a.csv": {
+                        "version": "2026-08-11",
+                        "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    }
+                },
+            }
+            with self.assertRaises(SystemExit):
+                MODULE.release_section(
+                    args,
+                    session,
+                    "https://zenodo.org/api",
+                    "sandbox",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    root,
+                    {},
+                )
+
+    def test_description_includes_code_tag_and_scripts(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "sources": [{"source": "rebuilt by build_atb_data.py."}],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {"build_atb_data.py": {"changed": False}},
+            "files": {"costs.csv": ["build_atb_data.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("code tag <code>v1.2.0</code>", description)
+        self.assertIn("build_atb_data.py</code> @ <code>v1.2.0</code>", description)
+        self.assertNotIn("changed since tag", description)
+
+    def test_description_marks_changed_scripts(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "sources": [{"source": "rebuilt by build_atb_data.py."}],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {"build_atb_data.py": {"changed": True}},
+            "files": {"costs.csv": ["build_atb_data.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("changed since tag", description)
+        self.assertIn("have changed since", description)
+
+    def test_manifest_meta_hash_includes_provenance(self):
+        manifest = {"data_version": "2026.08.20", "files": {"a.csv": {"md5": "x"}}}
+        base = MODULE.manifest_meta_hash(
+            manifest, "", {"tag": "v1.0.0", "scripts": {}, "files": {}}
+        )
+        changed = MODULE.manifest_meta_hash(
+            manifest, "", {"tag": "v1.1.0", "scripts": {}, "files": {}}
+        )
+        self.assertNotEqual(base, changed)
+
+    def test_manifest_meta_hash_includes_declared_scripts(self):
+        provenance = {"tag": "v1.0.0", "scripts": {}, "files": {}}
+        before = MODULE.manifest_meta_hash(
+            {"data_version": "2026.08.20", "files": {"a.csv": {"md5": "x"}}},
+            "",
+            provenance,
+        )
+        after = MODULE.manifest_meta_hash(
+            {
+                "data_version": "2026.08.20",
+                "files": {"a.csv": {"md5": "x", "scripts": ["a.py"]}},
+            },
+            "",
+            provenance,
+        )
+        self.assertNotEqual(before, after)
+
+    def test_description_notes_unverified_script_paths(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "scripts": ["typo.py"],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {},
+            "files": {},
+            "missing": {"costs.csv": ["typo.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("not found in the repository", description)
+        self.assertIn("<code>typo.py</code>", description)
+
+    def test_parser_exposes_allow_script_drift(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(["--allow-script-drift"])
+        self.assertTrue(args.allow_script_drift)
+
+
 class ManifestEntryTests(unittest.TestCase):
     def test_real_profiles_manifest_has_six_files(self):
         import json as _json
@@ -422,9 +823,14 @@ class DryRunTests(unittest.TestCase):
             manifest_path = root / "data" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    MODULE.dry_run(_mkargs(manifest_path))
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    out = io.StringIO()
+                    with redirect_stdout(out):
+                        MODULE.dry_run(_mkargs(manifest_path))
             text = out.getvalue()
         self.assertIn("[core] PowerGenome Input Data", text)
         self.assertIn("ok      core_a.csv", text)
@@ -467,11 +873,16 @@ class CollectionFilterTests(unittest.TestCase):
                 json.dumps(profiles_manifest)
             )
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    MODULE.dry_run(
-                        _mkargs(root / "data" / "manifest.json", ["profiles"])
-                    )
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    out = io.StringIO()
+                    with redirect_stdout(out):
+                        MODULE.dry_run(
+                            _mkargs(root / "data" / "manifest.json", ["profiles"])
+                        )
             text = out.getvalue()
         self.assertNotIn("[core]", text)
         self.assertIn("[profiles] PowerGenome Renewable Resource Profiles", text)
@@ -559,17 +970,23 @@ class DepositionOverrideTests(unittest.TestCase):
                 },
             }
             with mock.patch.object(MODULE.time, "sleep"):
-                result = MODULE.release_section(
-                    args,
-                    session,
-                    "https://zenodo.org/api",
-                    "production",
-                    manifest,
-                    "core",
-                    manifest["files"],
-                    data_dir,
-                    state,
-                )
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    result = MODULE.release_section(
+                        args,
+                        session,
+                        "https://zenodo.org/api",
+                        "production",
+                        manifest,
+                        "core",
+                        manifest["files"],
+                        data_dir,
+                        root,
+                        state,
+                    )
         self.assertEqual(result["summary"]["deposition_id"], "22233228")
         # The resumed draft must be fetched (not a new version created), then
         # records search, draft files, upload, and metadata update follow.
