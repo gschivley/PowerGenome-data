@@ -334,6 +334,26 @@ def transform_reeds_data(reeds_df, eia_tech_df):
 
     transformed["technology"] = transformed.apply(get_technology, axis=1)
 
+    # Fill missing storage energy for batteries with 4-hour duration
+    battery_mask = transformed["technology"].str.contains(
+        "batter", case=False, na=False
+    )
+    missing_energy = battery_mask & transformed["capacity_mwh"].isna()
+    if missing_energy.any():
+        transformed.loc[missing_energy, "capacity_mwh"] = (
+            transformed.loc[missing_energy, "capacity_mw"] * 4
+        )
+
+    # Overwrite capacity_mwh for pumped hydro to 15.5 hour duration by default
+    # https://sandia.gov/ess-ssl/gesdb/public/statistics.html
+    pumped_hydro_mask = transformed["technology"].str.contains(
+        "pumped", case=False, na=False
+    )
+    if pumped_hydro_mask.any():
+        transformed.loc[pumped_hydro_mask, "capacity_mwh"] = (
+            transformed.loc[pumped_hydro_mask, "capacity_mw"] * 15.5
+        )
+
     # Reorder columns and drop helper columns
     output_columns = [
         "technology",
@@ -517,12 +537,12 @@ def main():
     all_checks_passed = perform_data_quality_checks(transformed_df)
 
     # Export generators
-    output_file = "reeds_generators_transformed.csv"
+    output_file = "data/reeds_generators_transformed.csv"
     transformed_df.to_csv(output_file, index=False)
     print(f"\n✓ Exported {len(transformed_df):,} rows to {output_file}")
 
     # Export plant-region mapping
-    region_map_file = "plant_region_map.csv"
+    region_map_file = "data/plant_region_map.csv"
     plant_region_map.to_csv(region_map_file, index=False)
     print(
         f"✓ Exported {len(plant_region_map):,} plant-region mappings to {region_map_file}"
