@@ -160,6 +160,13 @@ never bumps another deposit's release version. Files are uploaded with their pla
 filenames can never collide across collections. Collections with no files are skipped, so a deposit
 is only created once a collection actually has data.
 
+Alongside the data files, each deposit includes its own `manifest.json`. Provenance therefore
+travels with the download: anyone who fetches a deposit can see the per-file `version`, `license`
+and upstream `sources` without cloning this repo. PowerGenome's `download_zenodo` CLI reads that
+copy (falling back to this repo when a deposit predates it) and records it locally, so a model run
+can report which data versions it used. The manifest is not part of the manifest's own file list,
+so it never appears in release diffs or tracked release state.
+
 Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
 `license`, `history`).
 
