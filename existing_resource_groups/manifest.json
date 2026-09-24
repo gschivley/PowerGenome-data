@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.08.31",
+  "data_version": "2026.09.24",
   "files": {
     "existing_hydro_reeds_ba_metadata.csv": {
       "history": [],
@@ -86,28 +86,40 @@
       "version": "2026-08-31"
     },
     "hydro_conventional_2007_2013.parquet": {
-      "history": [],
-      "last_updated": "2026-08-31",
+      "history": [
+        {
+          "last_updated": "2026-08-31",
+          "md5": "a1a3d2ce5507293f8f7d0917e7d07877",
+          "version": "2026-08-31"
+        }
+      ],
+      "last_updated": "2026-09-24",
       "license": "cc-by-4.0",
-      "md5": "a1a3d2ce5507293f8f7d0917e7d07877",
+      "md5": "b14d026d1b4ec6cd51eec21c009cabd7",
       "sources": [
         {
           "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
         }
       ],
-      "version": "2026-08-31"
+      "version": "2026-09-24"
     },
     "hydro_run_of_river_2007_2013.parquet": {
-      "history": [],
-      "last_updated": "2026-08-31",
+      "history": [
+        {
+          "last_updated": "2026-08-31",
+          "md5": "31afc0f401c76b47ba02a994fc9f24ec",
+          "version": "2026-08-31"
+        }
+      ],
+      "last_updated": "2026-09-24",
       "license": "cc-by-4.0",
-      "md5": "31afc0f401c76b47ba02a994fc9f24ec",
+      "md5": "bfb8dac7611c08666be6afa136619641",
       "sources": [
         {
           "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
         }
       ],
-      "version": "2026-08-31"
+      "version": "2026-09-24"
     },
     "regional_hydro_True.json": {
       "history": [],
@@ -170,6 +182,6 @@
       "version": "2026-08-31"
     }
   },
-  "generated_at_utc": "2026-08-31T00:00:00+00:00",
+  "generated_at_utc": "2026-09-24T18:20:58.146072+00:00",
   "manifest_version": 1
 }
