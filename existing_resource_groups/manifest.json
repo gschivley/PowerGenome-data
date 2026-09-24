@@ -98,7 +98,7 @@
       "md5": "b14d026d1b4ec6cd51eec21c009cabd7",
       "sources": [
         {
-          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
+          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
         }
       ],
       "version": "2026-09-24"
@@ -116,7 +116,7 @@
       "md5": "bfb8dac7611c08666be6afa136619641",
       "sources": [
         {
-          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, based on monthly generation within each balancing area by resources categorized by ReEDS hydro technology (see transform_reeds_generators.py), interpolated to hourly and smoothed."
+          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
         }
       ],
       "version": "2026-09-24"

@@ -9,11 +9,10 @@ This script:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import duckdb
-import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -39,7 +38,6 @@ PUDL_S3_SETTINGS = [
 PUDL_PARQUET_URL = "s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
 START_YEAR = 2007
 END_YEAR = 2013
-HOURS_PER_YEAR = 8760
 HOURS_PER_WEEK = 168
 
 # Hydro generator types to include
@@ -47,6 +45,20 @@ HYDRO_TYPES = {
     "run_of_river": "Run of River Hydroelectric",
     "conventional": "Conventional Hydroelectric",
 }
+
+
+def hours_in_month(report_date) -> float:
+    """Number of real calendar hours in the month of ``report_date``.
+
+    December must return 744/736 hours like any other month. The original
+    inline lambda built December's "next month" as Jan 1 of the *same* year,
+    producing a negative divisor that flipped the capacity factor's sign and
+    zeroed out every December after the 0-1 clip.
+    """
+    ts = pd.Timestamp(report_date)
+    month_start = pd.Timestamp(ts.year, ts.month, 1)
+    next_month_start = month_start + pd.DateOffset(months=1)
+    return (next_month_start - month_start).total_seconds() / 3600
 
 
 def load_plant_region_data() -> pd.DataFrame:
@@ -87,21 +99,33 @@ def merge_plant_region_hydro_data() -> pd.DataFrame:
     return merged[["plant_id", "region", "hydro_type"]].drop_duplicates()
 
 
-def query_pudl_monthly_capacity_factors() -> pd.DataFrame:
+def query_pudl_monthly_capacity_factors(
+    parquet_url: str = PUDL_PARQUET_URL,
+    s3_settings: list[str] | None = None,
+) -> pd.DataFrame:
     """
     Query PUDL EIA monthly generators data to calculate regional monthly capacity factors.
+
+    Args:
+        parquet_url: Location of the PUDL monthly generators parquet. Defaults
+            to the public S3 nightly path; tests pass a local file.
+        s3_settings: DuckDB statements to run before the query (httpfs setup
+            for S3). ``None`` uses ``PUDL_S3_SETTINGS``; an empty list skips
+            them for local files.
 
     Returns:
         DataFrame with columns: region, hydro_type, report_date, capacity_factor
     """
-    logger.info(f"Querying PUDL parquet from S3 for {START_YEAR}-{END_YEAR}...")
+    if s3_settings is None:
+        s3_settings = PUDL_S3_SETTINGS
+    logger.info(f"Querying PUDL parquet from {parquet_url} for {START_YEAR}-{END_YEAR}...")
 
     # Get plant-region mappings
     plant_hydro_map = merge_plant_region_hydro_data()
 
     # Use DuckDB to query parquet with filtering
     conn = duckdb.connect()
-    for setting in PUDL_S3_SETTINGS:
+    for setting in s3_settings:
         conn.execute(setting)
 
     # Read PUDL data and join with region mapping in DuckDB.
@@ -121,7 +145,7 @@ def query_pudl_monthly_capacity_factors() -> pd.DataFrame:
             pg.net_generation_mwh,
             pg.capacity_mw
         FROM 
-            read_parquet('{PUDL_PARQUET_URL}') pg
+            read_parquet('{parquet_url}') pg
         WHERE 
             EXTRACT(YEAR FROM pg.report_date) >= {START_YEAR}
             AND EXTRACT(YEAR FROM pg.report_date) <= {END_YEAR}
@@ -147,20 +171,10 @@ def query_pudl_monthly_capacity_factors() -> pd.DataFrame:
         .reset_index()
     )
 
-    # Capacity factor = monthly generation / (capacity * hours in month)
-    # Compute the actual hours in each calendar month. The previous
-    # implementation constructed the "next month" for December as
-    # pd.Timestamp(x.year, 1, 1), which is in the *same* year and therefore
-    # precedes December 1, producing a negative hour count. A negative
-    # divisor flips the sign of the capacity factor so that virtually every
-    # site clipped to zero for December, which is the December
-    # "missing-data" gap seen across all weather years.
-    def _hours_in_month(report_date: pd.Timestamp) -> float:
-        month_start = pd.Timestamp(report_date.year, report_date.month, 1)
-        next_month_start = month_start + pd.DateOffset(months=1)
-        return (next_month_start - month_start).total_seconds() / 3600
-
-    monthly_cf["hours_in_month"] = monthly_cf["report_date"].apply(_hours_in_month)
+    # Capacity factor = monthly generation / (capacity * hours in month),
+    # using true calendar-month hours (see hours_in_month for the December
+    # regression this guards against).
+    monthly_cf["hours_in_month"] = monthly_cf["report_date"].apply(hours_in_month)
 
     monthly_cf["capacity_factor"] = (
         monthly_cf["net_generation_mwh"]
@@ -227,6 +241,12 @@ def interpolate_monthly_to_hourly(
         # Get capacity factor for this month
         month_cf = region_data[region_data["report_date"] == month_start]
         if len(month_cf) == 0:
+            # Dropping the month silently would shift every later hour onto
+            # the wrong time_index, so make the gap visible in the logs.
+            logger.warning(
+                f"{region}/{hydro_type}: no capacity factor for "
+                f"{month_start:%Y-%m}; skipping month"
+            )
             continue
 
         cf_value = month_cf["capacity_factor"].values[0]

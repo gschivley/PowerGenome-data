@@ -14,6 +14,8 @@ Generation profiles for existing wind and solar resources were generated with NR
 
 Monthly capacity factors are derived from PUDL `out_eia__monthly_generators.parquet`. Only generators with `prime_mover_code = 'HY'` are used (pumped-storage `'PS'` and co-located thermal generators are excluded, since they report negative or non-hydro net generation that would corrupt the hydro profile). The hours-in-month divisor is computed as the true calendar-month length, so December (and every month) gets a valid non-zero capacity factor.
 
+Because the profiles are built from the PUDL `nightly` parquet, the exact numbers depend on the snapshot fetched at build time; the 2026.09.24 profiles were built from the nightly available on 2026-09-24.
+
 All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
 ## Files
