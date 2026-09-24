@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 # URLs for ReEDS shapefiles
 SHAPEFILE_BASE_URL = (
-    "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/shapefiles/US_PCA"
+    "https://github.com/ReEDS-Model/ReEDS/raw/main/inputs/shapefiles/US_PCA"
 )
 SHAPEFILE_FILES = ["US_PCA.shp", "US_PCA.shx", "US_PCA.dbf", "US_PCA.prj"]
 
