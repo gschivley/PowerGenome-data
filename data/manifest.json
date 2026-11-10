@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.09.03",
+  "data_version": "2026.11.04",
   "files": {
     "cpi_data.csv": {
       "history": [],
@@ -15,10 +15,16 @@
       "version": "2026-08-11"
     },
     "distributed_capacity.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "d8c206063044ea93edb80e8cae100357",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-04",
       "license": "cc-by-4.0",
-      "md5": "d8c206063044ea93edb80e8cae100357",
+      "md5": "79ff66e2c4149ac910ad702b866c217c",
       "sources": [
         {
           "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
@@ -29,20 +35,26 @@
           "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-04"
     },
     "distributed_profiles.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "license": "cc-by-4.0",
-      "md5": "39a54bb4fc2bf42287d66ceadb90714f",
-      "sources": [
+      "history": [
         {
-          "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
-          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
+          "last_updated": "2026-08-11",
+          "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+          "version": "2026-08-11"
         }
       ],
-      "version": "2026-08-11"
+      "last_updated": "2026-11-04",
+      "license": "cc-by-4.0",
+      "md5": "d1c77cb1261a4e5441c5ea4779bfc5a0",
+      "sources": [
+        {
+          "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py. UTC-aware hourly labels assume the source UTC-06:00 clock; legacy BA regional timing is unverified. Shift +6 independently per weather year; retain Feb 29 and omit Dec 31 in leap years. ZSTD level 3.",
+          "source_url": "https://media.githubusercontent.com/media/NatLabRockies/ReEDS-2.0/v2025.1.0/inputs/variability/multi_year/distpv-reference_ba.h5"
+        }
+      ],
+      "version": "2026-11-04"
     },
     "dollar_year_adjustment.csv": {
       "history": [],
@@ -231,6 +243,6 @@
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-09-03T05:06:38.637308+00:00",
+  "generated_at_utc": "2026-11-04T20:00:11.880878+00:00",
   "manifest_version": 1
 }

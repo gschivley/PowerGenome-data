@@ -3,7 +3,10 @@ Build distributed generation inputs for PowerGenome.
 
 Creates two tables:
 1. distributed_capacity: region, capacity_mw, year
-2. distributed_profiles: region, weather_year, value
+2. distributed_profiles: time_index, region, weather_year, value, datetime_utc
+
+UTC timestamps follow the source's offset labels, not a verified physical clock.
+Legacy ReEDS BA distributed-PV profiles have an unresolved regional timing anomaly.
 
 Supports inputs from either a local directory or directly from the
 NREL ReEDS GitHub repository (raw URLs under inputs/).
@@ -17,6 +20,7 @@ https://github.com/NREL/ReEDS-2.0/discussions/227#discussioncomment-13069190
 import argparse
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Union
 
@@ -28,6 +32,10 @@ INPUTS_DIR = Path(__file__).parent.parent
 
 # Base URL for ReEDS inputs on GitHub (raw content)
 GITHUB_INPUTS_BASE = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs"
+DISTPV_PROFILES_URL = (
+    "https://media.githubusercontent.com/media/NatLabRockies/ReEDS-2.0/"
+    "v2025.1.0/inputs/variability/multi_year/distpv-reference_ba.h5"
+)
 
 
 def is_url(path: Union[str, Path]) -> bool:
@@ -116,10 +124,15 @@ def build_distributed_capacity(
 def build_distributed_profiles(
     generation_profiles_path: Union[str, Path],
 ) -> pd.DataFrame:
-    """
-    Build distributed profiles table with columns: time_index, region, weather_year, value.
+    """Build capacity-factor profiles with timezone-aware ``datetime_utc`` labels.
 
-    Profiles represent capacity factors (0-1) without any conversion.
+    Convert each 8760-hour weather year independently using a cyclic shift based
+    on the source's fixed UTC offset. Preserve the source calendar (including
+    Feb 29 and excluding Dec 31 in leap years) and the legacy 0-based time_index
+    spanning all weather years. Naive or non-fixed-offset clocks are rejected.
+
+    The legacy BA source has a regional timing anomaly: these UTC labels encode
+    the source-offset assumption, not a verified physical clock correction.
     """
     # Defer heavy imports so script can run without them if skipping profiles
     import h5py
@@ -134,49 +147,69 @@ def build_distributed_profiles(
         tmp_file = _download_to_temp(url)
         h5_path = tmp_file
 
-    with h5py.File(str(h5_path), "r") as f:
-        generation_profiles = pd.DataFrame(
-            f["data"][:],
-            columns=[x.decode("utf-8") for x in f["columns"][:]],
-            index=pd.to_datetime([x.decode("utf-8") for x in f["index_0"][:]]),
-        )
-        # Filter to years <= 2013
-        generation_profiles = generation_profiles.loc[
-            generation_profiles.index.year <= 2013, :
-        ]
-    # Clean up temp file if used
-    if tmp_file is not None and os.path.exists(tmp_file):
-        # Keep the file until we finish using 'generation_profiles'
-        pass
+    try:
+        with h5py.File(str(h5_path), "r") as f:
+            timestamps = [
+                datetime.fromisoformat(x.decode("utf-8")) for x in f["index_0"][:]
+            ]
+            offsets = {timestamp.utcoffset() for timestamp in timestamps}
+            if None in offsets:
+                raise ValueError(
+                    "Distributed profiles require a timezone-aware source index."
+                )
+            if len(offsets) > 1 or any(
+                offset.total_seconds() % 3600 for offset in offsets
+            ):
+                raise ValueError(
+                    "Distributed profiles require a fixed, whole-hour UTC offset."
+                )
+            generation_profiles = pd.DataFrame(
+                f["data"][:],
+                columns=[x.decode("utf-8") for x in f["columns"][:]],
+                index=pd.DatetimeIndex(timestamps),
+            )
+    finally:
+        if tmp_file is not None:
+            os.remove(tmp_file)
 
-    # Adjust for UTC offset (assume 0 if index is tz-naive)
-    if (
-        generation_profiles.index.tz is not None
-        and generation_profiles.index[0].utcoffset() is not None
-    ):
-        utc_offset_hours = int(
-            generation_profiles.index[0].utcoffset().total_seconds() / 3600
-        )
-    else:
-        utc_offset_hours = 0
+    generation_profiles = generation_profiles.loc[
+        generation_profiles.index.year <= 2013, :
+    ]
+    index = generation_profiles.index
+    if index.empty:
+        raise ValueError("No distributed profiles found for weather years <= 2013.")
+    utc_offset_hours = int(next(iter(offsets)).total_seconds() / 3600)
 
-    # Build tidy dataframe
+    shifted_years = []
+    for year, profiles in generation_profiles.groupby(index.year, sort=True):
+        expected = pd.date_range(f"{year}-01-01", periods=8760, freq="h")
+        if not profiles.index.tz_localize(None).equals(expected):
+            raise ValueError(
+                f"Weather year {year} must contain 8760 consecutive hours from Jan 1."
+            )
+        # Rebase onto the same UTC weather-year grid; wrap only within this year.
+        shifted_years.append(
+            pd.DataFrame(
+                np.roll(profiles.to_numpy(), -utc_offset_hours, axis=0),
+                index=expected.tz_localize("UTC"),
+                columns=profiles.columns,
+            )
+        )
+    generation_profiles = pd.concat(shifted_years)
+
     df_list = []
     for region in tqdm(generation_profiles.columns, desc="Processing regions"):
-        # Get the generation profile for the region (roll to adjust UTC offset)
-        gen_profile = np.roll(generation_profiles[region].values, -utc_offset_hours)
-
-        # Create dataframe with weather_year
-        _df = pd.DataFrame(
-            {
-                "time_index": range(len(gen_profile)),
-                "region": region,
-                "weather_year": generation_profiles.index.year,
-                "value": gen_profile,
-            }
+        df_list.append(
+            pd.DataFrame(
+                {
+                    "time_index": range(len(generation_profiles)),
+                    "region": region,
+                    "weather_year": generation_profiles.index.year,
+                    "value": generation_profiles[region].to_numpy(),
+                    "datetime_utc": generation_profiles.index,
+                }
+            )
         )
-
-        df_list.append(_df)
 
     distributed_profiles = pd.concat(df_list, ignore_index=True)
     distributed_profiles["region"] = distributed_profiles["region"].astype("category")
@@ -185,14 +218,9 @@ def build_distributed_profiles(
     )
     distributed_profiles["value"] = distributed_profiles["value"].astype("float32")
 
-    # Remove temp file if created
-    if tmp_file is not None and os.path.exists(tmp_file):
-        try:
-            os.remove(tmp_file)
-        except OSError:
-            pass
-
-    return distributed_profiles[["time_index", "region", "weather_year", "value"]]
+    return distributed_profiles[
+        ["time_index", "region", "weather_year", "value", "datetime_utc"]
+    ]
 
 
 def main():
@@ -211,6 +239,11 @@ def main():
         default=1.1,
         help="Inverter loading ratio to convert DC to AC (default: 1.1)",
     )
+    parser.add_argument(
+        "--profiles-path",
+        default=DISTPV_PROFILES_URL,
+        help="Local HDF5 path or URL (default: pinned ReEDS v2025.1.0 BA profiles)",
+    )
     args = parser.parse_args()
 
     ilr = args.ilr  # Inverter Loading Ratio
@@ -228,7 +261,9 @@ def main():
 
     # Save distributed capacity
     output_capacity_path = "distributed_capacity.parquet"
-    distributed_capacity.to_parquet(output_capacity_path, index=False)
+    distributed_capacity.to_parquet(
+        output_capacity_path, index=False, compression="zstd", compression_level=3
+    )
     print(f"Saved distributed capacity to {output_capacity_path}")
     print(f"  Shape: {distributed_capacity.shape}")
     print(f"  Columns: {list(distributed_capacity.columns)}")
@@ -239,14 +274,14 @@ def main():
         print("Skipping distributed profiles as requested (--skip-profiles).")
     else:
         print("Building distributed profiles table...")
-        # Use the GitHub /raw URL to ensure LFS-backed binaries are served
-        distpv_h5_url = "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
         distributed_profiles = build_distributed_profiles(
-            generation_profiles_path=distpv_h5_url,
+            generation_profiles_path=args.profiles_path,
         )
         # Save distributed profiles
         output_profiles_path = "distributed_profiles.parquet"
-        distributed_profiles.to_parquet(output_profiles_path, index=False)
+        distributed_profiles.to_parquet(
+            output_profiles_path, index=False, compression="zstd", compression_level=3
+        )
         print(f"Saved distributed profiles to {output_profiles_path}")
         print(f"  Shape: {distributed_profiles.shape}")
         print(f"  Columns: {list(distributed_profiles.columns)}")
