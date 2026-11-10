@@ -183,12 +183,16 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "reeds_load_transformed.parquet": [
         {
             "source": (
-                "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered "
-                "to weather years 2007-2013 and model years 2020-2050 by "
-                "transform_reeds_load.py."
+                "ReEDS v2025.7.0 hourly load HDF5 (EER_IRAlow_load_hourly.h5, "
+                "LFS SHA256 5af50c3cf48b4262a0a376698178fec55852af3d7c6c0faf735296cac62477b8), "
+                "filtered to weather years 2007-2013 and model years 2020-2050 by "
+                "transform_reeds_load.py. Fixed UTC-06:00 values cyclically rolled +6 hours "
+                "per annual region/scenario group to UTC; timezone-aware datetime_utc "
+                "alongside 1-based time_index. 8760-hour calendar retains Feb 29 and "
+                "omits Dec 31 in leap years. Parquet ZSTD level 3."
             ),
             "source_url": (
-                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/"
+                "https://github.com/NatLabRockies/ReEDS-2.0/blob/v2025.7.0/inputs/load/"
                 "EER_IRAlow_load_hourly.h5"
             ),
         },
