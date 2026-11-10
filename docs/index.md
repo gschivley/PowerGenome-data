@@ -14,7 +14,7 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | --- | --- | --- | --- |
 | `transform_reeds_generators.py` | `data/reeds_generators_transformed.csv`, `data/plant_region_map.csv` | ReEDS generator database CSV from NREL GitHub; PUDL yearly generators parquet (`out_eia__yearly_generators.parquet`); ReEDS `county2zone.csv` | Cleans generator tech names (handles run-of-river), filters retired units, computes capacities, builds plant→region map. |
 | `build_hydro_profiles.py` | `existing_resource_groups/hydro_run_of_river_2007_2013.parquet`, `existing_resource_groups/hydro_conventional_2007_2013.parquet` | `data/plant_region_map.csv`, `data/reeds_generators_transformed.csv`; PUDL monthly generators parquet (`s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet`) | Derives monthly capacity factors per region/type, interpolates to hourly, smooths with a 1-week window. |
-| `transform_reeds_load.py` | `reeds_load_transformed.parquet` | ReEDS hourly load HDF5 (`inputs/load/EER_IRAlow_load_hourly.h5` from ReEDS GitHub, LFS-backed) | Downloads HDF5 (with LFS handling), filters weather years 2007–2013 and model years 2020–2050, melts to tidy hourly load with time_index. |
+| `transform_reeds_load.py` | `data/reeds_load_transformed.parquet` | ReEDS v2025.7.0 hourly load HDF5 (`inputs/load/EER_IRAlow_load_hourly.h5`, LFS-backed) | Filters weather years 2007–2013 and model years 2020–2050; converts fixed UTC−06:00 load to cyclic UTC hours; retains `time_index`, adds timezone-aware `datetime_utc`, and writes ZSTD level 3 Parquet. |
 | `build_new_pg_dg_inputs.py` | `distributed_capacity.parquet`, `distributed_profiles.parquet` | ReEDS `dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv`; ReEDS `county2zone.csv`; optional distpv HDF5 (`variability/multi_year/distpv-reference_ba.h5` from ReEDS GitHub raw) | Capacity is aggregated county→BA and converted from DC to AC (ILR=1.1). Profiles download can be skipped via `--skip-profiles` to avoid the large HDF5. |
 | `extract_location_variation.py` | `data/eia_location_variation_raw.csv`, `data/regional_cost_multipliers.csv`, `data/reeds_region_technology_location_variation_pivot.csv` | EIA capital cost PDF (`cache_data/capital_cost_AEO2025.pdf`); region→city map (`cache_data/reeds_region_to_eia_city.csv` from `match_reeds_regions_to_cities.py`) | Reads tables 1-1–1-19, maps EIA technologies to PowerGenome techs, merges with regions, and pivots to region×technology multipliers. |
 | `match_reeds_regions_to_cities.py` | `cache_data/reeds_region_to_eia_city.csv` (and `cache_data/geocoded_cities.json` cache) | Same EIA PDF (table 1-1); ReEDS US_PCA shapefile from NREL GitHub | Geocodes PDF cities, downloads shapefiles, then matches each ReEDS region to a city (within-region or nearest). Feeds location-variation extraction. |
@@ -42,6 +42,62 @@ uv run python build_atb_data.py            # rebuild ATB costs + heat rates (202
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
+
+## ReEDS hourly time convention
+
+ReEDS load uses fixed UTC−06:00 (no daylight saving). The load builder rolls
+values **forward six hours independently within each model year, weather year,
+region and scenario**, preserving annual energy. The first six UTC hours wrap
+from the end of the same weather year, rather than borrowing another year's
+values. `time_index` remains 1–8760; `datetime_utc` is a timezone-aware UTC
+interval-start timestamp with index 1 at January 1 00:00 UTC. The ReEDS calendar
+retains February 29 and omits December 31 in leap years. These timestamps describe
+the cyclic model calendar, not a continuous chronology across weather years.
+Timezone, calendar, source and boundary policy are also stored in Parquet schema
+metadata. Output uses lossless ZSTD compression at level 3.
+
+To correct a **legacy, unshifted** load file without downloading the source:
+
+```bash
+uv run python transform_reeds_load.py --migrate-existing
+# Optional: --output path/to/reeds_load_transformed.parquet
+```
+
+Migration streams complete annual groups and atomically replaces the file only
+on success. It requires sorted annual groups with the full 1–8760 grid and refuses
+files already containing `datetime_utc`. Do not migrate files previously shifted
+by hand: the absence of the timestamp column cannot prove that values are still
+unshifted. Remove any six-hour load-only workaround when adopting the corrected
+file. Downstream `utc_offset` settings for converting all UTC inputs to a model's
+local timezone remain separate.
+
+### Post-generation load timing diagnostic
+
+Generation and CLI migration automatically run a warning-only diagnostic on four
+representative ReEDS BAs: p131 (Massachusetts), p81 (Illinois), p33 (Colorado),
+and p10 (California). To check an existing output without modifying it:
+
+```bash
+uv run python transform_reeds_load.py --diagnose-only
+# Optional: --output path/to/reeds_load_transformed.parquet
+```
+
+The diagnostic selects the available model/weather pair nearest 2025/2012,
+checks each scenario separately, and prints winter/summer weekday average daily
+peak and minimum hours in UTC and fixed local standard time (no DST). It warns
+about missing BAs, malformed annual UTC grids, nonfinite/negative loads,
+insufficient hourly coverage, near-flat daily shapes (range ≤1% of mean), peaks
+outside 12:00–22:00 standard time, or minima outside 00:00–08:00. These broad
+heuristics prompt inspection rather than rejecting the generated data. They do
+not require strict east-to-west peak ordering: climate and demand composition
+also affect timing. Only one model/weather pair is sampled; this is not a full
+dataset validation or proof of UTC alignment. Exact source-offset/calendar tests
+remain authoritative. A uniform shift can preserve relative BA timing and may
+still fall within the heuristic windows.
+
+Distributed PV's timezone conversion and timestamp/compression update are being
+handled separately. Wind/solar reV profiles and synthesized hydro are not ReEDS
+hourly imports; this change does not infer timezone labels for those datasets.
 
 ## Data files not regenerated here
 

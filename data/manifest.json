@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.09.03",
+  "data_version": "2026.11.04",
   "files": {
     "cpi_data.csv": {
       "history": [],
@@ -137,17 +137,23 @@
       "version": "2026-08-11"
     },
     "reeds_load_transformed.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "license": "cc-by-4.0",
-      "md5": "2a6c49b1cd3ea175b776ce853f06485e",
-      "sources": [
+      "history": [
         {
-          "source": "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.",
-          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5"
+          "last_updated": "2026-08-11",
+          "md5": "2a6c49b1cd3ea175b776ce853f06485e",
+          "version": "2026-08-11"
         }
       ],
-      "version": "2026-08-11"
+      "last_updated": "2026-11-04",
+      "license": "cc-by-4.0",
+      "md5": "283d3eeea526cfa21bfbac3866cb96e5",
+      "sources": [
+        {
+          "source": "ReEDS v2025.7.0 hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS SHA256 5af50c3cf48b4262a0a376698178fec55852af3d7c6c0faf735296cac62477b8), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py. Fixed UTC-06:00 values cyclically rolled +6 hours per annual region/scenario group to UTC; timezone-aware datetime_utc alongside 1-based time_index. 8760-hour calendar retains Feb 29 and omits Dec 31 in leap years. Parquet ZSTD level 3.",
+          "source_url": "https://github.com/NatLabRockies/ReEDS-2.0/blob/v2025.7.0/inputs/load/EER_IRAlow_load_hourly.h5"
+        }
+      ],
+      "version": "2026-11-04"
     },
     "regional_cost_multipliers.csv": {
       "history": [],
@@ -231,6 +237,6 @@
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-09-03T05:06:38.637308+00:00",
+  "generated_at_utc": "2026-11-04T18:49:36.639779+00:00",
   "manifest_version": 1
 }
