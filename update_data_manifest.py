@@ -93,11 +93,15 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "ReEDS distributed PV generation profiles (multi-year "
-                "distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py."
+                "distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py. "
+                "UTC-aware hourly labels assume the source UTC-06:00 clock; "
+                "legacy BA regional timing is unverified. Shift +6 independently "
+                "per weather year; retain Feb 29 and omit Dec 31 in leap years. "
+                "ZSTD level 3."
             ),
             "source_url": (
-                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/"
-                "distpv-reference_ba.h5"
+                "https://media.githubusercontent.com/media/NatLabRockies/ReEDS-2.0/"
+                "v2025.1.0/inputs/variability/multi_year/distpv-reference_ba.h5"
             ),
         },
     ],

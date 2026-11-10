@@ -15,7 +15,7 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | `transform_reeds_generators.py` | `data/reeds_generators_transformed.csv`, `data/plant_region_map.csv` | ReEDS generator database CSV from NREL GitHub; PUDL yearly generators parquet (`out_eia__yearly_generators.parquet`); ReEDS `county2zone.csv` | Cleans generator tech names (handles run-of-river), filters retired units, computes capacities, builds plant→region map. |
 | `build_hydro_profiles.py` | `existing_resource_groups/hydro_run_of_river_2007_2013.parquet`, `existing_resource_groups/hydro_conventional_2007_2013.parquet` | `data/plant_region_map.csv`, `data/reeds_generators_transformed.csv`; PUDL monthly generators parquet (`s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet`) | Derives monthly capacity factors per region/type, interpolates to hourly, smooths with a 1-week window. |
 | `transform_reeds_load.py` | `reeds_load_transformed.parquet` | ReEDS hourly load HDF5 (`inputs/load/EER_IRAlow_load_hourly.h5` from ReEDS GitHub, LFS-backed) | Downloads HDF5 (with LFS handling), filters weather years 2007–2013 and model years 2020–2050, melts to tidy hourly load with time_index. |
-| `build_new_pg_dg_inputs.py` | `distributed_capacity.parquet`, `distributed_profiles.parquet` | ReEDS `dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv`; ReEDS `county2zone.csv`; optional distpv HDF5 (`variability/multi_year/distpv-reference_ba.h5` from ReEDS GitHub raw) | Capacity is aggregated county→BA and converted from DC to AC (ILR=1.1). Profiles download can be skipped via `--skip-profiles` to avoid the large HDF5. |
+| `build_new_pg_dg_inputs.py` | `distributed_capacity.parquet`, `distributed_profiles.parquet` | ReEDS `dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv`; ReEDS `county2zone.csv`; distpv HDF5 pinned to ReEDS v2025.1.0 (or `--profiles-path` local path/URL) | Capacity is aggregated county→BA and converted from DC to AC (ILR=1.1). Both outputs use ZSTD level 3. Profiles have UTC-aware timestamps under an **unverified source-clock assumption** (see below); `--skip-profiles` avoids the download. |
 | `extract_location_variation.py` | `data/eia_location_variation_raw.csv`, `data/regional_cost_multipliers.csv`, `data/reeds_region_technology_location_variation_pivot.csv` | EIA capital cost PDF (`cache_data/capital_cost_AEO2025.pdf`); region→city map (`cache_data/reeds_region_to_eia_city.csv` from `match_reeds_regions_to_cities.py`) | Reads tables 1-1–1-19, maps EIA technologies to PowerGenome techs, merges with regions, and pivots to region×technology multipliers. |
 | `match_reeds_regions_to_cities.py` | `cache_data/reeds_region_to_eia_city.csv` (and `cache_data/geocoded_cities.json` cache) | Same EIA PDF (table 1-1); ReEDS US_PCA shapefile from NREL GitHub | Geocodes PDF cities, downloads shapefiles, then matches each ReEDS region to a city (within-region or nearest). Feeds location-variation extraction. |
 | `merge_transmission_capacity.py` | `data/transmission_capacity_reeds.csv` | ReEDS AC and non-AC transmission CSVs from NREL GitHub | Downloads and caches the raw files, averages forward/reverse AC MW, sums AC+non-AC per region pair, keeps notes. |
@@ -42,6 +42,76 @@ uv run python build_atb_data.py            # rebuild ATB costs + heat rates (202
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
+
+## Distributed PV clock audit and hourly calendar
+
+The distributed PV timing concern reported for [release 22233228](https://zenodo.org/records/22233228)
+is confirmed: its 8,216,880 profile values exactly equal the historical ReEDS
+`distpv-reference_ba.h5` values after the original uniform +6-hour cyclic shift.
+The source itself has nearly longitude-independent solar timing. PowerGenome's
+uniform shift cannot cause that loss of east–west timing differences.
+
+For a reproducible check, take each region's 2010 hourly profile, compute the
+capacity-factor-weighted circular mean hour (the angle of the sum of capacity
+factor times the unit phasor for each hour), and regress that hour against
+longitude-derived UTC solar noon (`12 - longitude / 15`). Comparing each profile
+with its own source-hour labels gives:
+
+| Source | Locations | Slope against solar noon (expected about 1 for a common clock) |
+| --- | ---: | ---: |
+| Legacy ReEDS v2025.1.0 BA distributed PV | 134 BAs | 0.06465 |
+| Newer county distributed PV, Zenodo 18636038 | 3,109 counties | 1.00947 |
+
+The legacy source's index says UTC−06:00, but its values behave like
+region-local/noon-aligned profiles under that common label. This establishes an
+**upstream data/clock inconsistency**, not the exact original generation error.
+Local standard time is a plausible explanation, not a proven correction; the
+newer county file differs in vintage, years, and values, so its correct clock
+does not establish that county-to-BA aggregation caused the legacy problem.
+The utility-solar comparison in the report uses a different dataset; these
+numbers do not independently reproduce its 0.74 slope.
+
+Source fingerprints and references:
+
+- [Legacy BA HDF5, ReEDS v2025.1.0](https://media.githubusercontent.com/media/NatLabRockies/ReEDS-2.0/v2025.1.0/inputs/variability/multi_year/distpv-reference_ba.h5):
+  MD5 `f4584570629db292e725ecbf34da94ea`. The former `main` URL no longer
+  contains this file; the builder now pins the historical version.
+- [County profiles, Zenodo 18636038](https://zenodo.org/records/18636038):
+  MD5 `39be391056bd6b04afcaeed237c2dcf2`. Its documentation explicitly specifies
+  UTC−06:00, instantaneous on-hour observations, and dropping Dec 31 in leap
+  years. These newer profiles are **not** substituted into the legacy dataset.
+
+`distributed_profiles.parquet` now adds `datetime_utc` (`timestamp[ns, UTC]`).
+It records an hourly **label based on the source's offset assumption**; it does
+not certify physical UTC alignment or apply a speculative region-specific shift.
+For physically synchronized modeling, obtain upstream confirmation of the legacy
+clock or rebuild profiles from a verified common-clock source (with explicit
+capacity weighting and capacity-factor normalization).
+
+The DG builder and committed parquet use these explicit calendar conventions:
+
+- Each source weather year contains 8,760 consecutive hours starting Jan 1
+  00:00. Leap years **retain Feb 29 and omit Dec 31**; they end Dec 30 23:00.
+  This is not a calendar with Feb 29 removed.
+- Convert the source's fixed whole-hour offset to UTC by cyclically shifting
+  each weather year independently: +6 hours for the pinned UTC−06:00 source.
+  Relabel onto the same 8,760-hour grid beginning Jan 1 00:00 UTC. This is a
+  model-year cyclic conversion, not an uninterrupted absolute-time conversion
+  across source years; daylight saving time is not applied.
+- The first six UTC values come from the **same** weather year's last six
+  source hours. The previous global roll borrowed them from the preceding
+  retained year (wrapping 2013 to 2007). Only those first six values per
+  region/year can change; in the regenerated dataset, 526 of 8,216,880 values
+  differ (many wrapped nighttime values remain zero). Annual energy is now
+  preserved independently per year.
+- Preserve legacy DG `time_index`: zero-based `0..61319` across 2007–2013 for
+  every region (not reset each year). `weather_year` remains the source year,
+  agrees with `datetime_utc.year`, and each region has unique UTC labels.
+- Reject missing/duplicate/reordered calendar hours, timezone-naive input, and
+  fractional-hour or variable offsets instead of silently assuming a clock.
+- Both distributed-generation Parquet outputs use ZSTD level 3. Capacity values
+  are unchanged. Tests cover source-to-UTC value mapping, boundaries, leap years,
+  dtypes, timestamp round trips, and writer compression settings.
 
 ## Data files not regenerated here
 
