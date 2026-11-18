@@ -227,7 +227,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "technology_costs_atb.parquet": [
         {
             "source": (
-                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
                 "OEDI data lake (rebuilt by build_atb_data.py)"
             ),
             "source_url": (
@@ -237,7 +237,10 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         },
         {
             "source": (
-                "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs)"
+                "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs). "
+                "The 2025 utility-scale battery costs still come from the v1 workbook because "
+                "NREL has not published a v2 workbook (as of 2026-11-17); the v2 tidy data "
+                "leaves battery values unchanged."
             ),
             "source_url": "https://atb.nrel.gov/electricity/2025/data",
         },
@@ -245,7 +248,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "technology_heat_rates_nrelatb.csv": [
         {
             "source": (
-                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
                 "OEDI data lake (rebuilt by build_atb_data.py)"
             ),
             "source_url": (
