@@ -33,11 +33,11 @@ SHAPEFILE_FILES = ["US_PCA.shp", "US_PCA.shx", "US_PCA.dbf", "US_PCA.prj"]
 
 # PDF path
 PDF_PATH = Path(
-    "cache/capital_cost_AEO2025.pdf"
+    "cache_data/capital_cost_AEO2025.pdf"
 )  # https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf
 
 # Output path
-OUTPUT_PATH = Path("cache/reeds_region_to_eia_city.csv")
+OUTPUT_PATH = Path("cache_data/reeds_region_to_eia_city.csv")
 
 # Cache file for geocoded cities
 GEOCODE_CACHE_FILE = Path("cache_data/geocoded_cities.json")

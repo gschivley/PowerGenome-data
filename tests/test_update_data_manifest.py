@@ -32,6 +32,18 @@ class ManifestTests(unittest.TestCase):
         MODULE.update_manifest(data_dir, manifest_path, date_str)
         return json.loads(manifest_path.read_text())
 
+    def test_collection_readme_is_not_a_data_file(self):
+        # publish_zenodo.py renders README.md into the Zenodo description, so
+        # it must not be tracked (or versioned) as a data element.
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "README.md": "# Docs"})
+        first = self._run(data_dir, "2026-08-11")
+        self.assertNotIn("README.md", first["files"])
+
+        (data_dir / "README.md").write_text("# Docs, edited")
+        second = self._run(data_dir, "2026-08-12")
+        self.assertNotIn("README.md", second["files"])
+        self.assertEqual(second["data_version"], "2026.08.11")
+
     def test_initial_run_seeds_sources_and_sets_version(self):
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "unknown.csv": "b"})
         manifest = self._run(data_dir, "2026-08-11")

@@ -30,6 +30,7 @@ Each release is driven by its collection's manifest:
     listing files added, updated, and removed in this release, plus one
     file/version/last-updated/sources table per data element, using each
     file's own "version" key (the date that data element was last updated).
+    Files are grouped by license.
   * Only files whose md5 changed since the last release are uploaded. The
     first release (no prior state) uploads all manifest files. Files
     previously released but no longer in the manifest are removed from the
@@ -48,6 +49,10 @@ object keyed by section. The legacy single-deposit "zenodo_release" object is
 migrated into ``releases.core`` on load. .zenodo.json contains no secrets and
 is safe to commit. If a draft was created but not yet published, the draft is
 resumed on the next run instead of creating a duplicate.
+
+Files missing a "license" or carrying only placeholder sources ("Unknown -
+document me") are flagged: a warning in the sandbox, and a refusal in
+production unless --allow-undocumented is passed.
 
 Defaults to the Zenodo sandbox. Production requires --production or
 USE_PRODUCTION=true. Publishing requires --publish; without it a draft is
@@ -384,11 +389,20 @@ def describe_file(
         script_rows = (
             "<tr><th>Scripts</th><td><ul>" + "".join(items) + "</ul></td></tr>"
         )
+    version = info.get("version") or "Unknown"
+    last_updated = info.get("last_updated") or "Unknown"
+    # In the current manifest schema version == last_updated; only show the
+    # row when they diverge so the table doesn't repeat itself.
+    updated_row = (
+        f"<tr><th>Last updated</th><td>{esc(last_updated)}</td></tr>"
+        if last_updated != version
+        else ""
+    )
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
-        f"<tr><th>Data element version</th><td>{esc(info.get('version') or 'Unknown')}</td></tr>"
-        f"<tr><th>Last updated</th><td>{esc(info.get('last_updated') or 'Unknown')}</td></tr>"
+        f"<tr><th>Data element version</th><td>{esc(version)}</td></tr>"
+        f"{updated_row}"
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
         f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
         f"{script_rows}"
@@ -449,6 +463,43 @@ def readme_to_html(data_dir: Path) -> str:
     return markdown.markdown(
         readme_path.read_text(encoding="utf-8"),
         extensions=["tables", "fenced_code", "sane_lists"],
+    )
+
+
+def undocumented_files(manifest_files: dict) -> list[str]:
+    """Files missing a license or carrying only placeholder sources."""
+    bad = []
+    for name, info in sorted(manifest_files.items()):
+        if not info.get("license"):
+            bad.append(name)
+            continue
+        sources = info.get("sources") or []
+        if not sources or all(
+            not str(s.get("source", "")).strip()
+            or str(s.get("source", "")).strip() == "Unknown - document me"
+            for s in sources
+        ):
+            bad.append(name)
+    return bad
+
+
+def licensing_paragraph(files: dict) -> str:
+    """CC0 compilation preamble + files grouped by their per-file license."""
+    esc = html.escape
+    groups: dict[str, list[str]] = {}
+    for name, info in sorted(files.items()):
+        groups.setdefault(info.get("license") or "", []).append(name)
+    parts = []
+    for key in sorted(groups, key=lambda k: (not k, k)):
+        label = LICENSE_LABELS.get(key) or key or "Not specified"
+        names = ", ".join(f"<code>{esc(n)}</code>" for n in groups[key])
+        parts.append(f"<p><strong>{esc(label)}:</strong> {names}.</p>")
+    return (
+        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
+        "Creative Commons Zero (CC0, public domain dedication). Because the files "
+        "assemble public data from a variety of sources, each file retains the "
+        "license of its underlying source. Files grouped by license:</p>"
+        + "".join(parts)
     )
 
 
@@ -572,13 +623,7 @@ def build_description(
         f"{drift_note}"
         f"{missing_note}"
         f"{readme_html}"
-        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
-        "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
-        "public data from a variety of sources, each file retains the license of its "
-        "underlying source: U.S. government works (e.g. EIA, BEA, FRED) are in the public "
-        "domain, and data derived from ReEDS / NREL (including the NREL ATB and PUDL) is "
-        "Creative Commons Attribution 4.0 International (CC BY 4.0). See each file's "
-        "License row below.</p>"
+        f"{licensing_paragraph(files)}"
         f"{removed_block}"
         "<p>Each data element's own version key records when that element was "
         "last updated; the per-file sources below document where it came from.</p>"
@@ -1284,7 +1329,9 @@ def release_section(
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
     released_files = (
-        normalize_released_files(released.get("files", {})) if previously_published else {}
+        normalize_released_files(released.get("files", {}))
+        if previously_published
+        else {}
     )
     deposition_id = released.get("deposition_id")
     # Allow resuming a specific draft (e.g. one created by an earlier run that
@@ -1376,6 +1423,22 @@ def release_section(
             "release": released,
             "metadata": section_metadata(state, section),
         }
+
+    # Refuse to publish files whose source documentation is incomplete
+    # (production only; sandbox warns).
+    undocumented = undocumented_files(manifest_files)
+    if undocumented:
+        message = "files missing a license or with placeholder sources: " + ", ".join(
+            undocumented
+        )
+        if environment == "production" and not getattr(
+            args, "allow_undocumented", False
+        ):
+            sys.exit(
+                f"[{section}] Refusing production release: {message}. Document them in "
+                "the manifest, or re-run with --allow-undocumented."
+            )
+        log(f"[{section}] warning: {message}")
 
     # Publishing files that aren't in git history leaves a record with no
     # reproducible commit behind it. Refuse unless --allow-dirty is passed.
@@ -1469,7 +1532,8 @@ def release_section(
         base_metadata,
         readme_html=readme_html,
         removed_details={name: released_files[name] for name in removed},
-        removal_notes=released.get("removal_notes") or base_metadata.get("removal_notes"),
+        removal_notes=released.get("removal_notes")
+        or base_metadata.get("removal_notes"),
         provenance=provenance,
     )
     creators = base_metadata.get("creators") or default_creators()
@@ -1740,6 +1804,14 @@ def build_parser() -> argparse.ArgumentParser:
             "Allow releasing when referenced scripts have changed since the "
             "latest git tag or a declared script path is not tracked. The "
             "description marks those scripts. A reachable tag is still required."
+        ),
+    )
+    parser.add_argument(
+        "--allow-undocumented",
+        action="store_true",
+        help=(
+            "Proceed even when files lack a license or have placeholder sources "
+            "(only needed for production releases; the sandbox only warns)."
         ),
     )
     parser.add_argument(

@@ -44,6 +44,10 @@ from pathlib import Path
 
 MANIFEST_VERSION = 1
 
+# Collection documentation, rendered into the Zenodo description by
+# publish_zenodo.py rather than released as a data element.
+COLLECTION_README = "README.md"
+
 # Seed provenance for files that have never been seen before. Each file maps to a list of
 # {source, source_url} objects (one per upstream). The tool preserves any edits made in
 # data/manifest.json on later runs. Source values marked "Unknown - document me" are
@@ -357,8 +361,14 @@ SCRIPTS: dict[str, list[str]] = {
     "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
     "transmission_capacity_reeds.csv": ["merge_transmission_capacity.py"],
     # Existing resource groups (existing_resource_groups/) ---------------------------
-    "hydro_conventional_2007_2013.parquet": ["transform_reeds_generators.py"],
-    "hydro_run_of_river_2007_2013.parquet": ["transform_reeds_generators.py"],
+    "hydro_conventional_2007_2013.parquet": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
+    "hydro_run_of_river_2007_2013.parquet": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
 }
 
 
@@ -572,7 +582,7 @@ def update_manifest(
     files: dict[str, dict] = {}
     changed_any = False
     for path in sorted(data_dir.iterdir()):
-        if not path.is_file() or path.name == manifest_path.name:
+        if not path.is_file() or path.name in (manifest_path.name, COLLECTION_README):
             continue
         filename = path.name
         if tracked is not None and filename not in tracked and filename not in old_files:
