@@ -45,8 +45,10 @@ Each release is driven by its collection's manifest:
 
 Release state (per-section data_version, deposition id, per-file md5s, publish
 status) is stored in .zenodo.json in the project root, under a "releases"
-object keyed by section. The legacy single-deposit "zenodo_release" object is
-migrated into ``releases.core`` on load. .zenodo.json contains no secrets and
+object at ``releases.<section>.environments.<sandbox|production>``. Flat collection
+records and the legacy single-deposit "zenodo_release" object are migrated in
+memory on load and written on the next normal state save. Both environments'
+lineages are retained independently. .zenodo.json contains no secrets and
 is safe to commit. If a draft was created but not yet published, the draft is
 resumed on the next run instead of creating a duplicate.
 
@@ -284,21 +286,82 @@ def load_manifests(args, project_root: Path) -> dict[str, dict]:
 
 def load_state() -> dict:
     if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return normalize_release_state(
+            json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        )
     return {}
 
 
-def section_release(state: dict, section: str) -> dict:
-    """Release state for one collection, migrating the legacy single-deposit
-    ``zenodo_release`` object into ``releases.core``."""
-    releases = state.get("releases")
-    if isinstance(releases, dict) and isinstance(releases.get(section), dict):
-        return releases[section]
-    if section == CORE_SECTION:
-        legacy = state.get("zenodo_release")
-        if isinstance(legacy, dict) and legacy:
-            return legacy
-    return {}
+def normalize_release_state(state: dict) -> dict:
+    """Copy state into the environment layout without changing release payloads.
+
+    Validate every collection before any remote mutation, including unselected
+    collections: an ambiguous record must never silently start a new lineage.
+    Collection records take precedence over the legacy core fallback.
+    """
+
+    def invalid(path: str) -> None:
+        sys.exit(
+            f"Invalid Zenodo release state at {path}. Expected release records under "
+            "releases.<section>.environments.<sandbox|production> with matching "
+            "environment fields (legacy flat records default to sandbox). "
+            "Repair .zenodo.json before releasing; no remote changes were made."
+        )
+
+    if not isinstance(state, dict):
+        invalid("root")
+    releases = state.get("releases", {})
+    if not isinstance(releases, dict):
+        invalid("releases")
+    releases = dict(releases)
+    if CORE_SECTION not in releases and "zenodo_release" in state:
+        releases[CORE_SECTION] = state["zenodo_release"]
+
+    normalized = {}
+    for section, record in releases.items():
+        path = f"releases.{section}"
+        if not isinstance(record, dict):
+            invalid(path)
+        if "environments" in record:
+            # Mixing flat fields with the new container is ambiguous.
+            if set(record) != {"environments"}:
+                invalid(path)
+            environments = record["environments"]
+            if not isinstance(environments, dict):
+                invalid(f"{path}.environments")
+        elif record:
+            environment = record.get("environment", "sandbox")
+            if environment not in ("sandbox", "production"):
+                invalid(f"{path}.environment")
+            environments = {environment: record}
+        else:
+            environments = {}
+        for environment, payload in environments.items():
+            if (
+                environment not in ("sandbox", "production")
+                or not isinstance(payload, dict)
+                or payload.get("environment", environment) != environment
+                or "environments" in payload
+            ):
+                invalid(f"{path}.environments.{environment}")
+        normalized[section] = {
+            "environments": {
+                environment: dict(payload)
+                for environment, payload in environments.items()
+            }
+        }
+    result = dict(state)
+    result.pop("zenodo_release", None)
+    result["releases"] = normalized
+    return result
+
+
+def section_release(state: dict, section: str, environment: str = "sandbox") -> dict:
+    """Return only the target environment's release, accepting historical layouts."""
+    if environment not in ("sandbox", "production"):
+        sys.exit(f"Unknown Zenodo environment: {environment}")
+    releases = normalize_release_state(state)["releases"]
+    return releases.get(section, {}).get("environments", {}).get(environment, {})
 
 
 def section_metadata(state: dict, section: str) -> dict:
@@ -734,7 +797,7 @@ def next_release_version(
     releases that already carry this data_version (bare or ``.vN``-suffixed):
     the versions published on Zenodo for this concept (via the
     eventually-consistent records search) and the release versions recorded
-    locally in the saved state (``zenodo_release.versions``). The local
+    locally in ``releases.<section>.environments.<environment>.versions``. The local
     history closes the window where a fast follow-up release would not yet be
     indexed by Zenodo's search, preventing two releases from reusing a
     suffix. A brand-new deposition (no concept yet) gets ".v1".
@@ -1308,23 +1371,13 @@ def release_section(
 
     Returns ``{"section": ..., "summary": ..., "release": ..., "metadata": ...}``
     where ``summary`` is the per-section run report, ``release`` is the new
-    state to persist under ``releases.<section>``, and ``metadata`` is the
-    Zenodo metadata that was set (or would be set) for the deposit.
+    state to persist under ``releases.<section>.environments.<environment>``,
+    and ``metadata`` is the Zenodo metadata that was set (or would be set)
+    for the deposit.
     """
     data_version = manifest["data_version"]
 
-    released = section_release(state, section)
-    # Release state is environment-specific: deposition ids, DOIs, and the
-    # version suffix counter differ between sandbox and production. Treat a
-    # stored release from the *other* environment as absent so each environment
-    # starts its own first release, while keeping shared metadata like creators.
-    stored_environment = released.get("environment", "sandbox")
-    if released and stored_environment != environment:
-        log(
-            f"[{section}] stored release state is for {stored_environment}, "
-            f"target is {environment}; ignoring it"
-        )
-        released = {}
+    released = section_release(state, section, environment)
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
@@ -1654,7 +1707,7 @@ def run_release(args) -> None:
         if section not in sections:
             log(f"[{section}] not present in manifest; skipping")
 
-    state = load_state()
+    state = normalize_release_state(load_state())
     save_state = args.publish or args.save_state
 
     results = []
@@ -1698,19 +1751,15 @@ def run_release(args) -> None:
         # shared fields (creators, license, access_right, ...) only.
         for per_release_field in ("title", "description", "version"):
             project_metadata.pop(per_release_field, None)
-        # Merge with existing release state so a run limited to one collection
-        # (e.g. --collection core) does not clobber other collections' state.
-        existing_releases = state.get("releases", {}) if isinstance(state, dict) else {}
-        if not isinstance(existing_releases, dict):
-            existing_releases = {}
-        merged_releases = dict(existing_releases)
-        merged_releases.update(
-            {result["section"]: result["release"] for result in results}
-        )
-        new_state = {
-            "metadata": project_metadata,
-            "releases": merged_releases,
-        }
+        # Merge only the target environment, retaining inactive lineages and
+        # normalized legacy core state even when core was not selected.
+        new_state = normalize_release_state(state)
+        for result in results:
+            collection = new_state["releases"].setdefault(
+                result["section"], {"environments": {}}
+            )
+            collection["environments"][environment] = result["release"]
+        new_state["metadata"] = project_metadata
         STATE_PATH.write_text(
             json.dumps(new_state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
