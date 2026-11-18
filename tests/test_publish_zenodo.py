@@ -3,6 +3,8 @@ import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
+from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
@@ -191,6 +193,25 @@ class StateMigrationTests(unittest.TestCase):
     def test_legacy_state_has_no_non_core_sections(self):
         self.assertEqual(MODULE.section_release(LEGACY_STATE, "profiles"), {})
 
+    def test_legacy_core_preserves_complete_payload_in_either_environment(self):
+        for environment in ("sandbox", "production"):
+            with self.subTest(environment=environment):
+                state = deepcopy(LEGACY_STATE)
+                state["zenodo_release"].update(
+                    environment=environment,
+                    versions=["2026.08.14.v1"],
+                    removal_notes={"retired.csv": "superseded"},
+                    manifest_meta_hash="hash",
+                )
+                normalized = MODULE.normalize_release_state(state)
+                self.assertEqual(
+                    normalized["releases"]["core"]["environments"][environment],
+                    state["zenodo_release"],
+                )
+                self.assertEqual(
+                    MODULE.normalize_release_state(normalized), normalized
+                )
+
     def test_new_releases_state_wins_over_legacy(self):
         state = dict(LEGACY_STATE)
         state["releases"] = {"core": {"deposition_id": "700002", "published": False}}
@@ -201,6 +222,355 @@ class StateMigrationTests(unittest.TestCase):
         released = MODULE.section_release(NEW_STATE, "profiles")
         self.assertEqual(released["deposition_id"], "600001")
         self.assertEqual(MODULE.section_release(NEW_STATE, "core"), {})
+
+    def test_flat_records_migrate_losslessly_and_idempotently(self):
+        for environment in ("sandbox", "production"):
+            with self.subTest(environment=environment):
+                payload = dict(
+                    LEGACY_STATE["zenodo_release"],
+                    environment=environment,
+                    versions=["2026.08.14.v1"],
+                    manifest_meta_hash="hash",
+                    removal_notes={"old.csv": "superseded"},
+                    future_field={"preserve": True},
+                )
+                state = {"releases": {"core": payload}}
+                original = deepcopy(state)
+                normalized = MODULE.normalize_release_state(state)
+                self.assertEqual(
+                    normalized["releases"]["core"],
+                    {"environments": {environment: payload}},
+                )
+                self.assertEqual(
+                    MODULE.normalize_release_state(normalized), normalized
+                )
+                self.assertEqual(state, original)
+                self.assertEqual(
+                    MODULE.section_release(state, "core", environment), payload
+                )
+                other = "sandbox" if environment == "production" else "production"
+                self.assertEqual(MODULE.section_release(state, "core", other), {})
+
+    def test_missing_environment_defaults_to_sandbox_without_doi_inference(self):
+        payload = {"deposition_id": "123", "doi": "10.5281/zenodo.123"}
+        state = {"releases": {"core": payload}}
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), payload)
+        self.assertEqual(MODULE.section_release(state, "core", "production"), {})
+
+    def test_nested_key_supplies_missing_payload_environment(self):
+        payload = {"deposition_id": "production-id"}
+        state = {"releases": {"core": {"environments": {"production": payload}}}}
+        self.assertEqual(
+            MODULE.section_release(state, "core", "production"), payload
+        )
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), {})
+
+    def test_nested_selection_and_collection_precedence(self):
+        state = deepcopy(LEGACY_STATE)
+        production = {"environment": "production", "deposition_id": "prod"}
+        state["releases"] = {
+            "core": {"environments": {"production": production}},
+        }
+        self.assertEqual(
+            MODULE.section_release(state, "core", "production"), production
+        )
+        # Do not resurrect legacy sandbox state when a core container exists.
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), {})
+        state["releases"]["core"] = {}
+        self.assertEqual(MODULE.section_release(state, "core"), {})
+
+
+class EnvironmentPersistenceTests(unittest.TestCase):
+    """Exercise the real release/read/modify/save flow with no network access."""
+
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        self.state_path = self.root / ".zenodo.json"
+        self.manifests = {}
+        for section in ("core", "profiles"):
+            directory = self.root / MODULE.COLLECTIONS[section]["data_dir"]
+            directory.mkdir()
+            data = directory / "example.csv"
+            data.write_text("example\n")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "example.csv": {
+                        "md5": MODULE.md5_for_file(data),
+                        "version": "v1",
+                        "license": "cc-zero",
+                        "sources": [{"source": "Test fixture"}],
+                    }
+                },
+            }
+            path = directory / "manifest.json"
+            path.write_text(json.dumps(manifest))
+            self.manifests[section] = path
+        self.stack.enter_context(mock.patch.object(Path, "cwd", return_value=self.root))
+        # run_release changes these globals; restore them after each test.
+        self.stack.enter_context(mock.patch.object(MODULE, "PROJECT_ROOT", self.root))
+        self.stack.enter_context(mock.patch.object(MODULE, "STATE_PATH", self.state_path))
+        for name in ("load_dotenv", "log"):
+            self.stack.enter_context(mock.patch.object(MODULE, name))
+        self.stack.enter_context(mock.patch("builtins.print"))
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "truthy_env", return_value=False)
+        )
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "load_token", return_value="test-token")
+        )
+        self.session = mock.Mock(spec=requests.Session)
+        self.session.request.side_effect = AssertionError("Unexpected network operation")
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "make_session", return_value=self.session)
+        )
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "uncommitted_release_files", return_value=[])
+        )
+        self.stack.enter_context(
+            mock.patch.object(
+                MODULE,
+                "check_script_provenance",
+                return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+            )
+        )
+        self.remote = {}
+        self.next_id = 100
+        for name in ("create_deposition", "create_new_version", "get_deposition"):
+            self.remote[name] = self.stack.enter_context(
+                mock.patch.object(
+                    MODULE,
+                    name,
+                    side_effect=lambda *a, operation=name: self.deposition(operation, *a),
+                )
+            )
+        for name, result in (
+            ("existing_draft_files", {}),
+            ("upload_file", {}),
+            ("set_metadata", {}),
+        ):
+            self.remote[name] = self.stack.enter_context(
+                mock.patch.object(
+                    MODULE, name, side_effect=lambda *a, r=result, **k: deepcopy(r)
+                )
+            )
+        self.remote["publish_deposition"] = self.stack.enter_context(
+            mock.patch.object(
+                MODULE,
+                "publish_deposition",
+                side_effect=lambda session, base, dep: {"doi": f"test:{base}/{dep}"},
+            )
+        )
+        # Keep the actual suffix calculation; only mock its remote search.
+        response = mock.Mock()
+        response.json.return_value = {"hits": {"hits": []}}
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "retry_request", return_value=response)
+        )
+
+    def deposition(self, operation, session, base_url, deposition_id=None):
+        if operation != "get_deposition":
+            self.next_id += 1
+            deposition_id = str(self.next_id)
+        return {
+            "id": deposition_id,
+            "conceptrecid": "concept",
+            "links": {"bucket": "https://bucket.invalid", "files": "https://files.invalid"},
+        }
+
+    def payload(self, environment, published=True):
+        return {
+            "environment": environment,
+            "data_version": "2026.08.13",
+            "release_version": "2026.08.14.v2",
+            "deposition_id": f"{environment}-original",
+            "doi": f"test:{environment}",
+            "published": published,
+            "versions": ["2026.08.14.v1", "2026.08.14.v2"],
+            "files": {"old.csv": {"md5": "old", "license": "cc-zero"}},
+            "manifest_meta_hash": "old-hash",
+            "removal_notes": {"old.csv": "retired"},
+            "extra": {"must_survive": [1, 2]},
+        }
+
+    def write_state(self, state):
+        self.state_path.write_text(json.dumps(state))
+
+    def read_state(self):
+        return json.loads(self.state_path.read_text())
+
+    def run_release(self, environment, *, publish=True, save=True, section="core"):
+        flags = ["--collection", section, "--sleep-seconds", "0"]
+        if environment == "production":
+            flags.append("--production")
+        if publish:
+            flags.append("--publish")
+        if save:
+            flags.append("--save-state")
+        MODULE.run_release(MODULE.build_parser().parse_args(flags))
+        self.session.request.assert_not_called()
+        return self.read_state()
+
+    def test_alternating_environments_preserve_lineage_and_independent_histories(self):
+        for original_env, target_env in (
+            ("production", "sandbox"),
+            ("sandbox", "production"),
+        ):
+            with self.subTest(original=original_env):
+                original = self.payload(original_env)
+                untouched = {"environments": {"production": self.payload("production")}}
+                metadata = deepcopy(NEW_STATE["metadata"])
+                self.write_state({
+                    "metadata": metadata,
+                    "releases": {"core": original, "profiles": untouched},
+                })
+                self.remote["create_deposition"].reset_mock()
+                saved = self.run_release(target_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.assertEqual(environments[original_env], original)
+                self.assertEqual(environments[target_env]["versions"], ["2026.08.14.v1"])
+                self.assertEqual(saved["releases"]["profiles"], untouched)
+                self.assertEqual(saved["metadata"], metadata)
+                target = deepcopy(environments[target_env])
+                self.remote["create_deposition"].assert_called_once_with(
+                    self.session, MODULE.resolve_base(target_env == "production")
+                )
+
+                self.remote["create_new_version"].reset_mock()
+                saved = self.run_release(original_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.remote["create_new_version"].assert_called_once_with(
+                    self.session,
+                    MODULE.resolve_base(original_env == "production"),
+                    original["deposition_id"],
+                )
+                self.assertEqual(environments[target_env], target)
+                self.assertEqual(
+                    environments[original_env]["versions"],
+                    original["versions"] + ["2026.08.14.v3"],
+                )
+                self.assertEqual(saved["releases"]["profiles"], untouched)
+                self.assertEqual(saved["metadata"], metadata)
+
+                # Returning to the other published environment is a no-op.
+                before = deepcopy(saved)
+                self.remote["create_new_version"].reset_mock()
+                self.assertEqual(self.run_release(target_env), before)
+                self.remote["create_new_version"].assert_not_called()
+                self.assertEqual(self.run_release(original_env), before)
+                self.remote["create_new_version"].assert_not_called()
+
+                # A same-day metadata change versions each saved lineage with
+                # its own counter, never the other environment's history.
+                path = self.manifests["core"]
+                manifest = json.loads(path.read_text())
+                manifest["files"]["example.csv"]["version"] += "-updated"
+                path.write_text(json.dumps(manifest))
+                self.remote["create_new_version"].reset_mock()
+                saved = self.run_release(target_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.remote["create_new_version"].assert_called_once_with(
+                    self.session,
+                    MODULE.resolve_base(target_env == "production"),
+                    target["deposition_id"],
+                )
+                self.assertEqual(
+                    environments[original_env],
+                    before["releases"]["core"]["environments"][original_env],
+                )
+                self.assertEqual(
+                    environments[target_env]["versions"],
+                    ["2026.08.14.v1", "2026.08.14.v2"],
+                )
+                target = deepcopy(environments[target_env])
+                saved = self.run_release(original_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.assertEqual(environments[target_env], target)
+                self.assertEqual(
+                    environments[original_env]["versions"],
+                    original["versions"] + ["2026.08.14.v3", "2026.08.14.v4"],
+                )
+
+    def test_saved_sandbox_draft_resumes_after_production_release(self):
+        production = self.payload("production")
+        self.write_state({
+            "metadata": NEW_STATE["metadata"],
+            "releases": {"core": production},
+        })
+        saved = self.run_release("sandbox", publish=False)
+        draft = saved["releases"]["core"]["environments"]["sandbox"]
+        self.assertFalse(draft["published"])
+        self.assertEqual(draft["versions"], [])
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["production"], production
+        )
+        saved = self.run_release("production")
+        production = deepcopy(saved["releases"]["core"]["environments"]["production"])
+        self.assertEqual(saved["releases"]["core"]["environments"]["sandbox"], draft)
+        self.remote["get_deposition"].reset_mock()
+        saved = self.run_release("sandbox", publish=False)
+        self.remote["get_deposition"].assert_called_once_with(
+            self.session, MODULE.resolve_base(False), draft["deposition_id"]
+        )
+        self.assertEqual(saved["releases"]["core"]["environments"]["sandbox"], draft)
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["production"], production
+        )
+
+    def test_non_core_save_preserves_legacy_core_and_reads_do_not_write(self):
+        self.write_state(LEGACY_STATE)
+        before = self.state_path.read_bytes()
+        normalized = MODULE.load_state()
+        self.assertEqual(self.state_path.read_bytes(), before)
+        self.assertEqual(
+            normalized["releases"]["core"]["environments"]["sandbox"],
+            LEGACY_STATE["zenodo_release"],
+        )
+        self.run_release("sandbox", publish=False, save=False, section="profiles")
+        self.assertEqual(self.state_path.read_bytes(), before)
+        saved = self.run_release("sandbox", publish=False, section="profiles")
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["sandbox"],
+            LEGACY_STATE["zenodo_release"],
+        )
+        self.assertNotIn("zenodo_release", saved)
+        self.assertEqual(MODULE.load_state(), saved)
+
+    def test_invalid_state_refused_before_any_remote_mutation_or_save(self):
+        invalid_records = [
+            None,
+            [],
+            {"environment": "staging"},
+            {"environment": None},
+            {"environments": None},
+            {"environments": []},
+            {"environments": {"staging": {}}},
+            {"environments": {"sandbox": None}},
+            {"environments": {"production": {"environment": "sandbox"}}},
+            {"environments": {"sandbox": {"environment": None}}},
+            {"environments": {}, "deposition_id": "ambiguous"},
+            {"environments": {"sandbox": {"environments": {}}}},
+        ]
+        states = [
+            {"releases": {"core": self.payload("production"), "profiles": record}}
+            for record in invalid_records
+        ] + [
+            [],
+            {"releases": None},
+            {"zenodo_release": None},
+        ]
+        for state in states:
+            with self.subTest(state=state):
+                self.write_state(state)
+                before = self.state_path.read_bytes()
+                with self.assertRaisesRegex(SystemExit, "Repair .zenodo.json"):
+                    self.run_release("sandbox")
+                self.assertEqual(self.state_path.read_bytes(), before)
+                for remote in self.remote.values():
+                    remote.assert_not_called()
+                self.session.request.assert_not_called()
 
 
 class MetadataTests(unittest.TestCase):

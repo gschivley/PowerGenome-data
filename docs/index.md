@@ -274,12 +274,37 @@ description next to each script so readers can see exactly which code version pr
 
 On the first publish the script writes `.zenodo.json` in the repo root with shared Zenodo metadata plus
 a `releases` object keyed by collection section (`core`, `profiles`, `existing_resource_groups`).
-Each `releases.<section>` block tracks the environment (`sandbox` or `production`), the published
+Each `releases.<section>.environments.<sandbox|production>` block tracks the environment, the published
 `data_version`, the `release_version` (the version string actually recorded on Zenodo, suffix
 included), the `deposition_id`, the resolved `doi`, the `versions` history (every release version
 string published in this environment, used to keep same-day suffixes unique even while Zenodo's
-search index lags), and the per-file `md5`s that were released. The legacy single-deposit
-`zenodo_release` block is migrated into `releases.core` on load. The metadata block carries the fields
+search index lags), publication status, manifest metadata hash, removal notes, and per-file metadata
+including the released `md5`s. For example:
+
+```json
+{
+  "releases": {
+    "core": {
+      "environments": {
+        "sandbox": {"environment": "sandbox", "deposition_id": "123", "published": false},
+        "production": {"environment": "production", "deposition_id": "456", "published": true}
+      }
+    }
+  }
+}
+```
+
+Historical flat `releases.<section>` records are wrapped under their stored environment.
+The legacy single-deposit `zenodo_release` block becomes the core environment record only if
+`releases.core` is absent. Records without an environment retain the historical sandbox default;
+the script does not infer an environment from a DOI. Migration preserves the entire release payload
+in memory on load; reads alone do not rewrite the file. The nested layout is written on the next
+normal state save (`--publish` or `--save-state`), including legacy core state when only another
+collection is released. Invalid containers, unknown environments, mixed flat/nested records, and
+environment fields contradicting their container are rejected before remote changes; repair the
+state file rather than allowing a replacement lineage.
+
+The metadata block carries the fields
 shared by every deposit — `creators`, `access_right`, and the compilation `license` (e.g. `cc-zero`) —
 plus per-deposit overrides under `metadata.sections.<section>` (e.g. `title` and `creators`, so a
 collection can list additional authors); each file's source license is
@@ -288,6 +313,7 @@ and is committed to the repo so later runs know what changed and can create new 
 same records.
 
 The release state is tracked **per environment**. Sandbox and production deposition ids, DOIs, and version
-suffix counters are independent, so the script records which environment a release belongs to and ignores
-stored release state from the other environment (keeping shared metadata such as creators). This lets you
-publish to both sites from the same `.zenodo.json` without one release interfering with the other.
+suffix histories, change detection, and published/no-op checks are independent. Saving a release updates
+only its environment slot, preserving the complete inactive environment payload and unselected
+collections. Returning to production versions its saved deposition; returning to a saved sandbox draft
+resumes it. Shared and per-collection metadata stay under `metadata` and `metadata.sections`.
