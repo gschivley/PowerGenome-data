@@ -140,6 +140,41 @@ def write_workbook(path, grid, extra_sheets=("Commercial Battery Storage",)):
     return path
 
 
+class PinnedAtb2025SourceTests(unittest.TestCase):
+    """Guard the pinned ATB 2025 release without touching the network.
+
+    NREL has revised the ATB 2025 tidy source in place once already
+    (v1.0.0 to v2.0.0), which moved Nuclear - Large CAPEX by -4.6%/-11.4%.
+    Only a real build exercises the pin, so a stale pin would otherwise ship
+    silently; these configuration assertions fail fast and offline instead.
+    """
+
+    def test_2025_parquet_pin_is_v2_release(self):
+        url = MODULE.YEAR_SETTINGS[2025]["parquet_url"]
+        self.assertIn(
+            "/2025/v2.0.0/",
+            url,
+            msg=(
+                "ATB 2025 parquet pin is not the v2.0.0 tidy release. NREL revises "
+                "this source in place, so updating the pin requires re-verifying "
+                "values and updating this guard: " + url
+            ),
+        )
+        self.assertTrue(
+            url.endswith("/ATBe.parquet"),
+            msg="ATB 2025 parquet pin must point at the tidy ATBe.parquet file: " + url,
+        )
+
+    def test_pinned_and_fallback_years_exclude_2025_fallback(self):
+        self.assertEqual(set(MODULE.YEAR_SETTINGS), {2023, 2024, 2025})
+        self.assertEqual(MODULE.FALLBACK_YEARS, {2023, 2024})
+        self.assertNotIn(
+            2025,
+            MODULE.FALLBACK_YEARS,
+            msg="ATB 2025 is the current release and must never fall back to committed rows.",
+        )
+
+
 class FixtureTestCase(unittest.TestCase):
     """Shared synthetic sources for all test classes."""
 
