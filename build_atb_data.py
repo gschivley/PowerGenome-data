@@ -145,8 +145,12 @@ YEAR_SETTINGS: Final = {
     },
     2025: {
         "parquet_url": (
-            "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2025/v1.0.0/ATBe.parquet"
+            "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2025/v2.0.0/ATBe.parquet"
         ),
+        # Still the v1 workbook: NREL has not published a v2 workbook (checked
+        # 2026-11-17; v2 filename guesses 404 while this URL still serves the
+        # v1 file). This is safe because the v2 tidy data changes no battery
+        # values, so the workbook-derived battery costs are unaffected.
         "workbook_url": (
             "https://data.openei.org/files/8759/2025_v1_Workbook_08-27-2026.xlsx"
         ),

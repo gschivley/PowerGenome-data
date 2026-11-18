@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.09.03",
+  "data_version": "2026.11.17",
   "files": {
     "cpi_data.csv": {
       "history": [],
@@ -211,25 +211,30 @@
           "last_updated": "2026-08-11",
           "md5": "4c65c88129c4db3d0df180c3eb28a3ec",
           "version": "2026-08-11"
+        },
+        {
+          "last_updated": "2026-09-03",
+          "md5": "c286d7379ac186dd5a6e6af9085185f7",
+          "version": "2026-09-03"
         }
       ],
-      "last_updated": "2026-09-03",
+      "last_updated": "2026-11-17",
       "license": "cc-by-4.0",
-      "md5": "c286d7379ac186dd5a6e6af9085185f7",
+      "md5": "90a2d8cee3f9a7cc55a160868d5d394a",
       "scripts": [
         "build_atb_data.py"
       ],
       "sources": [
         {
-          "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+          "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
           "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
         },
         {
-          "source": "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs)",
+          "source": "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs). The 2025 utility-scale battery costs still come from the v1 workbook because NREL has not published a v2 workbook (as of 2026-11-17); the v2 tidy data leaves battery values unchanged.",
           "source_url": "https://atb.nrel.gov/electricity/2025/data"
         }
       ],
-      "version": "2026-09-03"
+      "version": "2026-11-17"
     },
     "technology_heat_rates_nrelatb.csv": {
       "history": [
@@ -247,7 +252,7 @@
       ],
       "sources": [
         {
-          "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+          "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
           "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
         }
       ],
@@ -270,6 +275,6 @@
       "version": "2026-08-11"
     }
   },
-  "generated_at_utc": "2026-09-03T05:06:38.637308+00:00",
+  "generated_at_utc": "2026-11-18T14:19:02.414993+00:00",
   "manifest_version": 1
 }
