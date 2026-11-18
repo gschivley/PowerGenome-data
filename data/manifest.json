@@ -19,6 +19,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "d8c206063044ea93edb80e8cae100357",
+      "scripts": [
+        "build_new_pg_dg_inputs.py"
+      ],
       "sources": [
         {
           "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
@@ -36,6 +39,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+      "scripts": [
+        "build_new_pg_dg_inputs.py"
+      ],
       "sources": [
         {
           "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
@@ -62,6 +68,9 @@
       "last_updated": "2026-08-11",
       "license": "public-domain",
       "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "scripts": [
+        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+      ],
       "sources": [
         {
           "source": "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.",
@@ -75,6 +84,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "b8ac4f0a59127c9e483d9b59aaad78b4",
+      "scripts": [
+        ".github/skills/nerc-reserve-margins/scripts/extract_nerc_reserve_margins.py"
+      ],
       "sources": [
         {
           "source": "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.",
@@ -94,6 +106,9 @@
       "last_updated": "2026-08-14",
       "license": "cc-by-4.0",
       "md5": "75b7e22488de8048e56c1e1f81c359f9",
+      "scripts": [
+        "build_operational_constraints_reeds.py"
+      ],
       "sources": [
         {
           "source": "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), transformed by build_operational_constraints_reeds.py into PowerGenome operational constraints.",
@@ -107,6 +122,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "0d8a6f43695c230a418827820f071dd8",
+      "scripts": [
+        "transform_reeds_generators.py"
+      ],
       "sources": [
         {
           "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) as the plant list, joined to ReEDS zones by transform_reeds_generators.py.",
@@ -124,6 +142,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "1dfff9c035410c487687ee9da9c85395",
+      "scripts": [
+        "transform_reeds_generators.py"
+      ],
       "sources": [
         {
           "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py.",
@@ -141,6 +162,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "2a6c49b1cd3ea175b776ce853f06485e",
+      "scripts": [
+        "transform_reeds_load.py"
+      ],
       "sources": [
         {
           "source": "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.",
@@ -154,6 +178,9 @@
       "last_updated": "2026-08-11",
       "license": "public-domain",
       "md5": "6c46df3480cbecd82ac1d724f4255658",
+      "scripts": [
+        "extract_location_variation.py"
+      ],
       "sources": [
         {
           "source": "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.",
@@ -167,6 +194,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "597fc25a77553b29217ea35037258d73",
+      "scripts": [
+        "build_reserve_margins.py"
+      ],
       "sources": [
         {
           "source": "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.",
@@ -186,6 +216,9 @@
       "last_updated": "2026-09-03",
       "license": "cc-by-4.0",
       "md5": "c286d7379ac186dd5a6e6af9085185f7",
+      "scripts": [
+        "build_atb_data.py"
+      ],
       "sources": [
         {
           "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
@@ -209,6 +242,9 @@
       "last_updated": "2026-09-03",
       "license": "cc-by-4.0",
       "md5": "743945e8a7fd1bb69d682c3c5f289153",
+      "scripts": [
+        "build_atb_data.py"
+      ],
       "sources": [
         {
           "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
@@ -222,6 +258,9 @@
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "afed76f028868aae1d68c095bca01f24",
+      "scripts": [
+        "merge_transmission_capacity.py"
+      ],
       "sources": [
         {
           "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
