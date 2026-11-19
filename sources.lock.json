@@ -34,6 +34,13 @@
       "path": "inputs/disaggregation/county_population.csv",
       "repository": "ReEDS-Model/ReEDS"
     },
+    "legacy/ReEDS_generator_database_final_EIA-NEMS.csv": {
+      "checksum": "sha256:0aefe1e1172354191d51c3f9884b11df7be8f0c928221d9e89cbd16390c9c455",
+      "commit": "e0de2262924b1501f946dc728b406a3f3bafc1eb",
+      "kind": "github",
+      "path": "inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv",
+      "repository": "NatLabRockies/ReEDS-2.0"
+    },
     "load/EER_IRAlow_load_hourly.h5": {
       "checksum": "sha256:5af50c3cf48b4262a0a376698178fec55852af3d7c6c0faf735296cac62477b8",
       "commit": "90fe80fce12c1bedba6dd36148d42100512114df",

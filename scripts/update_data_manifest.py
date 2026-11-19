@@ -168,25 +168,15 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "plant_region_map.csv": [
         {
-            "source": (
-                "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) "
-                "as the plant list, joined to ReEDS zones by scripts/transform_reeds_generators.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
-                "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-            ),
+            "source": "ReEDS EIA-NEMS generator database providing plant IDs and county FIPS codes (snapshot in input_pins).",
         },
-        {
-            "source": (
-                "ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant "
-                "to a model region."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
-                "county2zone.csv"
-            ),
-        },
+        *[
+            {
+                "source": f"{zone_set}: Pinned ReEDS county-to-zone mapping used to assign plants to model regions.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/county2zone.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
     ],
     "reeds_generators_transformed.csv": [
         {

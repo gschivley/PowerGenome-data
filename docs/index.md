@@ -12,7 +12,7 @@ This short guide explains how the Python scripts in `scripts/` fetch, extract, a
 
 | Script | Main outputs | External inputs & sources | Notes |
 | --- | --- | --- | --- |
-| `scripts/transform_reeds_generators.py` | `data/reeds_generators_transformed.csv`, `data/plant_region_map.csv` | ReEDS generator database CSV from ReEDS-Model/ReEDS GitHub; PUDL yearly generators parquet (`out_eia__yearly_generators.parquet`); ReEDS `zones/z134/county2zone.csv` | Cleans generator tech names (handles run-of-river), filters retired units, computes capacities, builds plant→region map. |
+| `scripts/transform_reeds_generators.py` | `data/reeds_generators_transformed.csv`, `data/plant_region_map.csv` | ReEDS generator database CSV; PUDL yearly generators parquet (`out_eia__yearly_generators.parquet`, for the generator table only); ReEDS z134 and z90 `county2zone.csv` files | Cleans generator tech names (handles run-of-river), filters retired units, computes capacities, and maps plants to both ReEDS zone sets. |
 | `scripts/build_hydro_profiles.py` | `existing_resource_groups/hydro_run_of_river_2007_2013.parquet`, `existing_resource_groups/hydro_conventional_2007_2013.parquet` | `data/plant_region_map.csv`, `data/reeds_generators_transformed.csv`; PUDL monthly generators parquet (`s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet`) | Derives monthly capacity factors per region/type, interpolates to hourly, smooths with a 1-week window. |
 | `scripts/build_reeds_load.py` | `data/reeds_load_transformed.parquet` | ReEDS EER2025 IRA-low state hourly profiles, county population and ReEDS zone mappings | Precomputes z134 and z90 profiles in one Zstd Parquet. |
 | `scripts/build_new_pg_dg_inputs.py` | `distributed_capacity.parquet`, `distributed_profiles.parquet` | ReEDS (ReEDS-Model/ReEDS) `dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv`; `zones/z134/county2zone.csv`; `disaggregation/county_population.csv`; hourly county-level distpv CF HDF5 (`cf_distpv_county.h5`, hosted on Zenodo and resolved via ReEDS `remote_files.csv`) | County-level inputs are aggregated to ReEDS BA regions: county capacity is summed and converted from DC to AC (ILR=1.1); county capacity-factor profiles are averaged per BA (capacity-weighted by default, or population-weighted via `--weight-by`) and shifted from fixed ReEDS CST to UTC. Profiles download can be skipped via `--skip-profiles`; cache the large HDF5 between runs with `--cache-dir`. |
@@ -60,7 +60,7 @@ In the table, `5bdbb89b` refers to ReEDS-Model/ReEDS commit
 | `scripts/build_reeds_transmission.py` | `itl_NARIS.csv`, `hvdc_existing.csv`, `transmission_cost_distance.csv`, `dollaryear.csv`, and both zone sets' `zonehash.csv`, `interfaces_r.csv`, `county2zone.csv`, and `b2b.csv` at `5bdbb89b`. The 2022 Census TIGER county boundary ZIP has a SHA-256 pin. |
 | `scripts/build_operational_constraints_reeds.py` | `pcm_defaults.json` at `5bdbb89b`. |
 | `scripts/match_reeds_regions_to_cities.py` | `US_PCA` shapefile, index, attribute table and projection at `5bdbb89b`. |
-| `scripts/transform_reeds_generators.py` | ReEDS EIA-NEMS generator database and z134 county map at `5bdbb89b`. The PUDL generator input is listed below. |
+| `scripts/transform_reeds_generators.py` | ReEDS EIA-NEMS generator database and z134/z90 county maps at `5bdbb89b`. The checked-in plant map instead uses the original plant list from ReEDS-2.0 commit `e0de2262` with those same county maps. The PUDL generator input is listed below. |
 | `scripts/transform_reeds_load.py`, `scripts/merge_transmission_capacity.py` | Legacy `EER_IRAlow_load_hourly.h5` and initial AC/non-AC transmission capacity CSVs from NatLabRockies/ReEDS-2.0 release `v2025.7.0`. Use the z134/z90 builders for the current load and transmission products. |
 
 The current builders use ReEDS-Model/ReEDS and its associated Zenodo records. The legacy load and
@@ -111,6 +111,15 @@ zone sets. For readers that cannot filter by `zone_set`, export only the matchin
 rows. `scripts/cluster_regions.py` selects z134 by default; pass `--zone-set z90` with
 its matching hierarchy to cluster z90 zones. Other PowerGenome datasets are not
 necessarily available in both resolutions.
+
+`data/plant_region_map.csv` has one row per plant. Use `region` for z134 (the
+existing column) or `region_z90` for z90. Both are ReEDS zone identifiers assigned
+from the plant's county FIPS, not by translating one zone into the other. To
+reproduce the checked-in map without rebuilding the generator table, run:
+
+```bash
+uv run python scripts/transform_reeds_generators.py --plant-map-only --generator-vintage legacy
+```
 
 `uv run python scripts/build_reeds_load.py` rebuilds the combined Zstandard Parquet from
 scratch. Both zone sets use `EER2025_IRAlow`: published ReEDS state-hourly end-use

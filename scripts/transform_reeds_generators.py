@@ -19,7 +19,9 @@ import pandas as pd
 from locked_sources import SourceLock, add_source_options
 
 GENERATOR_SOURCE = "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-COUNTY2ZONE_SOURCE = "zones/z134/county2zone.csv"
+LEGACY_GENERATOR_SOURCE = "legacy/ReEDS_generator_database_final_EIA-NEMS.csv"
+ZONE_COLUMNS = {"z134": "region", "z90": "region_z90"}
+COUNTY2ZONE_SOURCES = {zone_set: f"zones/{zone_set}/county2zone.csv" for zone_set in ZONE_COLUMNS}
 EIA_URL = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
 
 
@@ -87,11 +89,11 @@ def reverse_excel_date_conversion(value, zero_pad=False, uppercase_format=False)
     return value
 
 
-def fetch_reeds_data(sources):
+def fetch_reeds_data(sources, generator_source=GENERATOR_SOURCE):
     """Fetch ReEDS generator database from GitHub."""
     print("Fetching ReEDS data...")
     # Force T_UID to be read as string to prevent further Excel date conversion
-    df = pd.read_csv(sources.fetch(GENERATOR_SOURCE), dtype={"T_UID": str})
+    df = pd.read_csv(sources.fetch(generator_source), dtype={"T_UID": str})
     print(f"  Loaded {len(df):,} rows from ReEDS")
     return df
 
@@ -118,21 +120,12 @@ def fetch_eia_technology_names():
     return df[["plant_id_eia", "generator_id", "technology_description"]]
 
 
-def fetch_county_to_zone_mapping(sources):
-    """Fetch county to BA zone mapping from ReEDS."""
-    print("Fetching county to zone mapping...")
-    df = pd.read_csv(sources.fetch(COUNTY2ZONE_SOURCE))
-    print(f"  Loaded {len(df):,} county mappings")
-
-    # New ReEDS county2zone.csv uses column name "r" for the BA
-    df = df.rename(columns={"r": "ba"})
-    # Keep only FIPS and ba columns
-    df = df[["FIPS", "ba"]].copy()
-
-    # Convert FIPS to string with leading zeros (5 digits)
-    df["FIPS"] = df["FIPS"].astype(str).str.zfill(5)
-
-    return df
+def fetch_county_to_zone_mappings(sources):
+    """Read the pinned county-to-zone tables for both ReEDS zone sets."""
+    return {
+        zone_set: pd.read_csv(sources.fetch(source), usecols=["FIPS", "r"], dtype={"FIPS": "string"})
+        for zone_set, source in COUNTY2ZONE_SOURCES.items()
+    }
 
 
 def map_reeds_tech_to_technology(tech):
@@ -469,89 +462,67 @@ def perform_data_quality_checks(df):
     return len(issues) == 0
 
 
-def create_plant_region_map(reeds_df, county_zone_df):
-    """
-    Create plant to region mapping.
+def normalize_fips(fips):
+    return fips.astype("string").str.removeprefix("p").str.zfill(5)
 
-    Args:
-        reeds_df: ReEDS generator dataframe with FIPS and T_PID columns
-        county_zone_df: County to zone mapping with FIPS and ba columns
 
-    Returns:
-        DataFrame with plant_id and region columns
-    """
-    print("\nCreating plant-region mapping...")
-
-    # Extract unique plant-FIPS mappings from ReEDS data
-    plant_fips = reeds_df[["T_PID", "FIPS"]].copy()
-    plant_fips = plant_fips.rename(columns={"T_PID": "plant_id"})
-
-    # Strip 'p' prefix from FIPS in ReEDS data if present
-    plant_fips["FIPS"] = (
-        plant_fips["FIPS"].astype(str).str.replace("^p", "", regex=True).str.zfill(5)
+def create_plant_region_map(reeds_df, county_zone_mappings):
+    """Assign each plant to both zone sets by county, retaining `region` for z134."""
+    plant_region = (
+        reeds_df[["T_PID", "FIPS"]]
+        .drop_duplicates(subset=["T_PID"])
+        .rename(columns={"T_PID": "plant_id"})
     )
+    plant_region["FIPS"] = normalize_fips(plant_region["FIPS"])
 
-    # Drop duplicates
-    plant_fips = plant_fips.drop_duplicates(subset=["plant_id"])
+    for zone_set, column in ZONE_COLUMNS.items():
+        counties = county_zone_mappings[zone_set].rename(columns={"r": column})
+        counties = counties.assign(FIPS=normalize_fips(counties["FIPS"]))
+        plant_region = plant_region.merge(counties, on="FIPS", how="left", validate="m:1")
+        unmapped = plant_region[column].isna().sum()
+        print(f"  {zone_set}: {plant_region[column].nunique()} regions, {unmapped:,} unmapped plants")
 
-    # Merge with county to zone mapping
-    plant_region = plant_fips.merge(county_zone_df, on="FIPS", how="left")
+    return plant_region[["plant_id", *ZONE_COLUMNS.values()]]
 
-    # Rename ba to region
-    plant_region = plant_region.rename(columns={"ba": "region"})
 
-    # Select final columns
-    plant_region = plant_region[["plant_id", "region"]]
-
-    # Check for unmapped plants
-    unmapped = plant_region["region"].isna().sum()
-    if unmapped > 0:
-        print(f"  ⚠️  Warning: {unmapped:,} plants could not be mapped to a region")
-
-    print(f"  Created mapping for {len(plant_region):,} plants")
-    print(f"  Unique regions: {plant_region['region'].nunique()}")
-
-    return plant_region
+def export_plant_region_map(plant_region_map, sources, generator_source):
+    region_map_file = "data/plant_region_map.csv"
+    with sources.output(region_map_file, (generator_source, *COUNTY2ZONE_SOURCES.values())) as output:
+        plant_region_map.to_csv(output, index=False)
+    print(f"✓ Exported {len(plant_region_map):,} plant-region mappings to {region_map_file}")
 
 
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--plant-map-only", action="store_true",
+        help="Rebuild only the plant-region map, without fetching PUDL data.",
+    )
+    parser.add_argument(
+        "--generator-vintage", choices=("current", "legacy"), default="current",
+        help="Use the current locked generator snapshot or the original plant map's snapshot.",
+    )
     add_source_options(parser)
     args = parser.parse_args()
     sources = SourceLock(args.cache_dir, args.sources_lock)
+    generator_source = LEGACY_GENERATOR_SOURCE if args.generator_vintage == "legacy" else GENERATOR_SOURCE
 
-    print("=" * 60)
-    print("ReEDS to PowerGenome Generator Data Transformation")
-    print("=" * 60)
+    reeds_df = fetch_reeds_data(sources, generator_source)
+    plant_region_map = create_plant_region_map(reeds_df, fetch_county_to_zone_mappings(sources))
+    if args.plant_map_only:
+        export_plant_region_map(plant_region_map, sources, generator_source)
+        return
 
-    # Fetch data
-    reeds_df = fetch_reeds_data(sources)
     eia_tech_df = fetch_eia_technology_names()
-    county_zone_df = fetch_county_to_zone_mapping(sources)
-
-    # Transform
     transformed_df = transform_reeds_data(reeds_df, eia_tech_df)
-
-    # Create plant-region mapping
-    plant_region_map = create_plant_region_map(reeds_df, county_zone_df)
-
-    # Quality checks
     all_checks_passed = perform_data_quality_checks(transformed_df)
 
-    # Export generators
     output_file = "data/reeds_generators_transformed.csv"
-    with sources.output(output_file, (GENERATOR_SOURCE,)) as output:
+    with sources.output(output_file, (generator_source,)) as output:
         transformed_df.to_csv(output, index=False)
     print(f"\n✓ Exported {len(transformed_df):,} rows to {output_file}")
-
-    # Export plant-region mapping
-    region_map_file = "data/plant_region_map.csv"
-    with sources.output(region_map_file, (GENERATOR_SOURCE, COUNTY2ZONE_SOURCE)) as output:
-        plant_region_map.to_csv(output, index=False)
-    print(
-        f"✓ Exported {len(plant_region_map):,} plant-region mappings to {region_map_file}"
-    )
+    export_plant_region_map(plant_region_map, sources, generator_source)
 
     # Verify all plants in generators file are in plant-region mapping
     print("\nVerifying plant-region mapping coverage...")
@@ -569,7 +540,7 @@ def main():
         all_checks_passed = False
     else:
         print(
-            f"  ✓ All {len(generator_plants):,} plants in generators file are mapped to regions"
+            f"  ✓ All {len(generator_plants):,} plants in generators file are present in the plant-region map"
         )
 
     if not all_checks_passed:
