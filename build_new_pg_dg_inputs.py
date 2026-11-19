@@ -5,8 +5,8 @@ Creates two tables:
 1. distributed_capacity: region, capacity_mw, year
 2. distributed_profiles: time_index, region, weather_year, value, datetime_utc
 
-Supports inputs from either a local directory or directly from the
-ReEDS GitHub repository (raw URLs under inputs/). ReEDS now provides
+The command verifies its ReEDS inputs against sources.lock.json.
+The transformation functions accept local paths. ReEDS provides
 distributed PV data at the *county* level rather than by BA region:
 
 - county-level DG capacity: inputs/dgen_model_inputs/<scenario>/distpvcap_<scenario>.csv
@@ -25,22 +25,15 @@ https://github.com/NREL/ReEDS-2.0/discussions/227#discussioncomment-13069190
 """
 
 import argparse
-import os
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Union
 
 import numpy as np
 import pandas as pd
-import requests
 
-INPUTS_DIR = Path(__file__).parent.parent
+from locked_sources import SourceLock, add_source_options
 
-# Base URL for ReEDS inputs on GitHub (raw content)
-GITHUB_INPUTS_BASE = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs"
-
-# Paths (relative to GITHUB_INPUTS_BASE) to the county-level inputs
 REMOTE_FILES_PATH = "remote_files.csv"
 DISTPV_SCEN = "stscen2023_mid_case"
 DISTPV_CAP_PATH = f"dgen_model_inputs/{DISTPV_SCEN}/distpvcap_{DISTPV_SCEN}.csv"
@@ -53,83 +46,6 @@ DISTPV_CF_FILENAME = "cf_distpv_county.h5"
 CAP_MIN = 0.0001
 HOURS_PER_WEATHER_YEAR = 8760
 SOURCE_UTC_OFFSET_HOURS = -6
-
-
-def is_url(path: Union[str, Path]) -> bool:
-    return isinstance(path, str) and path.startswith(("http://", "https://"))
-
-
-def _stream_request(url: str, dest: str) -> None:
-    """Stream a URL download to dest, raising a helpful error on failure."""
-    try:
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-    except requests.RequestException as e:
-        if os.path.exists(dest):
-            os.remove(dest)
-        raise RuntimeError(f"Failed to download {url}: {e}") from e
-
-
-def download_file(
-    url: str, cache_dir: Union[str, Path, None] = None
-) -> str:
-    """Download a URL to a local file and return its path.
-
-    If cache_dir is given, the file is cached there (reusing it on later
-    calls to avoid re-downloading large files); otherwise a temporary file
-    is used that the caller is expected to clean up.
-    """
-    fname = Path(url.split("/")[-1] or "download")
-
-    if cache_dir is not None:
-        Path(cache_dir).mkdir(parents=True, exist_ok=True)
-        dest = str(Path(cache_dir) / fname)
-        if os.path.exists(dest):
-            return dest
-    else:
-        fd, dest = tempfile.mkstemp(suffix=fname.suffix)
-        os.close(fd)
-
-    _stream_request(url, dest)
-
-    # If this is supposed to be an HDF5 file, verify the signature
-    if fname.suffix == ".h5":
-        with open(dest, "rb") as fh:
-            sig = fh.read(8)
-        # HDF5 signature should be b"\x89HDF\r\n\x1a\n"
-        if sig != b"\x89HDF\r\n\x1a\n":
-            if os.path.exists(dest):
-                os.remove(dest)
-            raise ValueError(
-                f"Downloaded file from {url} does not look like a valid HDF5 "
-                "(unexpected signature). This may be an HTML error page or a "
-                "Git LFS pointer. Check the URL or provide a local path."
-            )
-    return dest
-
-
-def resolve_zenodo_url(remote_files_path: Union[str, Path], filename: str) -> str:
-    """Resolve the Zenodo download URL for a file from ReEDS remote_files.csv.
-
-    remote_files.csv (inputs/remote_files.csv in the ReEDS repo) lists the
-    Zenodo record hosting each large model input. Each row's url_base
-    contains {record_id} and {filename} placeholders to format.
-    """
-    remote_files = pd.read_csv(str(remote_files_path))
-    matches = remote_files[remote_files["filename"] == filename]
-    if matches.empty:
-        raise ValueError(
-            f"'{filename}' is not listed in {remote_files_path}. "
-            "The file may have been renamed or moved in a newer ReEDS release."
-        )
-    row = matches.iloc[0]
-    return str(row["url_base"]).format(
-        record_id=row["record_id"], filename=row["filename"]
-    )
 
 
 def read_county2zone(mapping_path: Union[str, Path]) -> pd.Series:
@@ -204,7 +120,7 @@ def build_distributed_capacity(
 def _county_weights(
     counties,
     county_capacity_path: Union[str, Path],
-    county_population_path: Union[str, Path],
+    county_population_path: Union[str, Path, None],
     county2zone: pd.Series,
     weight_year: int,
     weight_by: str,
@@ -279,12 +195,11 @@ def _utc_profile_calendar(source_index: pd.DatetimeIndex) -> pd.DatetimeIndex:
 def build_distributed_profiles(
     generation_profiles_path: Union[str, Path],
     county_capacity_path: Union[str, Path],
-    county_population_path: Union[str, Path],
+    county_population_path: Union[str, Path, None],
     mapping_path: Union[str, Path],
     weight_year: int = 2035,
     weight_by: str = "capacity",
     max_weather_year: int = 2013,
-    cache_dir: Union[str, Path, None] = None,
 ) -> pd.DataFrame:
     """
     Build hourly BA capacity-factor profiles with timezone-aware UTC labels.
@@ -299,26 +214,15 @@ def build_distributed_profiles(
 
     county2zone = read_county2zone(mapping_path)
 
-    # Download the .h5 file if a URL is given
-    tmp_file = None
-    h5_path = generation_profiles_path
-    if is_url(generation_profiles_path):
-        tmp_file = download_file(str(generation_profiles_path), cache_dir=cache_dir)
-        h5_path = tmp_file
-
-    try:
-        with h5py.File(str(h5_path), "r") as f:
-            source_index = _county_source_index(f["index_0"][:])
-            retained = source_index.year <= max_weather_year
-            utc_index = _utc_profile_calendar(source_index[retained])
-            county_cf = pd.DataFrame(
-                f["data"][:],
-                columns=[x.decode("utf-8") for x in f["columns"][:]],
-                index=source_index,
-            ).loc[retained]
-    finally:
-        if tmp_file is not None and cache_dir is None:
-            Path(tmp_file).unlink(missing_ok=True)
+    with h5py.File(generation_profiles_path, "r") as f:
+        source_index = _county_source_index(f["index_0"][:])
+        retained = source_index.year <= max_weather_year
+        utc_index = _utc_profile_calendar(source_index[retained])
+        county_cf = pd.DataFrame(
+            f["data"][:],
+            columns=[x.decode("utf-8") for x in f["columns"][:]],
+            index=source_index,
+        ).loc[retained]
 
     # Downselect profiles to counties present in the mapping (all of them in
     # practice) and align the weights to the same county set.
@@ -419,33 +323,23 @@ def main():
         default=2013,
         help="Include weather years up to and including this year (default: 2013)",
     )
-    parser.add_argument(
-        "--cache-dir",
-        type=Path,
-        default=None,
-        help="Optional directory to cache remote downloads (e.g. the large "
-        "distpv HDF5) between runs",
-    )
+    add_source_options(parser)
     args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
 
-    ilr = args.ilr  # Inverter Loading Ratio
-
-    # Build distributed capacity table
     print("Building distributed capacity table...")
-    county_capacity_url = f"{GITHUB_INPUTS_BASE}/{DISTPV_CAP_PATH}"
-    mapping_url = f"{GITHUB_INPUTS_BASE}/{COUNTY2ZONE_PATH}"
-
+    county_capacity_path = sources.fetch(DISTPV_CAP_PATH)
+    mapping_path = sources.fetch(COUNTY2ZONE_PATH)
     distributed_capacity = build_distributed_capacity(
-        county_capacity_path=county_capacity_url,
-        mapping_path=mapping_url,
-        ilr=ilr,
+        county_capacity_path=county_capacity_path,
+        mapping_path=mapping_path,
+        ilr=args.ilr,
     )
 
     # Save distributed capacity
     output_capacity_path = "distributed_capacity.parquet"
-    distributed_capacity.to_parquet(
-        output_capacity_path, index=False, compression="zstd"
-    )
+    with sources.output(output_capacity_path, (DISTPV_CAP_PATH, COUNTY2ZONE_PATH)) as output:
+        distributed_capacity.to_parquet(output, index=False, compression="zstd")
     print(f"Saved distributed capacity to {output_capacity_path}")
     print(f"  Shape: {distributed_capacity.shape}")
     print(f"  Columns: {list(distributed_capacity.columns)}")
@@ -456,28 +350,24 @@ def main():
         print("Skipping distributed profiles as requested (--skip-profiles).")
     else:
         print("Building distributed profiles table...")
-        # Resolve the Zenodo download URL for the county-level distpv HDF5
-        # from ReEDS' remote_files.csv
-        remote_files_url = f"{GITHUB_INPUTS_BASE}/{REMOTE_FILES_PATH}"
-        distpv_h5_url = resolve_zenodo_url(remote_files_url, DISTPV_CF_FILENAME)
-        print(f"  Resolved {DISTPV_CF_FILENAME} URL: {distpv_h5_url}")
-        county_population_url = f"{GITHUB_INPUTS_BASE}/{COUNTY_POPULATION_PATH}"
+        distpv_h5 = sources.fetch_from_zenodo_catalog(DISTPV_CF_FILENAME, REMOTE_FILES_PATH)
+        weight_pin = COUNTY_POPULATION_PATH if args.weight_by == "population" else DISTPV_CAP_PATH
+        population_path = sources.fetch(weight_pin) if args.weight_by == "population" else None
 
         distributed_profiles = build_distributed_profiles(
-            generation_profiles_path=distpv_h5_url,
-            county_capacity_path=county_capacity_url,
-            county_population_path=county_population_url,
-            mapping_path=mapping_url,
+            generation_profiles_path=distpv_h5,
+            county_capacity_path=county_capacity_path,
+            county_population_path=population_path,
+            mapping_path=mapping_path,
             weight_year=args.weight_year,
             weight_by=args.weight_by,
             max_weather_year=args.max_weather_year,
-            cache_dir=args.cache_dir,
         )
         # Save distributed profiles
         output_profiles_path = "distributed_profiles.parquet"
-        distributed_profiles.to_parquet(
-            output_profiles_path, index=False, compression="zstd"
-        )
+        profile_pins = (DISTPV_CF_FILENAME, REMOTE_FILES_PATH, COUNTY2ZONE_PATH, weight_pin)
+        with sources.output(output_profiles_path, profile_pins) as output:
+            distributed_profiles.to_parquet(output, index=False, compression="zstd")
         print(f"Saved distributed profiles to {output_profiles_path}")
         print(f"  Shape: {distributed_profiles.shape}")
         print(f"  Columns: {list(distributed_profiles.columns)}")

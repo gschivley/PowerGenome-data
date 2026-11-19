@@ -53,6 +53,35 @@
           "version": "2026-11-19"
         }
       ],
+      "input_pins": {
+        "cf_distpv_county.h5": {
+          "checksum": "md5:39be391056bd6b04afcaeed237c2dcf2",
+          "filename": "cf_distpv_county.h5",
+          "kind": "zenodo",
+          "record_id": 18636038
+        },
+        "dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv": {
+          "checksum": "sha256:eacd062724eab9082ac5ea778a9f22e5ceae0786a0b4c990c2ba3a00b2e84d3a",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "remote_files.csv": {
+          "checksum": "sha256:1a2d0da9d2a95f8abbf3417a094e7509040500b273abcb962487112af464cfae",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/remote_files.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/county2zone.csv": {
+          "checksum": "sha256:60123e6ac1261a3b17a09de47c904b382db39abdc3d7e1918fca1067692d45ea",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/county2zone.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
       "md5": "691755f533e6195d72f77bd2740c6112",
@@ -134,6 +163,15 @@
           "version": "2026-08-11"
         }
       ],
+      "input_pins": {
+        "plant_characteristics/pcm_defaults.json": {
+          "checksum": "sha256:00200c1db4169d012cb06b5d8d1c9ad4ac8dc9fb0d2e0789b943658e141a6067",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/plant_characteristics/pcm_defaults.json",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-08-14",
       "license": "cc-by-4.0",
       "md5": "75b7e22488de8048e56c1e1f81c359f9",
@@ -196,6 +234,42 @@
           "version": "2026-08-11"
         }
       ],
+      "input_pins": {
+        "demand_EER2025_IRAlow.h5": {
+          "checksum": "md5:385b0f7ef9117390a10ea2ada1c0961b",
+          "filename": "demand_EER2025_IRAlow.h5",
+          "kind": "zenodo",
+          "record_id": 18435264
+        },
+        "disaggregation/county_population.csv": {
+          "checksum": "sha256:0dcdc72aec291888c6c412f2e9211ca1ef8dff4cfe56cf8b872fe7b250fd3507",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/disaggregation/county_population.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/county_state.csv": {
+          "checksum": "sha256:c9b5430c927a83cb9ad0c817f205654b23d2689243e072b4b9196b6f075f0d5a",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/county_state.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/county2zone.csv": {
+          "checksum": "sha256:60123e6ac1261a3b17a09de47c904b382db39abdc3d7e1918fca1067692d45ea",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/county2zone.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/county2zone.csv": {
+          "checksum": "sha256:e7faf363c436d0fc2260bcdd2bfca8d1300cc8f6e0708f5d8d4a4b061f3509ef",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/county2zone.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
       "md5": "47446a4d55a38c32dd0d77cc52240386",
@@ -244,6 +318,16 @@
     },
     "reserve_margins.csv": {
       "history": [],
+      "input_pins": {
+        "reserves/prm_annual.csv": {
+          "checksum": "sha256:283c9da5ef494afb87a44794e56606e723d0fcfd095d02259980a76fa8d6cc18",
+          "commit": "cd0ee68f684ab61e107e07da6dbe4c8bf27c1389",
+          "kind": "github",
+          "path": "inputs/reserves/prm_annual.csv",
+          "release_tag": "2026.04.17",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-08-11",
       "license": "cc-by-4.0",
       "md5": "597fc25a77553b29217ea35037258d73",
@@ -324,6 +408,83 @@
           "version": "2026-08-11"
         }
       ],
+      "input_pins": {
+        "tl_2022_us_county.zip": {
+          "checksum": "sha256:a48c6e018d80e5557720971831a37120450f02c6d934687ccb3c26314ae8bda6",
+          "kind": "https",
+          "url": "https://www2.census.gov/geo/tiger/TIGER2022/COUNTY/tl_2022_us_county.zip"
+        },
+        "transmission/hvdc_existing.csv": {
+          "checksum": "sha256:421f52b5c228fd43de38cb760db2a61e527210218ae4d16b6cec9043142eb934",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/transmission/hvdc_existing.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "transmission/itl_NARIS.csv": {
+          "checksum": "sha256:2b11f5174e590c245fe060c188ce310726025c6ede0f0675ea2a85dca24e2de6",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/transmission/itl_NARIS.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/b2b.csv": {
+          "checksum": "sha256:bd4797d4c0ca9f43653746b744c6104a7054aa450228a6d1a139f1289d196fa2",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/b2b.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/county2zone.csv": {
+          "checksum": "sha256:60123e6ac1261a3b17a09de47c904b382db39abdc3d7e1918fca1067692d45ea",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/county2zone.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/interfaces_r.csv": {
+          "checksum": "sha256:1c9afd708ccbf32b2c5e5867ce66fce78e57559836676fd4ed255cc15c3adbd1",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/interfaces_r.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/zonehash.csv": {
+          "checksum": "sha256:95bbf855c4a2fbac1544220dd793185dc3619bd472753ab03cc9f0bc5882b0ed",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/zonehash.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/b2b.csv": {
+          "checksum": "sha256:fc30232331e2e71ae5302b820903ef0ef05bc03e88d428f13a2c8e15881d629b",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/b2b.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/county2zone.csv": {
+          "checksum": "sha256:e7faf363c436d0fc2260bcdd2bfca8d1300cc8f6e0708f5d8d4a4b061f3509ef",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/county2zone.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/interfaces_r.csv": {
+          "checksum": "sha256:c8c691ff9dbfa3692bcd626086fd6a3d6bc96d300d6a3ee1a844d67fb45ca6eb",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/interfaces_r.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/zonehash.csv": {
+          "checksum": "sha256:6691df7386d793f0ea2ca0ddda017c432bf6ae462d1d6591fe091b46dd56a811",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/zonehash.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-11-19",
       "license": "BSD-3-Clause",
       "md5": "28d2507753054ec02317f6c693755d9f",
@@ -386,6 +547,36 @@
           "version": "2026-11-19"
         }
       ],
+      "input_pins": {
+        "transmission/dollaryear.csv": {
+          "checksum": "sha256:2dd146cc97daea7cad664256d95002d7cfe7e66550187903fc1c5e7f1bbbea2e",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/transmission/dollaryear.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "transmission/transmission_cost_distance.csv": {
+          "checksum": "sha256:64f802b09ca6cb7ba1a2e342f4319c723e20fe4bcb14dcc5b6c72f134e6b5366",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/transmission/transmission_cost_distance.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z134/zonehash.csv": {
+          "checksum": "sha256:95bbf855c4a2fbac1544220dd793185dc3619bd472753ab03cc9f0bc5882b0ed",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z134/zonehash.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        },
+        "zones/z90/zonehash.csv": {
+          "checksum": "sha256:6691df7386d793f0ea2ca0ddda017c432bf6ae462d1d6591fe091b46dd56a811",
+          "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",
+          "kind": "github",
+          "path": "inputs/zones/z90/zonehash.csv",
+          "repository": "ReEDS-Model/ReEDS"
+        }
+      },
       "last_updated": "2026-11-19",
       "license": "BSD-3-Clause",
       "md5": "fe15373e01cc05d8074306ec22f51146",

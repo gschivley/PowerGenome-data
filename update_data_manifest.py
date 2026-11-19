@@ -42,6 +42,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from locked_sources import RECEIPT_SUFFIX, read_output_pins
+
 MANIFEST_VERSION = 1
 REEDS_ZONE_INPUTS = (
     "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/"
@@ -563,13 +565,10 @@ def build_new_entry(filename: str, md5: str, date_str: str) -> dict:
 def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
     """Push the prior entry onto history and create a new current entry for a changed file."""
     history = list(prior.get("history", []))
-    history.append(
-        {
-            "version": prior["version"],
-            "last_updated": prior["last_updated"],
-            "md5": prior["md5"],
-        }
-    )
+    previous = {key: prior[key] for key in ("version", "last_updated", "md5")}
+    if "input_pins" in prior:
+        previous["input_pins"] = prior["input_pins"]
+    history.append(previous)
     entry = {
         "sources": _prior_sources(prior),
         "last_updated": date_str,
@@ -670,7 +669,11 @@ def update_manifest(
     files: dict[str, dict] = {}
     changed_any = False
     for path in sorted(data_dir.iterdir()):
-        if not path.is_file() or path.name in (manifest_path.name, COLLECTION_README):
+        if (
+            not path.is_file()
+            or path.name in (manifest_path.name, COLLECTION_README)
+            or path.name.endswith(RECEIPT_SUFFIX)
+        ):
             continue
         filename = path.name
         if tracked is not None and filename not in tracked and filename not in old_files:
@@ -681,12 +684,15 @@ def update_manifest(
             continue
         md5 = md5_of(path)
         prior = old_files.get(filename)
+        pins = read_output_pins(path, md5)
 
         if prior is None:
             files[filename] = build_new_entry(filename, md5, date_str)
             print(f"[added]    {filename}")
             changed_any = True
-        elif prior.get("md5") == md5:
+        elif prior.get("md5") == md5 and (
+            pins is None or prior.get("input_pins") in (None, pins)
+        ):
             entry = _migrate_entry(prior)
             entry["sources"] = _resolve_sources(filename, prior)
             entry = _with_declared_scripts(filename, entry)
@@ -696,6 +702,8 @@ def update_manifest(
             files[filename] = _advance_entry(filename, prior, md5, date_str)
             print(f"[changed]  {filename}")
             changed_any = True
+        if pins is not None:
+            files[filename]["input_pins"] = pins
         if not files[filename].get("license"):
             print(f"[warn]     {filename}: no 'license' set (add one manually)")
 

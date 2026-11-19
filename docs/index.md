@@ -19,7 +19,6 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | `extract_location_variation.py` | `data/eia_location_variation_raw.csv`, `data/regional_cost_multipliers.csv`, `data/reeds_region_technology_location_variation_pivot.csv` | EIA capital cost PDF (`cache_data/capital_cost_AEO2025.pdf`); region→city map (`cache_data/reeds_region_to_eia_city.csv` from `match_reeds_regions_to_cities.py`) | Reads tables 1-1–1-19, maps EIA technologies to PowerGenome techs, merges with regions, and pivots to region×technology multipliers. |
 | `match_reeds_regions_to_cities.py` | `cache_data/reeds_region_to_eia_city.csv` (and `cache_data/geocoded_cities.json` cache) | Same EIA PDF (table 1-1); ReEDS US_PCA shapefile from ReEDS-Model/ReEDS GitHub | Geocodes PDF cities, downloads shapefiles, then matches each ReEDS region to a city (within-region or nearest). Feeds location-variation extraction. |
 | `build_reeds_transmission.py` | `data/transmission_capacity_reeds.csv`, `data/transmission_expansion_cost_reeds.csv` | Pinned ReEDS AC interface limits, existing DC capacities and greenfield routes | Builds both zone sets, averaging forward/reverse AC MW and summing AC+DC per region pair. |
-| `build_emission_policies.py` | `emission_policies_wecc.csv` (path hard-coded) | ESR Excel workbook (`ESR_Inputs_ReEDS_WECC.xlsx`); `settings/model_definition.yml` for model years and aggregations | Pop-weighted ESR values by region/year; enforces CES ≥ RPS when both apply. |
 | `fetch_gdp_ipd_data.py` | `data/dollar_year_adjustment.csv` | FRED (series `A191RD3A086NBEA`); BEA NIPA API (fallback, requires `BEA_API_KEY` env var) | Fetches annual GDP Implicit Price Deflator (GDP-IPD, index 2017=100) from 1980 onward. GDP-IPD is used by AEO and ATB for dollar-year adjustments. Intended to supersede `cpi_data.csv`; some configs/consumers may still reference the older file until migration is complete. Run weekly via GitHub Actions. |
 | `build_operational_constraints_reeds.py` | `data/operational_constraints_reeds.csv` | ReEDS `pcm_defaults.json` (`inputs/plant_characteristics/` from NREL GitHub) | Builds PowerGenome operational constraints from ReEDS PCM defaults: drops all CSP technologies, maps ReEDS tech names to ATB/EIA new-build names (see `TECH_MAP` in the script), applies battery/pumped-storage efficiency and duration overrides, and appends curated existing-technology rows preserved from the historical file. |
 | `build_atb_data.py` | `data/technology_costs_atb.parquet`, `data/technology_heat_rates_nrelatb.csv` | NREL ATB electricity tidy parquet (OEDI data lake: 2023, 2024 v4.0.0, 2025 v2.0.0) and ATB Excel workbooks for utility-scale battery costs (2025 battery costs still come from the v1 workbook, since no v2 workbook has been published and v2 leaves battery values unchanged) | Rebuilds NREL ATB technology costs and heat rates for data years 2023-2025 with the conventions of the historical build scripts (technology naming, $/kW→$/MW, construction-finance handling from 2024 on, `dollar_year = atb_year - 2`). Battery power ($/kW) and energy ($/kWh) capital costs are extracted from the Excel workbooks because the tidy data does not separate them; battery fixed O&M is 2.5% of capex. ATB 2025 contributes only the R&D financial case (tax-credit and experience-curve cases are dropped). Downloads are cached under `cache_data/atb/`. If a historical year (2023/2024) can no longer be reproduced from the official sources, the committed rows for that year are reused and a warning names the year and artifacts; 2023 currently falls back because the hosted tidy file was revised in place and no longer contains the original pumped-storage hydropower CAPEX records. ATB 2025 is required and never falls back. |
@@ -33,17 +32,73 @@ uv run python transform_reeds_generators.py
 uv run python build_hydro_profiles.py
 uv run python build_reeds_load.py
 uv run python build_new_pg_dg_inputs.py --skip-profiles  # avoid large HDF5 download
-# Full run (caches the large HDF5 under cache_data/ for reuse):
-uv run python build_new_pg_dg_inputs.py --cache-dir cache_data
+uv run python build_new_pg_dg_inputs.py                  # full run with a verified source cache
 uv run python extract_location_variation.py
 uv run python build_reeds_transmission.py
-uv run python build_emission_policies.py
 uv run python fetch_gdp_ipd_data.py
-uv run python build_operational_constraints_reeds.py  # optional --pcm-path <local pcm_defaults.json> to avoid downloading
+uv run python build_operational_constraints_reeds.py  # optional --pcm-path for an exact local copy
 uv run python build_atb_data.py            # rebuild ATB costs + heat rates (2023-2025); --years to limit
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
+
+## ReEDS source versions
+
+The builders read the repository's `sources.lock.json`. GitHub downloads use a full commit and file
+path with SHA-256 verification. A known release tag identifies the release in the lockfile. Git
+LFS downloads verify the data payload against the SHA-256 recorded in the Git pointer. Zenodo
+downloads use a specific version record and verify the file's published MD5. The builders verify
+fresh downloads, cache hits, and explicit local copies before reading them.
+
+In the table, `5bdbb89b` refers to ReEDS-Model/ReEDS commit
+`5bdbb89b31727c7f6eb55b93a56d14f8c3132890`.
+
+| Builder | Locked inputs and versions |
+| --- | --- |
+| `build_new_pg_dg_inputs.py` | `stscen2023_mid_case` county capacity, z134 county map, county population for population weighting, and `inputs/remote_files.csv` at `5bdbb89b`. The catalog's county PV row must agree with Zenodo record [18636038, v2](https://zenodo.org/records/18636038) for `cf_distpv_county.h5`. |
+| `build_reeds_load.py` | County-to-state, county population, and z134/z90 county maps at `5bdbb89b`. `demand_EER2025_IRAlow.h5` is from Zenodo record [18435264, v1](https://zenodo.org/records/18435264). |
+| `build_reeds_transmission.py` | `itl_NARIS.csv`, `hvdc_existing.csv`, `transmission_cost_distance.csv`, `dollaryear.csv`, and both zone sets' `zonehash.csv`, `interfaces_r.csv`, `county2zone.csv`, and `b2b.csv` at `5bdbb89b`. The 2022 Census TIGER county boundary ZIP has a SHA-256 pin. |
+| `build_operational_constraints_reeds.py` | `pcm_defaults.json` at `5bdbb89b`. |
+| `match_reeds_regions_to_cities.py` | `US_PCA` shapefile, index, attribute table and projection at `5bdbb89b`. |
+| `transform_reeds_generators.py` | ReEDS EIA-NEMS generator database and z134 county map at `5bdbb89b`. The PUDL generator input is listed below. |
+| `build_reserve_margins.py` | `prm_annual.csv` from ReEDS-Model/ReEDS release `2026.04.17`, plus the checked-in `cache_data/hierarchy.csv`. |
+| `transform_reeds_load.py`, `merge_transmission_capacity.py` | Legacy `EER_IRAlow_load_hourly.h5` and initial AC/non-AC transmission capacity CSVs from NatLabRockies/ReEDS-2.0 release `v2025.7.0`. Use the z134/z90 builders for the current load and transmission products. |
+
+Most ReEDS builders default to `cache_data/reeds-sources/`. Load and transmission use
+`cache_data/reeds-load/` and `cache_data/reeds-transmission/`. Pass `--cache-dir` to select a
+different cache. The cache includes the repository, commit, and relative file path for GitHub
+inputs and the record ID and filename for Zenodo inputs. To reuse a download from an older flat
+cache, copy it to the path returned by `SourceLock(cache_dir).cache_path(source_id)` using the
+input's key in the lockfile. A checksum mismatch stops the build and identifies the file. After
+investigating, remove a corrupt cache copy to retry the same pinned download.
+
+### Refresh a pin for review
+
+1. Identify the existing input and proposed replacement. For GitHub, record its full commit,
+   exact file path, and release tag if known. Hash the file bytes with SHA-256 and check that
+   any Git LFS payload matches the SHA-256 from the pointer at that commit. For Zenodo, use
+   the specific version's record page and match the filename and published checksum against
+   a full download.
+2. If the input is resolved through ReEDS `remote_files.csv`, verify the catalog at its pinned
+   commit and confirm that its row agrees with the Zenodo version, filename, and checksum.
+   Review the catalog and data changes together when the catalog changes.
+3. Review the lockfile diff and rebuild the affected outputs in a scratch directory. Use
+   `--sources-lock` to select a candidate lockfile while testing. Compare against the
+   existing outputs, including schemas, keys, values, and timestamps for Parquet artifacts.
+   Keep each build's `<output>.sources.json` receipt with its output when moving files for
+   manifest review. Include checksum results, expected output changes, and any rebuild
+   blockers in the PR.
+
+### Other external inputs
+
+| Builder or workflow | Source and how it is versioned |
+| --- | --- |
+| `build_atb_data.py` | OEDI ATB tidy Parquet uses a year-only 2023 object, a 2024 `v4.0.0` object, and a 2025 `v2.0.0` object. The battery workbooks have separate versioned filenames (2023 `v9.0`, 2024 `v3`, 2025 `v1`). The hosted 2023 Parquet was revised in place, so the 2023 build currently reuses historical committed rows. |
+| `transform_reeds_generators.py`, `build_hydro_profiles.py` | PUDL `out_eia__yearly_generators.parquet` and `out_eia__monthly_generators.parquet` use moving nightly object paths. Full historical reproduction requires the original yearly/monthly snapshots. Hydro also reads the local generator and plant-region products. |
+| `fetch_gdp_ipd_data.py`, `fetch_cpi_data.py` | FRED series `A191RD3A086NBEA` and `CPIAUCNS`, with BEA NIPA table `T10109` and BLS series `CUUR0000SA0` as respective fallbacks. These endpoints identify series whose historical values can be revised. |
+| EIA fuel-price helper and regional cost extraction | EIA bulk ZIPs are addressed by AEO edition (the manifest cites AEO 2026). The regional cost builders use a local copy of the edition-addressed AEO 2025 capital-cost PDF. The derived region-to-city map depends on the PDF, the locked ReEDS shapefile, and live Nominatim geocoding or a local JSON cache with no upstream snapshot ID. |
+| NERC reserve-margin helper | Uses the edition-addressed 2025 Long-Term Reliability Assessment PDF. |
+| Emissions policies and other prepared tables | ESR inputs historically used locally supplied Excel workbooks, including `ESR_Inputs_ReEDS_WECC.xlsx`, with model settings for years and aggregations. Workbook revisions and the external vintages of some prepared files remain undocumented. |
 
 ## Selecting a ReEDS zone set
 
@@ -97,7 +152,8 @@ An unlisted route is not a zero-cost route.
 `build_new_pg_dg_inputs.py` aggregates the ReEDS `cf_distpv_county.h5` capacity
 factors to z134 balancing areas. The default weights are county capacity for
 2035 (falling back to 2036 when needed); `--weight-by population` is also
-available. The script resolves the HDF5 through ReEDS `inputs/remote_files.csv`.
+available. The builder verifies the pinned ReEDS `inputs/remote_files.csv` and checks the
+matching row against the pinned Zenodo record before reading profiles.
 [Zenodo record 18636038](https://zenodo.org/records/18636038) documents fixed
 UTC−06:00 (no daylight saving time) and instantaneous on-hour observations.
 The builder validates that offset and each retained year's hourly calendar. It
@@ -114,8 +170,9 @@ does not otherwise rescale the source capacity factors.
 
 The generated `data/distributed_profiles.parquet` is a local/Zenodo release
 artifact and is not tracked in Git. Run `uv run python build_new_pg_dg_inputs.py`
-from the repository root, move the generated profile Parquet into `data/`, and
-run the manifest update below to record its verified checksum. The builder also
+from the repository root, move the generated profile Parquet and its
+`distributed_profiles.parquet.sources.json` receipt into `data/`, and run the
+manifest update below to record the verified checksum and pins. The builder also
 writes a capacity Parquet in the working directory; a profiles-only refresh does
 not require replacing the tracked capacity artifact in `data/`.
 
@@ -190,8 +247,8 @@ where extra collections live in a top-level `sections` object of `data/manifest.
 
 - `manifest_version` — schema version of the manifest format itself; fixed at `1` unless the schema changes.
 - `data_version` — the **collection** version in calendar-versioning format `YYYY.MM.DD`. It
-  advances to the current date whenever a data input is added or its contents change, and is otherwise
-  preserved from the previous run. The manifest file itself is excluded from scanning, so it never
+  advances to the current date whenever an output is added, its contents change, or its
+  previously recorded pin set changes. The manifest file itself is excluded from scanning, so it never
   triggers a `data_version` bump on its own. Use this to tag a collection release (e.g. on Zenodo).
 - Per file — `sources` is a list of `{source, source_url}` objects describing the upstream origin
   (human-maintained; a file may rely on more than one upstream, e.g. `plant_region_map.csv` uses both
@@ -201,7 +258,10 @@ where extra collections live in a top-level `sections` object of `data/manifest.
   (`public-domain`, `cc-by-4.0`, or `cc-zero`), `scripts` is the optional list of repo-relative
   paths of the repository scripts that build the file (declared so releases can be pinned to a
   code version), and `history` holds prior
-  `{version, last_updated, md5}` entries for every change that has been seen.
+  `{version, last_updated, md5}` entries for each prior artifact version.
+- `input_pins` is the build's verified pin snapshot. It appears on per-file entries and, when
+  available, on prior versions in their history. Older releases and mixed-source builds can have
+  incomplete provenance.
 
 ### Update it
 
@@ -216,7 +276,10 @@ uv run python update_data_manifest.py --data-dir resource_profiles --manifest re
 uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 ```
 
-Behavior:
+The manifest updater imports a build receipt only when the recorded MD5 matches the output
+beside it. A stale receipt stops the update. Receipts are local build metadata and are excluded
+from the list of release files. The first verified receipt for an existing byte-identical output
+can add pin provenance without changing the release version.
 
 - Unchanged files keep their existing version, date, and source.
 - Changed or newly added files get `version`/`last_updated` set to the current date, the previous entry

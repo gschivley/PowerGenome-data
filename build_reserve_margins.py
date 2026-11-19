@@ -10,25 +10,16 @@ This script:
    data/reserve_margins.csv with columns: region, planning_year, reserve_margin
 """
 
-from io import StringIO
+import argparse
 import warnings
 
 import pandas as pd
-import requests
 
-PRM_ANNUAL_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv"
+from locked_sources import SourceLock, add_source_options
+
+PRM_SOURCE = "reserves/prm_annual.csv"
 HIERARCHY_PATH = "cache_data/hierarchy.csv"
 OUTPUT_PATH = "data/reserve_margins.csv"
-REQUEST_TIMEOUT_SECONDS = 30
-
-
-def fetch_prm_annual(url: str) -> pd.DataFrame:
-    """Fetch the ReEDS planning reserve margin file from GitHub."""
-    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
-    response.raise_for_status()
-    df = pd.read_csv(StringIO(response.text))
-    df = df.rename(columns={"*nercr": "nercr"})
-    return df
 
 
 def validate_reserve_margins(df: pd.DataFrame) -> None:
@@ -78,9 +69,11 @@ def validate_reserve_margins(df: pd.DataFrame) -> None:
         )
 
 
-def build_reserve_margins() -> pd.DataFrame:
+def build_reserve_margins(sources: SourceLock | None = None) -> pd.DataFrame:
     """Build the reserve margins DataFrame mapping regions to annual PRM values."""
-    prm = fetch_prm_annual(PRM_ANNUAL_URL)
+    if sources is None:
+        sources = SourceLock()
+    prm = pd.read_csv(sources.fetch(PRM_SOURCE)).rename(columns={"*nercr": "nercr"})
     hierarchy = pd.read_csv(HIERARCHY_PATH, usecols=["ba", "nercr"])
 
     merged = hierarchy.merge(prm[["nercr", "t", "nerc"]], on="nercr", how="left")
@@ -94,9 +87,18 @@ def build_reserve_margins() -> pd.DataFrame:
     return merged
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
     print("Building reserve margins...")
-    reserve_margins = build_reserve_margins()
-    reserve_margins.to_csv(OUTPUT_PATH, index=False)
+    reserve_margins = build_reserve_margins(sources)
+    with sources.output(OUTPUT_PATH, (PRM_SOURCE,)) as output:
+        reserve_margins.to_csv(output, index=False)
     print(f"Saved {len(reserve_margins)} rows to {OUTPUT_PATH}")
     print(reserve_margins.head(10).to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()

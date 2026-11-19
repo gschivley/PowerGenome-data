@@ -1,12 +1,17 @@
 """Offline regression tests using the ReEDS county HDF5 structure."""
 
+import hashlib
 import importlib.util
+import json
+import sys
 from pathlib import Path
 
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
+
+from locked_sources import SourceLock, ZENODO_TEMPLATE, receipt_path
 
 SCRIPT = Path(__file__).parents[1] / "build_new_pg_dg_inputs.py"
 SPEC = importlib.util.spec_from_file_location("build_new_pg_dg_inputs", SCRIPT)
@@ -102,3 +107,64 @@ def test_rejects_wrong_source_calendar(county_inputs, problem):
     write_county_h5(county_inputs["generation_profiles_path"], dates.map(str))
     with pytest.raises(ValueError, match="8,760-hour ReEDS calendar|chronological order"):
         MODULE.build_distributed_profiles(**county_inputs)
+
+
+@pytest.mark.parametrize("mode", ["skip", "capacity", "population"])
+def test_county_cli_records_only_the_inputs_each_output_used(
+    tmp_path, county_inputs, monkeypatch, mode
+):
+    days = pd.date_range("2013-01-01", periods=8760, freq="h", tz="Etc/GMT+6")
+    write_county_h5(county_inputs["generation_profiles_path"], days.map(str))
+    payloads = {
+        MODULE.DISTPV_CAP_PATH: county_inputs["county_capacity_path"].read_bytes(),
+        MODULE.COUNTY2ZONE_PATH: county_inputs["mapping_path"].read_bytes(),
+    }
+    if mode == "population":
+        payloads[MODULE.COUNTY_POPULATION_PATH] = county_inputs["county_population_path"].read_bytes()
+    if mode != "skip":
+        hdf5 = county_inputs["generation_profiles_path"].read_bytes()
+        md5 = hashlib.md5(hdf5).hexdigest()
+        payloads[MODULE.REMOTE_FILES_PATH] = (
+            "filename,record_id,md5,url_base\n"
+            f"{MODULE.DISTPV_CF_FILENAME},123,{md5},{ZENODO_TEMPLATE}\n"
+        ).encode()
+    pins = {
+        key: {
+            "kind": "github", "repository": "owner/repo", "commit": "a" * 40,
+            "path": f"inputs/{key}", "checksum": f"sha256:{hashlib.sha256(value).hexdigest()}",
+        }
+        for key, value in payloads.items()
+    }
+    if mode != "skip":
+        pins[MODULE.DISTPV_CF_FILENAME] = {
+            "kind": "zenodo", "filename": MODULE.DISTPV_CF_FILENAME,
+            "record_id": 123, "checksum": f"md5:{md5}",
+        }
+        payloads[MODULE.DISTPV_CF_FILENAME] = hdf5
+
+    lockfile = tmp_path / "sources.lock.json"
+    lockfile.write_text(json.dumps({"lock_version": 1, "sources": pins}))
+    cache = tmp_path / "cache"
+    lock = SourceLock(cache, lockfile)
+    for key, value in payloads.items():
+        destination = lock.cache_path(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(value)
+
+    monkeypatch.chdir(tmp_path)
+    args = ["build_new_pg_dg_inputs.py", "--sources-lock", str(lockfile), "--cache-dir", str(cache)]
+    args.extend(["--skip-profiles"] if mode == "skip" else ["--weight-by", mode])
+    monkeypatch.setattr(sys, "argv", args)
+    MODULE.main()
+
+    capacity = json.loads(receipt_path("distributed_capacity.parquet").read_text())
+    assert set(capacity["input_pins"]) == {MODULE.DISTPV_CAP_PATH, MODULE.COUNTY2ZONE_PATH}
+    receipt = receipt_path("distributed_profiles.parquet")
+    if mode == "skip":
+        assert not receipt.exists()
+    else:
+        profiles = json.loads(receipt.read_text())
+        weights = MODULE.COUNTY_POPULATION_PATH if mode == "population" else MODULE.DISTPV_CAP_PATH
+        assert set(profiles["input_pins"]) == {
+            MODULE.DISTPV_CF_FILENAME, MODULE.REMOTE_FILES_PATH, MODULE.COUNTY2ZONE_PATH, weights,
+        }

@@ -30,3 +30,7 @@ cache_data/reeds-z90-load/
 cache_data/reeds-z90-transmission/
 cache_data/reeds-load/
 cache_data/reeds-transmission/
+
+# Verified ReEDS source cache and output provenance receipts
+/cache_data/reeds-sources/
+*.sources.json

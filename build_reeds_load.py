@@ -2,7 +2,6 @@
 """Build PowerGenome hourly load for z134 and z90 from shared ReEDS inputs."""
 
 import argparse
-import hashlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -11,12 +10,12 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import requests
 
-REEDS_REV = "5bdbb89b31727c7f6eb55b93a56d14f8c3132890"
-REEDS_INPUTS = f"https://raw.githubusercontent.com/ReEDS-Model/ReEDS/{REEDS_REV}/inputs"
-LOAD_URL = "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5"
-LOAD_MD5 = "385b0f7ef9117390a10ea2ada1c0961b"
+from locked_sources import SourceLock, add_source_options
+
+LOAD_SOURCE = "demand_EER2025_IRAlow.h5"
+STATE_SOURCE = "zones/county_state.csv"
+POPULATION_SOURCE = "disaggregation/county_population.csv"
 SCENARIO = "EER2025_IRAlow"
 MODEL_YEARS = (2021, 2025, 2030, 2035, 2040, 2045, 2050)
 WEATHER_YEARS = tuple(range(2007, 2014))
@@ -29,35 +28,6 @@ LOAD_SCHEMA = pa.schema([
     ("load_mw", pa.float64()), ("year", pa.int32()), ("scenario", pa.string()),
     ("zone_set", pa.string()), ("datetime_utc", pa.timestamp("ns", tz="UTC")),
 ])
-
-
-def fetch(url, cache, *, md5=None):
-    path = cache / url.rsplit("/", 1)[1]
-    if not path.exists():
-        cache.mkdir(parents=True, exist_ok=True)
-        with NamedTemporaryFile(dir=cache, delete=False) as tmp:
-            temporary = Path(tmp.name)
-        try:
-            with requests.get(url, stream=True, timeout=(15, 90)) as response:
-                response.raise_for_status()
-                with temporary.open("wb") as f:
-                    for chunk in response.iter_content(1024 * 1024):
-                        f.write(chunk)
-            verify_md5(temporary, md5)
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-    else:
-        verify_md5(path, md5)
-    return path
-
-
-def verify_md5(path, expected):
-    if expected:
-        with path.open("rb") as f:
-            actual = hashlib.file_digest(f, "md5").hexdigest()
-        if actual != expected:
-            raise ValueError(f"Unexpected MD5 for {path}: {actual} (expected {expected})")
 
 
 def population_weights(county_zones, county_states, population):
@@ -139,22 +109,28 @@ def build_load(source, weights_by_zone_set, output, **hourly_options):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("data/reeds_load_transformed.parquet"))
-    parser.add_argument("--cache-dir", type=Path, default=Path("cache_data/reeds-load"))
+    add_source_options(parser, Path("cache_data/reeds-load"))
     args = parser.parse_args()
 
-    def read(path, cache):
-        return pd.read_csv(fetch(f"{REEDS_INPUTS}/{path}", cache), dtype={"FIPS": str})
+    sources = SourceLock(args.cache_dir, args.sources_lock)
 
-    states = read("zones/county_state.csv", args.cache_dir)
-    population = read("disaggregation/county_population.csv", args.cache_dir)
+    def read(source_id):
+        return pd.read_csv(sources.fetch(source_id), dtype={"FIPS": str})
+
+    states = read(STATE_SOURCE)
+    population = read(POPULATION_SOURCE)
     weights = {}
+    zone_sources = []
     for zone_set, count in ZONE_SETS.items():
-        counties = read(f"zones/{zone_set}/county2zone.csv", args.cache_dir / zone_set)
-        weights[zone_set] = population_weights(counties, states, population)
+        zone_source = f"zones/{zone_set}/county2zone.csv"
+        zone_sources.append(zone_source)
+        weights[zone_set] = population_weights(read(zone_source), states, population)
         if len(weights[zone_set].columns) != count:
             raise ValueError(f"Expected {count} zones in {zone_set}; got {len(weights[zone_set].columns)}")
-    source = fetch(LOAD_URL, args.cache_dir, md5=LOAD_MD5)
-    build_load(source, weights, args.output)
+    source = sources.fetch(LOAD_SOURCE)
+    pins = (LOAD_SOURCE, STATE_SOURCE, POPULATION_SOURCE, *zone_sources)
+    with sources.output(args.output, pins) as output:
+        build_load(source, weights, output)
     print(f"Wrote {args.output}")
 
 

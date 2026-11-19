@@ -3,8 +3,7 @@
 
 This script regenerates the operational constraints table used by PowerGenome
 settings (``operational_constraints_table: operational_constraints_reeds.csv``)
-from the ReEDS plant characterization module (PCM) defaults file on GitHub:
-https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json
+from the ReEDS plant characterization module (PCM) defaults pinned in sources.lock.json.
 
 What it does:
 1. Fetches ``pcm_defaults.json`` from the ReEDS repo (or reads a local copy via
@@ -35,19 +34,15 @@ Re-run from the repo root with:  python build_operational_constraints_reeds.py
 """
 
 import argparse
-from io import StringIO
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import requests
 
-PCM_DEFAULTS_URL = (
-    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/"
-    "inputs/plant_characteristics/pcm_defaults.json"
-)
+from locked_sources import SourceLock, add_source_options
+
+PCM_SOURCE = "plant_characteristics/pcm_defaults.json"
 OUTPUT_PATH = Path("data/operational_constraints_reeds.csv")
-REQUEST_TIMEOUT_SECONDS = 30
 
 # Map new-build ATB technology names (keys, in the ATB naming convention used by
 # PowerGenome, e.g. "naturalgas_2on1_combined_cycle_fframe") to the existing
@@ -175,18 +170,6 @@ CURATED_ROWS = [
         "Max_Duration": 20, "Min_Duration": 8,
     },
 ]
-
-
-def fetch_pcm_defaults(url: str) -> pd.DataFrame:
-    """Fetch the ReEDS PCM defaults file from GitHub as a tidy DataFrame."""
-    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
-    response.raise_for_status()
-    df = (
-        pd.read_json(StringIO(response.text))
-        .T.reset_index()
-        .rename(columns={"index": "tech"})
-    )
-    return df
 
 
 def read_pcm_defaults(path: Path) -> pd.DataFrame:
@@ -369,7 +352,7 @@ def main() -> None:
         "--pcm-path",
         type=Path,
         default=None,
-        help="Optional local path to pcm_defaults.json (default: fetch from GitHub).",
+        help="Optional local copy of the pinned pcm_defaults.json.",
     )
     parser.add_argument(
         "--output",
@@ -377,19 +360,17 @@ def main() -> None:
         default=OUTPUT_PATH,
         help=f"Output CSV path (default: {OUTPUT_PATH}).",
     )
+    add_source_options(parser)
     args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
 
     print("Building operational constraints...")
-    if args.pcm_path is not None:
-        print(f"Reading PCM defaults from {args.pcm_path}")
-        pcm = read_pcm_defaults(args.pcm_path)
-    else:
-        print(f"Fetching PCM defaults from {PCM_DEFAULTS_URL}")
-        pcm = fetch_pcm_defaults(PCM_DEFAULTS_URL)
+    pcm = read_pcm_defaults(sources.fetch(PCM_SOURCE, local_path=args.pcm_path))
 
     constraints = build_operational_constraints_reeds(pcm)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    constraints.to_csv(args.output, index=False)
+    with sources.output(args.output, (PCM_SOURCE,)) as output:
+        constraints.to_csv(output, index=False)
     print(f"Saved {len(constraints)} rows to {args.output}")
     print(constraints.head(10).to_string(index=False))
 

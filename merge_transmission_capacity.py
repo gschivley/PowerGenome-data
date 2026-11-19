@@ -10,36 +10,15 @@ Output: transmission_capacity_reeds_legacy.csv
 Usage:
   python merge_transmission_capacity.py
 """
+import argparse
 from pathlib import Path
 
 import pandas as pd
-import requests
 
-# GitHub URLs for transmission files
-AC_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
-NONAC_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_nonAC_ba.csv"
+from locked_sources import SourceLock, add_source_options
 
-
-def download_file(url, cache_path):
-    """Download file from URL and cache it locally."""
-    cache_path = Path(cache_path)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if cache_path.exists():
-        print(f"Using cached file: {cache_path}")
-        with open(cache_path, "r") as f:
-            return f.read()
-
-    print(f"Downloading from {url}...")
-    response = requests.get(url)
-    response.raise_for_status()
-
-    # Cache the file
-    with open(cache_path, "w") as f:
-        f.write(response.text)
-    print(f"  Cached to {cache_path}")
-
-    return response.text
+AC_SOURCE = "transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+NONAC_SOURCE = "transmission/transmission_capacity_init_nonAC_ba.csv"
 
 
 def parse_ac(csv_text):
@@ -84,13 +63,12 @@ def main():
     print("Merging ReEDS Transmission Capacity Data")
     print("=" * 60)
 
-    # Download files
-    ac_text = download_file(
-        AC_URL, "cache_data/transmission_capacity_init_AC_ba_NARIS2024.csv"
-    )
-    nonac_text = download_file(
-        NONAC_URL, "cache_data/transmission_capacity_init_nonAC_ba.csv"
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
+    ac_text = sources.fetch(AC_SOURCE).read_text(encoding="utf-8")
+    nonac_text = sources.fetch(NONAC_SOURCE).read_text(encoding="utf-8")
 
     # Parse data
     print("\nParsing AC transmission data...")
@@ -119,7 +97,8 @@ def main():
     out_file = "transmission_capacity_reeds_legacy.csv"
     out_path = Path(out_file)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    agg_df.to_csv(out_path, index=False)
+    with sources.output(out_path, (AC_SOURCE, NONAC_SOURCE)) as output:
+        agg_df.to_csv(output, index=False)
 
     print(f"\n✓ Wrote {len(agg_df):,} total rows to {out_file}")
     print("=" * 60)
