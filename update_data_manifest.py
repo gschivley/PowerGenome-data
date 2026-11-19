@@ -103,12 +103,29 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "distributed_profiles.parquet": [
         {
             "source": (
-                "ReEDS distributed PV generation profiles (multi-year "
-                "distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py."
+                "ReEDS hourly county distributed PV capacity factors (cf_distpv_county.h5), "
+                "resolved via ReEDS inputs/remote_files.csv and aggregated to z134 balancing "
+                "areas by build_new_pg_dg_inputs.py; fixed UTC−06:00 values shifted six hours "
+                "later within each weather year and labeled on the cyclic 8,760-hour UTC calendar."
+            ),
+            "source_url": "https://zenodo.org/records/18636038/files/cf_distpv_county.h5",
+        },
+        {
+            "source": (
+                "ReEDS stscen2023_mid_case county PV capacity weights, using 2036 "
+                "because 2035 is not available in the source table."
             ),
             "source_url": (
-                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/"
-                "distpv-reference_ba.h5"
+                "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/"
+                "5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/"
+                "dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+            ),
+        },
+        {
+            "source": "ReEDS county-to-zone mapping for z134 balancing areas.",
+            "source_url": (
+                "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/"
+                "5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/county2zone.csv"
             ),
         },
     ],

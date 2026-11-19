@@ -92,6 +92,52 @@ not a per-MW or per-mile cost. `length_miles` is the source route length; neithe
 measure applies ReEDS' optional routing length adder or inflation adjustment.
 An unlisted route is not a zero-cost route.
 
+## Distributed PV hourly profiles
+
+`build_new_pg_dg_inputs.py` aggregates the ReEDS `cf_distpv_county.h5` capacity
+factors to z134 balancing areas. The default weights are county capacity for
+2035 (falling back to 2036 when needed); `--weight-by population` is also
+available. The script resolves the HDF5 through ReEDS `inputs/remote_files.csv`.
+[Zenodo record 18636038](https://zenodo.org/records/18636038) documents fixed
+UTC−06:00 (no daylight saving time) and instantaneous on-hour observations.
+The builder validates that offset and each retained year's hourly calendar. It
+does not otherwise rescale the source capacity factors.
+
+- Each weather year has 8,760 hours starting Jan 1 00:00. Leap years retain
+  February 29 and end December 30 at 23:00; December 31 is omitted.
+- Values shift six hours later **within each weather year**: the first six UTC
+  slots take the last six source values of the same year. This cyclic convention
+  preserves each year's total without borrowing from another weather year.
+- `datetime_utc` is a timezone-aware UTC hourly label, not an interval-start
+  measurement. `time_index` remains zero-based across all retained years per
+  region (0–61,319 for the default 2007–2013 coverage).
+
+The generated `data/distributed_profiles.parquet` is a local/Zenodo release
+artifact and is not tracked in Git. Run `uv run python build_new_pg_dg_inputs.py`
+from the repository root, move the generated profile Parquet into `data/`, and
+run the manifest update below to record its verified checksum. The builder also
+writes a capacity Parquet in the working directory; a profiles-only refresh does
+not require replacing the tracked capacity artifact in `data/`.
+
+### Historical BA source clock audit
+
+The audit in [draft PR #25](https://github.com/gschivley/PowerGenome-data/pull/25)
+reproduced all 8,216,880 values in [Zenodo release 22233228](https://zenodo.org/records/22233228)
+from the legacy ReEDS v2025.1.0 BA file `distpv-reference_ba.h5` (MD5
+`f4584570629db292e725ecbf34da94ea`) with the original uniform +6-hour roll.
+Despite fixed UTC−06:00 labels, the BA data already showed almost no east–west
+shift in solar timing. The roll did not cause that anomaly, though the global roll did introduce a separate bug: borrowing at weather-year
+boundaries.
+
+In 2010, the slope of the capacity-factor-weighted circular mean hour against
+longitude-derived UTC solar noon (`12 − longitude / 15`) was 0.06465 for the
+134 legacy BAs versus 1.00947 for the 3,109 counties in record 18636038 (about 1
+is expected for a shared clock). Region-local or noon-aligned legacy values
+remain a plausible explanation, not a proved cause or correction. The datasets
+differ in vintage and values, so this does not establish that county-to-BA
+aggregation caused the legacy anomaly. The old BA file and release are audit
+references only, not inputs to the county-based product above.
+
 ## Data files not regenerated here
 
 Files such as `fuel_prices.csv` and other static CSVs in `data/` are provided as-is and are not built by the scripts listed above. `technology_costs_atb.parquet` and `technology_heat_rates_nrelatb.csv` are the exception: they are rebuilt by `build_atb_data.py` (see the table above), including a fallback that reuses committed rows for any historical ATB year whose official source can no longer reproduce them.
