@@ -22,7 +22,10 @@ Data is published to Zenodo as one deposit per collection via `publish_zenodo.py
 - **PowerGenome Existing Renewable Resource Groups** — existing renewable resource group files from `existing_resource_groups/`
 
 Each collection keeps its own manifest (`<folder>/manifest.json`) with its own `data_version`, so
-collections version independently and deposits are only created once a collection has files.
+collections version independently and deposits are only created once a collection has files. Each
+deposit includes its collection's manifest, so downloads carry the per-file data versions,
+licenses and upstream sources.
+
 Large hourly load and distributed PV profiles, and Parquets in the two resource-profile
 collections, are release artifacts rather than Git LFS files. A fresh checkout does not
 include them. Download the matching Zenodo release or build the artifacts locally before
