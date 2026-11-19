@@ -3,7 +3,10 @@ RESOURCE_GROUP_PROFILES: ../resource_profiles
 
 data_location: ../data
 generation_table: reeds_generators_transformed.csv
-plant_region_table: plant_region_map.csv
+plant_region_table:
+  table_name: plant_region_map.csv
+  filters:
+    - - [zone_set, 'in', [z134]]
 resource_heat_rate_table: technology_heat_rates_nrelatb.csv
 resource_cost_table: technology_costs_atb.parquet
 operational_constraints_table: operational_constraints_reeds.csv

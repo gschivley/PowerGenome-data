@@ -62,9 +62,10 @@ def hours_in_month(report_date) -> float:
 
 
 def load_plant_region_data() -> pd.DataFrame:
-    """Load plant-to-region mapping."""
-    logger.info("Loading plant-region mappings...")
-    return pd.read_csv("data/plant_region_map.csv")
+    """Load the z134 plant-to-region mapping used by the hydro profiles."""
+    logger.info("Loading z134 plant-region mappings...")
+    plant_regions = pd.read_csv("data/plant_region_map.csv")
+    return plant_regions.loc[plant_regions["zone_set"].eq("z134"), ["plant_id", "region"]]
 
 
 def load_generator_data() -> pd.DataFrame:

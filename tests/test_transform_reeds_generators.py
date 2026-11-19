@@ -13,11 +13,14 @@ def test_plant_map_uses_county_in_each_zone_set():
 
     result = create_plant_region_map(generators, zone_maps)
 
-    assert result.columns.tolist() == ["plant_id", "region", "region_z90"]
-    assert result["plant_id"].tolist() == [4, 7, 9]
-    assert result["region"].tolist() == ["p1", "p1", "p2"]
-    assert result["region_z90"].iloc[:2].tolist() == ["AL_N", "AL_S"]
-    assert pd.isna(result["region_z90"].iloc[2])
+    expected = pd.DataFrame(
+        {
+            "plant_id": [4, 7, 9, 4, 7, 9],
+            "region": ["p1", "p1", "p2", "AL_N", "AL_S", float("nan")],
+            "zone_set": ["z134", "z134", "z134", "z90", "z90", "z90"],
+        }
+    )
+    pd.testing.assert_frame_equal(result, expected)
 
 
 def test_plant_map_rejects_duplicate_counties_after_normalization():

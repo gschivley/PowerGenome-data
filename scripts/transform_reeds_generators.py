@@ -20,8 +20,8 @@ from locked_sources import SourceLock, add_source_options
 
 GENERATOR_SOURCE = "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
 LEGACY_GENERATOR_SOURCE = "legacy/ReEDS_generator_database_final_EIA-NEMS.csv"
-ZONE_COLUMNS = {"z134": "region", "z90": "region_z90"}
-COUNTY2ZONE_SOURCES = {zone_set: f"zones/{zone_set}/county2zone.csv" for zone_set in ZONE_COLUMNS}
+ZONE_SETS = ("z134", "z90")
+COUNTY2ZONE_SOURCES = {zone_set: f"zones/{zone_set}/county2zone.csv" for zone_set in ZONE_SETS}
 EIA_URL = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
 
 
@@ -467,22 +467,24 @@ def normalize_fips(fips):
 
 
 def create_plant_region_map(reeds_df, county_zone_mappings):
-    """Assign each plant to both zone sets by county, retaining `region` for z134."""
-    plant_region = (
+    """Assign each plant to one region per ReEDS zone set by county."""
+    plant_fips = (
         reeds_df[["T_PID", "FIPS"]]
         .drop_duplicates(subset=["T_PID"])
         .rename(columns={"T_PID": "plant_id"})
     )
-    plant_region["FIPS"] = normalize_fips(plant_region["FIPS"])
+    plant_fips["FIPS"] = normalize_fips(plant_fips["FIPS"])
 
-    for zone_set, column in ZONE_COLUMNS.items():
-        counties = county_zone_mappings[zone_set].rename(columns={"r": column})
+    mappings = []
+    for zone_set in ZONE_SETS:
+        counties = county_zone_mappings[zone_set].rename(columns={"r": "region"})
         counties = counties.assign(FIPS=normalize_fips(counties["FIPS"]))
-        plant_region = plant_region.merge(counties, on="FIPS", how="left", validate="m:1")
-        unmapped = plant_region[column].isna().sum()
-        print(f"  {zone_set}: {plant_region[column].nunique()} regions, {unmapped:,} unmapped plants")
+        mapped = plant_fips.merge(counties, on="FIPS", how="left", validate="m:1")
+        unmapped = mapped["region"].isna().sum()
+        print(f"  {zone_set}: {mapped['region'].nunique()} regions, {unmapped:,} unmapped plants")
+        mappings.append(mapped[["plant_id", "region"]].assign(zone_set=zone_set))
 
-    return plant_region[["plant_id", *ZONE_COLUMNS.values()]]
+    return pd.concat(mappings, ignore_index=True)
 
 
 def export_plant_region_map(plant_region_map, sources, generator_source):

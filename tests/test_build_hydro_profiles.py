@@ -35,6 +35,22 @@ PUDL_COLUMNS = [
 ]
 
 
+def test_hydro_uses_only_z134_plant_regions(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "plant_region_map.csv").write_text(
+        "plant_id,region,zone_set\n1,WA_W,z90\n1,p1,z134\n"
+    )
+    (data / "reeds_generators_transformed.csv").write_text(
+        "plant_id,technology\n1,Conventional Hydroelectric\n"
+    )
+
+    assert MODULE.merge_plant_region_hydro_data().to_dict("records") == [
+        {"plant_id": 1, "region": "p1", "hydro_type": "conventional"}
+    ]
+
+
 class TestHoursInMonth(unittest.TestCase):
     """December (and every month) must get a positive calendar-hour divisor."""
 

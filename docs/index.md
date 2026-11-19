@@ -112,10 +112,21 @@ rows. `scripts/cluster_regions.py` selects z134 by default; pass `--zone-set z90
 its matching hierarchy to cluster z90 zones. Other PowerGenome datasets are not
 necessarily available in both resolutions.
 
-`data/plant_region_map.csv` has one row per plant. Use `region` for z134 (the
-existing column) or `region_z90` for z90. Both are ReEDS zone identifiers assigned
-from the plant's county FIPS, not by translating one zone into the other. To
-reproduce the checked-in map without rebuilding the generator table, run:
+`data/plant_region_map.csv` has columns `plant_id`, `region`, and `zone_set`, with
+one row per plant per zone set. Filter on `zone_set` before joining to generators
+on `plant_id`. Use PowerGenome's generic `filters` setting on `plant_region_table`:
+
+```yaml
+plant_region_table:
+  table_name: plant_region_map.csv
+  filters:
+    - - [zone_set, 'in', [z134]]
+```
+
+The WECC and EI_PJM examples and the hydro profile builder use z134. For a z90
+model, use `[z90]` in the filter and use matching regions in the other inputs.
+Regions are assigned from the plant's county FIPS independently for each zone
+set. To reproduce the checked-in map without rebuilding the generator table, run:
 
 ```bash
 uv run python scripts/transform_reeds_generators.py --plant-map-only --generator-vintage legacy
