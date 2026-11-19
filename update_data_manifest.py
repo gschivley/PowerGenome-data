@@ -193,7 +193,13 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "reeds_load_transformed.parquet": [
         {
-            "source": "ReEDS EER2025 IRA-low hourly state end-use load, model years 2021/2025/2030/2035/2040/2045/2050 and weather years 2007–2013.",
+            "source": (
+                "ReEDS EER2025 IRA-low hourly state end-use load, model years "
+                "2021/2025/2030/2035/2040/2045/2050 and weather years 2007–2013. "
+                "Fixed UTC−06:00 values shifted six hours later independently within "
+                "each model/weather-year block; datetime_utc labels interval starts "
+                "on the cyclic 8,760-hour UTC calendar."
+            ),
             "source_url": "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5",
         },
         *[

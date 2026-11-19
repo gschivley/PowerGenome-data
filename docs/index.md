@@ -59,13 +59,18 @@ demand, allocated at build time using each zone's share of its states' 2021
 Census county populations (ReEDS' `population` method). No additional
 distribution-loss factor, historical calibration, or model-year interpolation is
 used. The source has model years 2021, 2025, 2030, 2035, 2040, 2045 and 2050.
-This replaces the legacy z134 `IRA_low` scenario and its broader model-year coverage. Weather years
-2007–2013 each contain 8,760 hours in fixed UTC−06:00 time, omitting December 31
-of leap years as in the source. `time_index` starts at 1 for each model year,
-weather year and zone. For example, to select the 2030 z90 profiles:
+This replaces the legacy z134 `IRA_low` scenario and its broader model-year coverage.
+Both zone sets convert the source's fixed UTC−06:00 load to UTC. Each model-year
+and weather-year block shifts six hours later independently: the first six UTC
+hours use the last six source hours from the same block, preserving annual energy
+without mixing weather years. `datetime_utc` labels interval starts on a cyclic
+8,760-hour calendar that retains February 29 and omits December 31 in leap years.
+`time_index` is still one-based within each model year, weather year and zone,
+but now indexes UTC hours. Remove any downstream load-only six-hour correction
+when adopting this file; model-local timezone settings are separate.
 
 ```sql
-SELECT time_index, weather_year, region, load_mw
+SELECT time_index, datetime_utc, weather_year, region, load_mw
 FROM read_parquet('data/reeds_load_transformed.parquet')
 WHERE zone_set = 'z90' AND scenario = 'EER2025_IRAlow' AND year = 2030;
 ```

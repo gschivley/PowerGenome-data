@@ -185,13 +185,13 @@
       ],
       "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "c93858ef3d4710385a4ebb7b18c9f0f0",
+      "md5": "47446a4d55a38c32dd0d77cc52240386",
       "scripts": [
         "build_reeds_load.py"
       ],
       "sources": [
         {
-          "source": "ReEDS EER2025 IRA-low hourly state end-use load, model years 2021/2025/2030/2035/2040/2045/2050 and weather years 2007\u20132013.",
+          "source": "ReEDS EER2025 IRA-low hourly state end-use load, model years 2021/2025/2030/2035/2040/2045/2050 and weather years 2007\u20132013. Fixed UTC\u221206:00 values shifted six hours later independently within each model/weather-year block; datetime_utc labels interval starts on the cyclic 8,760-hour UTC calendar.",
           "source_url": "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5"
         },
         {
@@ -400,6 +400,6 @@
       "version": "2026-11-19"
     }
   },
-  "generated_at_utc": "2026-11-19T04:25:23.743671+00:00",
+  "generated_at_utc": "2026-11-19T12:42:08.113973+00:00",
   "manifest_version": 1
 }

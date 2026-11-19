@@ -21,11 +21,13 @@ SCENARIO = "EER2025_IRAlow"
 MODEL_YEARS = (2021, 2025, 2030, 2035, 2040, 2045, 2050)
 WEATHER_YEARS = tuple(range(2007, 2014))
 HOURS_PER_YEAR = 8760
+SOURCE_TIMEZONE = "Etc/GMT+6"  # Fixed UTC-06:00; no daylight saving time.
+UTC_SHIFT_HOURS = 6
 ZONE_SETS = {"z134": 134, "z90": 90}
 LOAD_SCHEMA = pa.schema([
     ("time_index", pa.int64()), ("weather_year", pa.int32()), ("region", pa.string()),
     ("load_mw", pa.float64()), ("year", pa.int32()), ("scenario", pa.string()),
-    ("zone_set", pa.string()),
+    ("zone_set", pa.string()), ("datetime_utc", pa.timestamp("ns", tz="UTC")),
 ])
 
 
@@ -80,6 +82,7 @@ def population_weights(county_zones, county_states, population):
 
 
 def hourly_tables(source, weights, zone_set, years=MODEL_YEARS, weather_years=WEATHER_YEARS):
+    hour_slots = np.tile(np.arange(HOURS_PER_YEAR), len(weights.columns))
     with h5py.File(source, "r") as h5:
         for year in years:
             group = h5[str(year)]
@@ -88,28 +91,32 @@ def hourly_tables(source, weights, zone_set, years=MODEL_YEARS, weather_years=WE
             if mismatch:
                 raise ValueError(f"State coverage mismatch: {sorted(mismatch)}")
             dates = pd.DatetimeIndex(pd.to_datetime(group["datetime"][:].astype("U")))
-            dates = dates.tz_convert("Etc/GMT+6").as_unit("ns")
+            if dates.tz is None or dates.tz.utcoffset(None) != pd.Timedelta(hours=-UTC_SHIFT_HOURS):
+                raise ValueError(f"Expected timezone-aware UTC-06:00 source timestamps for {year}")
+            dates = dates.tz_convert(SOURCE_TIMEZONE).as_unit("ns")
             for weather_year in weather_years:
                 mask = dates.year == weather_year
-                expected = pd.date_range(
-                    f"{weather_year}-01-01", periods=HOURS_PER_YEAR, freq="h", tz=dates.tz
-                )
-                if not dates[mask].equals(expected.as_unit("ns")):
+                # Both clocks use 8760 interval starts from Jan 1, omitting Dec 31 in leap years.
+                calendar = pd.date_range(f"{weather_year}-01-01", periods=HOURS_PER_YEAR, freq="h").as_unit("ns")
+                if not dates[mask].equals(calendar.tz_localize(SOURCE_TIMEZONE)):
                     raise ValueError(f"Invalid hourly calendar for {year}/{weather_year}")
                 raw = np.column_stack([group[state][:][mask] for state in states])
-                loads = raw @ weights.loc[states].to_numpy()
+                # Align values to the UTC calendar, wrapping only within this annual block.
+                raw_utc = np.roll(raw, UTC_SHIFT_HOURS, axis=0)
+                loads = raw_utc @ weights.loc[states].to_numpy()
                 if not np.isfinite(loads).all() or (loads < 0).any():
                     raise ValueError(f"Invalid loads for {year}/{weather_year}")
-                np.testing.assert_allclose(loads.sum(axis=1), raw.sum(axis=1), rtol=1e-12)
+                np.testing.assert_allclose(loads.sum(axis=1), raw_utc.sum(axis=1), rtol=1e-12)
                 frame = pd.DataFrame(
                     {
-                        "time_index": np.tile(np.arange(1, HOURS_PER_YEAR + 1), len(weights.columns)),
+                        "time_index": hour_slots + 1,
                         "weather_year": weather_year,
                         "region": np.repeat(weights.columns.to_numpy(), HOURS_PER_YEAR),
                         "load_mw": loads.T.ravel(),
                         "year": year,
                         "scenario": SCENARIO,
                         "zone_set": zone_set,
+                        "datetime_utc": calendar.tz_localize("UTC").take(hour_slots),
                     }
                 )
                 yield pa.Table.from_pandas(frame, schema=LOAD_SCHEMA, preserve_index=False)
