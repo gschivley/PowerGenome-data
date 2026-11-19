@@ -1,5 +1,5 @@
 {
-  "data_version": "2026.11.17",
+  "data_version": "2026.11.19",
   "files": {
     "cpi_data.csv": {
       "history": [],
@@ -15,10 +15,16 @@
       "version": "2026-08-11"
     },
     "distributed_capacity.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "d8c206063044ea93edb80e8cae100357",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "d8c206063044ea93edb80e8cae100357",
+      "md5": "86713a54bbd61578b0128ff1c34a2553",
       "scripts": [
         "build_new_pg_dg_inputs.py"
       ],
@@ -32,13 +38,19 @@
           "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-19"
     },
     "distributed_profiles.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+      "md5": "f1b768dc3a404e651766a63ffbc33e79",
       "scripts": [
         "build_new_pg_dg_inputs.py"
       ],
@@ -48,7 +60,7 @@
           "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-19"
     },
     "dollar_year_adjustment.csv": {
       "history": [],
@@ -64,10 +76,16 @@
       "version": "2026-08-11"
     },
     "fuel_prices.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-19",
       "license": "public-domain",
-      "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+      "md5": "c41248f16a56de361a3bacb6a71bd5e6",
       "scripts": [
         ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
       ],
@@ -77,7 +95,7 @@
           "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-19"
     },
     "nerc_reserve_margins.csv": {
       "history": [],
@@ -158,20 +176,42 @@
       "version": "2026-08-11"
     },
     "reeds_load_transformed.parquet": {
-      "history": [],
-      "last_updated": "2026-08-11",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "2a6c49b1cd3ea175b776ce853f06485e",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "2a6c49b1cd3ea175b776ce853f06485e",
+      "md5": "c93858ef3d4710385a4ebb7b18c9f0f0",
       "scripts": [
-        "transform_reeds_load.py"
+        "build_reeds_load.py"
       ],
       "sources": [
         {
-          "source": "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py.",
-          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/EER_IRAlow_load_hourly.h5"
+          "source": "ReEDS EER2025 IRA-low hourly state end-use load, model years 2021/2025/2030/2035/2040/2045/2050 and weather years 2007\u20132013.",
+          "source_url": "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5"
+        },
+        {
+          "source": "z134: Pinned ReEDS county-to-zone mapping used to allocate state load.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/county2zone.csv"
+        },
+        {
+          "source": "z90: Pinned ReEDS county-to-zone mapping used to allocate state load.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/county2zone.csv"
+        },
+        {
+          "source": "Pinned ReEDS county-to-state mapping.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/county_state.csv"
+        },
+        {
+          "source": "ReEDS county population weights from 2021 Census estimates.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/disaggregation/county_population.csv"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-19"
     },
     "regional_cost_multipliers.csv": {
       "history": [],
@@ -216,11 +256,16 @@
           "last_updated": "2026-09-03",
           "md5": "c286d7379ac186dd5a6e6af9085185f7",
           "version": "2026-09-03"
+        },
+        {
+          "last_updated": "2026-11-17",
+          "md5": "90a2d8cee3f9a7cc55a160868d5d394a",
+          "version": "2026-11-17"
         }
       ],
-      "last_updated": "2026-11-17",
+      "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "90a2d8cee3f9a7cc55a160868d5d394a",
+      "md5": "16e7b023bea48e54c9e01f50bd212c16",
       "scripts": [
         "build_atb_data.py"
       ],
@@ -234,7 +279,7 @@
           "source_url": "https://atb.nrel.gov/electricity/2025/data"
         }
       ],
-      "version": "2026-11-17"
+      "version": "2026-11-19"
     },
     "technology_heat_rates_nrelatb.csv": {
       "history": [
@@ -259,22 +304,102 @@
       "version": "2026-09-03"
     },
     "transmission_capacity_reeds.csv": {
-      "history": [],
-      "last_updated": "2026-08-11",
-      "license": "cc-by-4.0",
-      "md5": "afed76f028868aae1d68c095bca01f24",
+      "history": [
+        {
+          "last_updated": "2026-08-11",
+          "md5": "afed76f028868aae1d68c095bca01f24",
+          "version": "2026-08-11"
+        }
+      ],
+      "last_updated": "2026-11-19",
+      "license": "BSD-3-Clause",
+      "md5": "28d2507753054ec02317f6c693755d9f",
       "scripts": [
-        "merge_transmission_capacity.py"
+        "build_reeds_transmission.py"
       ],
       "sources": [
         {
-          "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
-          "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+          "source": "Native ReEDS forward and reverse AC interface transfer limits (MW), averaged before combining with existing non-AC capacity.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/transmission/itl_NARIS.csv"
+        },
+        {
+          "source": "z134: ReEDS zone-level AC interface list and corresponding zone hashes.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/interfaces_r.csv"
+        },
+        {
+          "source": "z90: ReEDS zone-level AC interface list and corresponding zone hashes.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/interfaces_r.csv"
+        },
+        {
+          "source": "z134: ReEDS zone hashes used to join the AC transfer-limit database.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/zonehash.csv"
+        },
+        {
+          "source": "z90: ReEDS zone hashes used to join the AC transfer-limit database.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/zonehash.csv"
+        },
+        {
+          "source": "ReEDS existing HVDC projects and endpoint coordinates.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/transmission/hvdc_existing.csv"
+        },
+        {
+          "source": "z134: ReEDS back-to-back converter capacities (MW).",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/b2b.csv"
+        },
+        {
+          "source": "z90: ReEDS back-to-back converter capacities (MW).",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/b2b.csv"
+        },
+        {
+          "source": "z134: ReEDS county-to-zone mapping for HVDC endpoints.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/county2zone.csv"
+        },
+        {
+          "source": "z90: ReEDS county-to-zone mapping for HVDC endpoints.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/county2zone.csv"
+        },
+        {
+          "source": "2022 Census TIGER/Line county boundaries for HVDC endpoint assignment.",
+          "source_url": "https://www2.census.gov/geo/tiger/TIGER2022/COUNTY/tl_2022_us_county.zip"
         }
       ],
-      "version": "2026-08-11"
+      "version": "2026-11-19"
+    },
+    "transmission_expansion_cost_reeds.csv": {
+      "history": [
+        {
+          "last_updated": "2026-11-19",
+          "md5": "cb25ad5391cc83f2bc646f8380dd4620",
+          "version": "2026-11-19"
+        }
+      ],
+      "last_updated": "2026-11-19",
+      "license": "BSD-3-Clause",
+      "md5": "fe15373e01cc05d8074306ec22f51146",
+      "scripts": [
+        "build_reeds_transmission.py"
+      ],
+      "sources": [
+        {
+          "source": "ReEDS representative greenfield interzonal route costs and distances from reVRt.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/transmission/transmission_cost_distance.csv"
+        },
+        {
+          "source": "z134: ReEDS zone hashes used to identify the representative route endpoints.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/zonehash.csv"
+        },
+        {
+          "source": "z90: ReEDS zone hashes used to identify the representative route endpoints.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z90/zonehash.csv"
+        },
+        {
+          "source": "ReEDS source cost dollar year (2024 US dollars).",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/transmission/dollaryear.csv"
+        }
+      ],
+      "version": "2026-11-19"
     }
   },
-  "generated_at_utc": "2026-11-18T14:19:02.414993+00:00",
+  "generated_at_utc": "2026-11-19T04:25:23.743671+00:00",
   "manifest_version": 1
 }

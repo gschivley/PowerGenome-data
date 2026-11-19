@@ -1,2 +1,4 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
 data/fuel_prices.parquet -filter -diff -merge -text
+data/distributed_capacity.parquet -filter -diff -merge -text
+data/technology_costs_atb.parquet -filter -diff -merge -text

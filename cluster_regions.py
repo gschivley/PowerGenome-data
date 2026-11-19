@@ -22,7 +22,7 @@ from sklearn.cluster import SpectralClustering
 
 
 def load_and_validate_data(
-    hierarchy_file: str, transmission_file: str
+    hierarchy_file: str, transmission_file: str, zone_set: str = "z134"
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load and validate hierarchy and transmission files."""
     try:
@@ -34,6 +34,16 @@ def load_and_validate_data(
     except pd.errors.ParserError as e:
         print(f"Error: Failed to parse CSV file: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if "zone_set" in transmission:
+        transmission = transmission.loc[transmission["zone_set"] == zone_set].copy()
+        if transmission.empty:
+            sys.exit(f"Error: No transmission rows found for zone set {zone_set!r}")
+    elif zone_set != "z134":
+        sys.exit(f"Error: Cannot select {zone_set!r} from a transmission file without zone_set")
+
+    if zone_set != "z134" and "ba" not in hierarchy and "r" in hierarchy:
+        hierarchy = hierarchy.rename(columns={"r": "ba"})
 
     return hierarchy, transmission
 
@@ -514,6 +524,10 @@ def main():
         "target_regions", type=int, help="Target number of clusters"
     )
     parser.add_argument(
+        "--zone-set", default="z134",
+        help="Zone set to select from a multi-resolution transmission table (default: z134)",
+    )
+    parser.add_argument(
         "grouping_column",
         help="Column from hierarchy to use for regional groups "
         "(e.g., nercr, transreg, transgrp, cendiv, st)",
@@ -553,7 +567,7 @@ def main():
         print("Loading data...")
 
     hierarchy, transmission = load_and_validate_data(
-        args.hierarchy_file, args.transmission_file
+        args.hierarchy_file, args.transmission_file, args.zone_set
     )
 
     if args.verbose:

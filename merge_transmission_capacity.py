@@ -2,9 +2,10 @@
 """Merge AC and non-AC transmission capacity files into a single CSV. Add the average of
 MW_f0 and MW_r0 for AC lines to MW for non-AC lines when they share the same region pair.
 
-Downloads transmission files from ReEDS GitHub repo and merges them.
+Downloads and merges historical ReEDS-2.0 transmission inputs. For current
+z134 and z90 data, use build_reeds_transmission.py instead.
 
-Output columns: region_from,region_to,firm_ttc_mw,notes
+Output: transmission_capacity_reeds_legacy.csv
 
 Usage:
   python merge_transmission_capacity.py
@@ -115,7 +116,7 @@ def main():
     print(f"  Aggregated to {len(agg_df):,} unique region pairs")
 
     # Write output
-    out_file = "data/transmission_capacity_reeds.csv"
+    out_file = "transmission_capacity_reeds_legacy.csv"
     out_path = Path(out_file)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     agg_df.to_csv(out_path, index=False)

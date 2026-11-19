@@ -43,6 +43,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MANIFEST_VERSION = 1
+REEDS_ZONE_INPUTS = (
+    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/"
+    "5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/"
+)
 
 # Collection documentation, rendered into the Zenodo description by
 # publish_zenodo.py rather than released as a data element.
@@ -189,15 +193,23 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "reeds_load_transformed.parquet": [
         {
-            "source": (
-                "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered "
-                "to weather years 2007-2013 and model years 2020-2050 by "
-                "transform_reeds_load.py."
-            ),
-            "source_url": (
-                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/"
-                "EER_IRAlow_load_hourly.h5"
-            ),
+            "source": "ReEDS EER2025 IRA-low hourly state end-use load, model years 2021/2025/2030/2035/2040/2045/2050 and weather years 2007–2013.",
+            "source_url": "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5",
+        },
+        *[
+            {
+                "source": f"{zone_set}: Pinned ReEDS county-to-zone mapping used to allocate state load.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/county2zone.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "Pinned ReEDS county-to-state mapping.",
+            "source_url": REEDS_ZONE_INPUTS + "zones/county_state.csv",
+        },
+        {
+            "source": "ReEDS county population weights from 2021 Census estimates.",
+            "source_url": REEDS_ZONE_INPUTS + "disaggregation/county_population.csv",
         },
     ],
     "regional_cost_multipliers.csv": [
@@ -263,24 +275,61 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "transmission_capacity_reeds.csv": [
         {
-            "source": (
-                "ReEDS AC transmission capacity files merged by "
-                "merge_transmission_capacity.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
-                "transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
-            ),
+            "source": "Native ReEDS forward and reverse AC interface transfer limits (MW), averaged before combining with existing non-AC capacity.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/itl_NARIS.csv",
         },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone-level AC interface list and corresponding zone hashes.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/interfaces_r.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone hashes used to join the AC transfer-limit database.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/zonehash.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
         {
-            "source": (
-                "ReEDS non-AC transmission capacity files merged by "
-                "merge_transmission_capacity.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
-                "transmission/transmission_capacity_init_nonAC_ba.csv"
-            ),
+            "source": "ReEDS existing HVDC projects and endpoint coordinates.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/hvdc_existing.csv",
+        },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS back-to-back converter capacities (MW).",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/b2b.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        *[
+            {
+                "source": f"{zone_set}: ReEDS county-to-zone mapping for HVDC endpoints.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/county2zone.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "2022 Census TIGER/Line county boundaries for HVDC endpoint assignment.",
+            "source_url": "https://www2.census.gov/geo/tiger/TIGER2022/COUNTY/tl_2022_us_county.zip",
+        },
+    ],
+    "transmission_expansion_cost_reeds.csv": [
+        {
+            "source": "ReEDS representative greenfield interzonal route costs and distances from reVRt.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/transmission_cost_distance.csv",
+        },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone hashes used to identify the representative route endpoints.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/zonehash.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "ReEDS source cost dollar year (2024 US dollars).",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/dollaryear.csv",
         },
     ],
     # Renewable resource profiles (resource_profiles/) ---------------------------------
@@ -357,12 +406,13 @@ SCRIPTS: dict[str, list[str]] = {
     "operational_constraints_reeds.csv": ["build_operational_constraints_reeds.py"],
     "plant_region_map.csv": ["transform_reeds_generators.py"],
     "reeds_generators_transformed.csv": ["transform_reeds_generators.py"],
-    "reeds_load_transformed.parquet": ["transform_reeds_load.py"],
+    "reeds_load_transformed.parquet": ["build_reeds_load.py"],
     "regional_cost_multipliers.csv": ["extract_location_variation.py"],
     "reserve_margins.csv": ["build_reserve_margins.py"],
     "technology_costs_atb.parquet": ["build_atb_data.py"],
     "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
-    "transmission_capacity_reeds.csv": ["merge_transmission_capacity.py"],
+    "transmission_capacity_reeds.csv": ["build_reeds_transmission.py"],
+    "transmission_expansion_cost_reeds.csv": ["build_reeds_transmission.py"],
     # Existing resource groups (existing_resource_groups/) ---------------------------
     "hydro_conventional_2007_2013.parquet": [
         "build_hydro_profiles.py",
@@ -401,6 +451,18 @@ def git_tracked_filenames(data_dir: Path) -> set[str] | None:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
     return {Path(line).name for line in output.splitlines() if line.strip()}
+
+
+def is_git_ignored(path: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", path.name],
+            cwd=path.parent,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return False
+    return result.returncode == 0
 
 
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
@@ -614,8 +676,11 @@ def update_manifest(
         if not files[filename].get("license"):
             print(f"[warn]     {filename}: no 'license' set (add one manually)")
 
-    # Drop files that no longer exist in data/.
     for filename in sorted(set(old_files) - set(files)):
+        if filename.endswith(".parquet") and is_git_ignored(data_dir / filename):
+            files[filename] = old_files[filename]
+            print(f"[retained] {filename} (Git-ignored release artifact, not on disk)")
+            continue
         print(f"[removed]  {filename} (no longer in {data_dir.name}/)")
         changed_any = True
 

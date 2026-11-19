@@ -14,11 +14,11 @@ This short guide explains how the top-level Python scripts fetch, extract, and t
 | --- | --- | --- | --- |
 | `transform_reeds_generators.py` | `data/reeds_generators_transformed.csv`, `data/plant_region_map.csv` | ReEDS generator database CSV from NREL GitHub; PUDL yearly generators parquet (`out_eia__yearly_generators.parquet`); ReEDS `county2zone.csv` | Cleans generator tech names (handles run-of-river), filters retired units, computes capacities, builds plant→region map. |
 | `build_hydro_profiles.py` | `existing_resource_groups/hydro_run_of_river_2007_2013.parquet`, `existing_resource_groups/hydro_conventional_2007_2013.parquet` | `data/plant_region_map.csv`, `data/reeds_generators_transformed.csv`; PUDL monthly generators parquet (`s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet`) | Derives monthly capacity factors per region/type, interpolates to hourly, smooths with a 1-week window. |
-| `transform_reeds_load.py` | `reeds_load_transformed.parquet` | ReEDS hourly load HDF5 (`inputs/load/EER_IRAlow_load_hourly.h5` from ReEDS GitHub, LFS-backed) | Downloads HDF5 (with LFS handling), filters weather years 2007–2013 and model years 2020–2050, melts to tidy hourly load with time_index. |
+| `build_reeds_load.py` | `data/reeds_load_transformed.parquet` | ReEDS EER2025 IRA-low state hourly profiles, county population and ReEDS zone mappings | Precomputes z134 and z90 profiles in one Zstd Parquet. |
 | `build_new_pg_dg_inputs.py` | `distributed_capacity.parquet`, `distributed_profiles.parquet` | ReEDS `dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv`; ReEDS `county2zone.csv`; optional distpv HDF5 (`variability/multi_year/distpv-reference_ba.h5` from ReEDS GitHub raw) | Capacity is aggregated county→BA and converted from DC to AC (ILR=1.1). Profiles download can be skipped via `--skip-profiles` to avoid the large HDF5. |
 | `extract_location_variation.py` | `data/eia_location_variation_raw.csv`, `data/regional_cost_multipliers.csv`, `data/reeds_region_technology_location_variation_pivot.csv` | EIA capital cost PDF (`cache_data/capital_cost_AEO2025.pdf`); region→city map (`cache_data/reeds_region_to_eia_city.csv` from `match_reeds_regions_to_cities.py`) | Reads tables 1-1–1-19, maps EIA technologies to PowerGenome techs, merges with regions, and pivots to region×technology multipliers. |
 | `match_reeds_regions_to_cities.py` | `cache_data/reeds_region_to_eia_city.csv` (and `cache_data/geocoded_cities.json` cache) | Same EIA PDF (table 1-1); ReEDS US_PCA shapefile from NREL GitHub | Geocodes PDF cities, downloads shapefiles, then matches each ReEDS region to a city (within-region or nearest). Feeds location-variation extraction. |
-| `merge_transmission_capacity.py` | `data/transmission_capacity_reeds.csv` | ReEDS AC and non-AC transmission CSVs from NREL GitHub | Downloads and caches the raw files, averages forward/reverse AC MW, sums AC+non-AC per region pair, keeps notes. |
+| `build_reeds_transmission.py` | `data/transmission_capacity_reeds.csv`, `data/transmission_expansion_cost_reeds.csv` | Pinned ReEDS AC interface limits, existing DC capacities and greenfield routes | Builds both zone sets, averaging forward/reverse AC MW and summing AC+DC per region pair. |
 | `build_emission_policies.py` | `emission_policies_wecc.csv` (path hard-coded) | ESR Excel workbook (`ESR_Inputs_ReEDS_WECC.xlsx`); `settings/model_definition.yml` for model years and aggregations | Pop-weighted ESR values by region/year; enforces CES ≥ RPS when both apply. |
 | `fetch_gdp_ipd_data.py` | `data/dollar_year_adjustment.csv` | FRED (series `A191RD3A086NBEA`); BEA NIPA API (fallback, requires `BEA_API_KEY` env var) | Fetches annual GDP Implicit Price Deflator (GDP-IPD, index 2017=100) from 1980 onward. GDP-IPD is used by AEO and ATB for dollar-year adjustments. Intended to supersede `cpi_data.csv`; some configs/consumers may still reference the older file until migration is complete. Run weekly via GitHub Actions. |
 | `build_operational_constraints_reeds.py` | `data/operational_constraints_reeds.csv` | ReEDS `pcm_defaults.json` (`inputs/plant_characteristics/` from NREL GitHub) | Builds PowerGenome operational constraints from ReEDS PCM defaults: drops all CSP technologies, maps ReEDS tech names to ATB/EIA new-build names (see `TECH_MAP` in the script), applies battery/pumped-storage efficiency and duration overrides, and appends curated existing-technology rows preserved from the historical file. |
@@ -31,10 +31,10 @@ All scripts are regular Python entry points. Examples (run from repo root):
 ```bash
 uv run python transform_reeds_generators.py
 uv run python build_hydro_profiles.py
-uv run python transform_reeds_load.py
+uv run python build_reeds_load.py
 uv run python build_new_pg_dg_inputs.py --skip-profiles  # avoid large HDF5
 uv run python extract_location_variation.py
-uv run python merge_transmission_capacity.py
+uv run python build_reeds_transmission.py
 uv run python build_emission_policies.py
 uv run python fetch_gdp_ipd_data.py
 uv run python build_operational_constraints_reeds.py  # optional --pcm-path <local pcm_defaults.json> to avoid downloading
@@ -42,6 +42,48 @@ uv run python build_atb_data.py            # rebuild ATB costs + heat rates (202
 ```
 
 `match_reeds_regions_to_cities.py` is usually run once before `extract_location_variation.py` to build the region→city map and geocode cache. Many scripts expect the referenced PDFs/CSVs to already exist under `cache_data/` or will download them on first run.
+
+## Selecting a ReEDS zone set
+
+`data/reeds_load_transformed.parquet` and `data/transmission_capacity_reeds.csv`
+contain both zone sets from the same pinned ReEDS sources. Filter **both** tables
+on `zone_set = 'z134'` or `zone_set = 'z90'`; do not mix endpoints or load across
+zone sets. For readers that cannot filter by `zone_set`, export only the matching
+rows. `cluster_regions.py` selects z134 by default; pass `--zone-set z90` with
+its matching hierarchy to cluster z90 zones. Other PowerGenome datasets are not
+necessarily available in both resolutions.
+
+`uv run python build_reeds_load.py` rebuilds the combined Zstandard Parquet from
+scratch. Both zone sets use `EER2025_IRAlow`: published ReEDS state-hourly end-use
+demand, allocated at build time using each zone's share of its states' 2021
+Census county populations (ReEDS' `population` method). No additional
+distribution-loss factor, historical calibration, or model-year interpolation is
+used. The source has model years 2021, 2025, 2030, 2035, 2040, 2045 and 2050.
+This replaces the legacy z134 `IRA_low` scenario and its broader model-year coverage. Weather years
+2007–2013 each contain 8,760 hours in fixed UTC−06:00 time, omitting December 31
+of leap years as in the source. `time_index` starts at 1 for each model year,
+weather year and zone. For example, to select the 2030 z90 profiles:
+
+```sql
+SELECT time_index, weather_year, region, load_mw
+FROM read_parquet('data/reeds_load_transformed.parquet')
+WHERE zone_set = 'z90' AND scenario = 'EER2025_IRAlow' AND year = 2030;
+```
+
+`uv run python build_reeds_transmission.py` rebuilds both zone sets. For each,
+it averages the two native AC transfer limits and
+sums existing interzonal HVDC and back-to-back converter capacities into the
+same unordered pairs. HVDC endpoints are assigned using 2022 Census TIGER
+county boundaries and the pinned ReEDS county-to-zone map; intrazonal and
+planned projects are not included. The z134 zone `p19` has no interzonal link
+in these sources, so it appears in the load table but not the capacity table.
+
+`data/transmission_expansion_cost_reeds.csv` lists available onshore
+ReEDS greenfield routes by ordered endpoint pair, polarity and voltage.
+`capital_cost_usd` is the total single-circuit route cost in 2024 US dollars,
+not a per-MW or per-mile cost. `length_miles` is the source route length; neither
+measure applies ReEDS' optional routing length adder or inflation adjustment.
+An unlisted route is not a zero-cost route.
 
 ## Data files not regenerated here
 
@@ -137,7 +179,10 @@ Behavior:
 - Hand-maintained `license` values are preserved when a file changes (only `version`/`last_updated`/`md5`
   are rewritten); files that carry no `license` are flagged with a warning so the attribution can be
   added.
-- Files that are no longer present in `data/` are dropped from the manifest (with a warning).
+- Missing files are dropped from the manifest except for Git-ignored Parquet release artifacts, which
+  may be absent in a fresh checkout. Their existing records and checksums are retained. To intentionally
+  retire an ignored artifact, remove its manifest entry and local file. Before running the publisher,
+  build or download the manifest-listed Parquets locally; the publisher verifies their checksums.
 
 Run the tests with:
 

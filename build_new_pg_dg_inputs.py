@@ -228,7 +228,9 @@ def main():
 
     # Save distributed capacity
     output_capacity_path = "distributed_capacity.parquet"
-    distributed_capacity.to_parquet(output_capacity_path, index=False)
+    distributed_capacity.to_parquet(
+        output_capacity_path, index=False, compression="zstd"
+    )
     print(f"Saved distributed capacity to {output_capacity_path}")
     print(f"  Shape: {distributed_capacity.shape}")
     print(f"  Columns: {list(distributed_capacity.columns)}")
@@ -246,7 +248,9 @@ def main():
         )
         # Save distributed profiles
         output_profiles_path = "distributed_profiles.parquet"
-        distributed_profiles.to_parquet(output_profiles_path, index=False)
+        distributed_profiles.to_parquet(
+            output_profiles_path, index=False, compression="zstd"
+        )
         print(f"Saved distributed profiles to {output_profiles_path}")
         print(f"  Shape: {distributed_profiles.shape}")
         print(f"  Columns: {list(distributed_profiles.columns)}")

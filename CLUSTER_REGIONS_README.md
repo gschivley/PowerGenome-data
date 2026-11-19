@@ -41,7 +41,7 @@ pip install networkx scipy scikit-learn pandas pyyaml numpy
 ### Required Arguments
 
 - **hierarchy_file**: Path to hierarchy.csv (typically `cache_data/hierarchy.csv`)
-- **transmission_file**: Path to transmission capacity file (typically `data/transmission_capacity_reeds.csv`)
+- **transmission_file**: Path to transmission capacity file (typically `data/transmission_capacity_reeds.csv`). When this file contains multiple zone sets, the script selects `z134` by default. To cluster z90, pass `--zone-set z90` with the corresponding ReEDS z90 hierarchy.
 - **target_regions**: Target number of clusters (integer)
 - **grouping_column**: Hierarchy column for regional grouping (see Available Columns below)
 

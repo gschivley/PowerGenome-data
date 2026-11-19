@@ -357,7 +357,7 @@ def build_hydro_profiles():
 
             # Save as parquet
             output_file = output_dir / f"hydro_{hydro_type}_2007_2013.parquet"
-            output_df.to_parquet(output_file)
+            output_df.to_parquet(output_file, compression="zstd")
 
             logger.info(f"\nSaved {hydro_type} profiles to {output_file}")
             logger.info(f"  Rows: {len(output_df)}")

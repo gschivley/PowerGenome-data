@@ -275,6 +275,25 @@ class GitTrackedTests(unittest.TestCase):
         manifest = json.loads(manifest_path.read_text())
         self.assertIn("scratch.csv", manifest["files"])
 
+    def test_missing_ignored_release_artifact_is_retained(self):
+        data_dir = self._make_git_collection("data")
+        manifest_path = data_dir / "manifest.json"
+        (data_dir.parent / ".gitignore").write_text("/data/profiles.parquet\n")
+        artifact = data_dir / "profiles.parquet"
+        artifact.write_bytes(b"profiles")
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11", include_untracked=True)
+        before = json.loads(manifest_path.read_text())
+        artifact.unlink()
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        after = json.loads(manifest_path.read_text())
+        self.assertEqual(after["files"][artifact.name], before["files"][artifact.name])
+        self.assertEqual(after["data_version"], before["data_version"])
+        (data_dir / "scratch.csv").unlink()
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        after = json.loads(manifest_path.read_text())
+        self.assertNotIn("scratch.csv", after["files"])
+        self.assertIn(artifact.name, after["files"])
+
     def test_manifested_untracked_file_remains_managed(self):
         data_dir = self._make_git_collection("data")
         manifest_path = data_dir / "manifest.json"

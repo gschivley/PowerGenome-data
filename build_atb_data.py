@@ -631,7 +631,7 @@ def build(
     cost_backup = backup_dir / COST_OUTPUT_NAME
     heat_rate_backup = backup_dir / HEAT_RATE_OUTPUT_NAME
     try:
-        costs.to_parquet(cost_tmp, index=False)
+        costs.to_parquet(cost_tmp, index=False, compression="zstd")
         heat_rates.to_csv(heat_rate_tmp, index=False)
         if cost_path.exists():
             shutil.copy2(cost_path, cost_backup)
