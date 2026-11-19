@@ -2,7 +2,7 @@ CLUSTER_REGIONS.PY - SETUP INSTRUCTIONS
 ========================================
 
 Files Created:
-  1. cluster_regions.py (executable script)
+  1. scripts/cluster_regions.py (executable script)
   2. CLUSTER_REGIONS_README.md (comprehensive documentation)
   3. This file (SETUP_INSTRUCTIONS.txt)
 
@@ -26,7 +26,7 @@ STEP 3: Run the Script
 ======================
 Basic usage example:
 
-  ./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 10 nercr
+  ./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 10 nercr
 
 This will:
   - Cluster all 134 ReEDS BAs by NERC region (nercr)
@@ -37,19 +37,19 @@ Advanced Examples
 =================
 
 1. Cluster only WECC regions:
-   ./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 4 nercr \
+   ./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 4 nercr \
      --include_groups WECC_NW WECC_CA WECC_SW
 
 2. Cluster with validation (run both algorithms):
-   ./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 15 transgrp \
+   ./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 15 transgrp \
      --validate --verbose
 
 3. Keep specific groups separate:
-   ./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 nercr \
+   ./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 nercr \
      --no_cluster ERCOT WECC_CA
 
 4. Cluster Eastern regions only:
-   ./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 transreg \
+   ./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 transreg \
      --include_groups PJM NYISO ISONE SERTP
 
 Command-Line Arguments

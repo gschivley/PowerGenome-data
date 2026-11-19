@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-SCRIPT = Path(__file__).parents[1] / "build_operational_constraints_reeds.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "build_operational_constraints_reeds.py"
 SPEC = importlib.util.spec_from_file_location("build_operational_constraints_reeds", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

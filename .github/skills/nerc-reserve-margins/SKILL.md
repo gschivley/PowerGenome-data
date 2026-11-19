@@ -15,8 +15,7 @@ Each region's last published value is carried forward through 2050. The exact re
 report year corresponding to the extraction are recorded in the Zenodo description when the
 data is published.
 
-This skill is independent of the ReEDS BA-level `data/reserve_margins.csv` workflow. It keeps
-NERC assessment-area names and does not map them to balancing areas or model regions.
+The output uses NERC assessment-area names.
 
 ## Procedure
 

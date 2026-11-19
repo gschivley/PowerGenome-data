@@ -3,12 +3,12 @@
 MW_f0 and MW_r0 for AC lines to MW for non-AC lines when they share the same region pair.
 
 Downloads and merges historical ReEDS-2.0 transmission inputs. For current
-z134 and z90 data, use build_reeds_transmission.py instead.
+z134 and z90 data, use scripts/build_reeds_transmission.py instead.
 
 Output: transmission_capacity_reeds_legacy.csv
 
 Usage:
-  python merge_transmission_capacity.py
+  python scripts/merge_transmission_capacity.py
 """
 import argparse
 from pathlib import Path

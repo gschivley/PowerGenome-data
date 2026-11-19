@@ -30,7 +30,7 @@ Ramp_Dn_Percentage, Up_Time, Down_Time, Existing_Charge_Cap_MW, Max_Cap_MWh,
 Min_Cap_MWh, Max_Charge_Cap_MW, Reg_Cost, Rsv_Cost, Start_Cost_per_MW,
 Max_Duration, Min_Duration
 
-Re-run from the repo root with:  python build_operational_constraints_reeds.py
+Re-run from the repo root with:  python scripts/build_operational_constraints_reeds.py
 """
 
 import argparse

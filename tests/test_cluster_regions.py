@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).parents[1] / "cluster_regions.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "cluster_regions.py"
 SPEC = importlib.util.spec_from_file_location("cluster_regions", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

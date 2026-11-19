@@ -1,13 +1,11 @@
 import csv
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
 
 @pytest.mark.parametrize("zone_set", ["z134", "z90"])
-def test_combines_ac_and_dc_for_each_zone_set(tmp_path, monkeypatch, zone_set):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
+def test_combines_ac_and_dc_for_each_zone_set(tmp_path, zone_set):
     from build_reeds_transmission import ac_rows, combine_capacity, write_csv
 
     hashes = pd.Series({"A": "a", "B": "b"})
@@ -28,8 +26,7 @@ def test_combines_ac_and_dc_for_each_zone_set(tmp_path, monkeypatch, zone_set):
     assert new["notes"] == "HVDC; B2B converter"
 
 
-def test_expansion_cost_preserves_distinct_reverse_routes(monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
+def test_expansion_cost_preserves_distinct_reverse_routes():
     from build_reeds_transmission import expansion_costs
 
     routes = pd.DataFrame({"start": ["a", "b", "a"], "end": ["b", "a", "offshore"],

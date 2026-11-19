@@ -1,4 +1,4 @@
-# cluster_regions.py - ReEDS Region Clustering Tool
+# scripts/cluster_regions.py - ReEDS Region Clustering Tool
 
 Cluster ReEDS regions based on transmission capacity using spectral and hierarchical clustering while respecting regional group constraints.
 
@@ -35,7 +35,7 @@ pip install networkx scipy scikit-learn pandas pyyaml numpy
 ### Basic Syntax
 
 ```bash
-./cluster_regions.py <hierarchy_file> <transmission_file> <target_regions> <grouping_column> [options]
+./scripts/cluster_regions.py <hierarchy_file> <transmission_file> <target_regions> <grouping_column> [options]
 ```
 
 ### Required Arguments
@@ -78,34 +78,34 @@ The hierarchy file includes the following columns that can be used for `grouping
 ### Cluster all regions to 10 clusters by NERC Region
 
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 10 nercr
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 10 nercr
 ```
 
 ### Cluster only WECC regions to 4 clusters
 
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 4 nercr \
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 4 nercr \
   --include_groups WECC_NW WECC_CA WECC_SW
 ```
 
 ### Cluster by transmission group with validation
 
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 20 transgrp \
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 20 transgrp \
   --validate --output my_clusters.yml
 ```
 
 ### Cluster by state but keep certain NERC regions unclustered
 
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 13 st \
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 13 st \
   --no_cluster WECC_NW ERCOT --verbose
 ```
 
 ### Cluster Eastern regions only, preventing certain groups from merging
 
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 transreg \
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 8 transreg \
   --include_groups PJM NYISO ISONE SERTP \
   --no_cluster NYISO ISONE
 ```
@@ -152,7 +152,7 @@ The `--include_groups` argument acts as a **whitelist**. Only BAs from the speci
 **Example:**
 ```bash
 # Cluster only WECC regions
-./cluster_regions.py ... nercr --include_groups WECC_NW WECC_CA WECC_SW
+./scripts/cluster_regions.py ... nercr --include_groups WECC_NW WECC_CA WECC_SW
 ```
 
 ### --no_cluster (Prevent Merging)
@@ -162,7 +162,7 @@ The `--no_cluster` argument prevents specific regional groups from being merged 
 **Example:**
 ```bash
 # Cluster all regions by state, but keep NYISO and ISONE as single clusters
-./cluster_regions.py ... st --no_cluster NYISO ISONE
+./scripts/cluster_regions.py ... st --no_cluster NYISO ISONE
 ```
 
 ### Interaction of --include_groups and --no_cluster
@@ -172,7 +172,7 @@ The `--no_cluster` argument prevents specific regional groups from being merged 
 
 **Example:**
 ```bash
-./cluster_regions.py ... nercr \
+./scripts/cluster_regions.py ... nercr \
   --include_groups WECC_NW WECC_CA WECC_SW PJM MISO \
   --no_cluster WECC_CA
 ```
@@ -189,7 +189,7 @@ If `target_regions` is less than the number of regional groups, the script autom
 **Example:**
 ```bash
 # 15 unique NERC regions, but target only 8 clusters
-./cluster_regions.py ... nercr 8
+./scripts/cluster_regions.py ... nercr 8
 # The 7 weakest inter-group connections will be severed
 ```
 
@@ -264,7 +264,7 @@ To use the output in PowerGenome:
 
 1. Generate clusters:
 ```bash
-./cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 15 transgrp \
+./scripts/cluster_regions.py cache_data/hierarchy.csv data/transmission_capacity_reeds.csv 15 transgrp \
   --output my_regions.yml
 ```
 
@@ -316,25 +316,25 @@ uv pip install pyyaml --force-reinstall
 
 ```bash
 # By NERC region
-./cluster_regions.py ... nercr --output nerc_clusters.yml
+./scripts/cluster_regions.py ... nercr --output nerc_clusters.yml
 
 # By transmission region
-./cluster_regions.py ... transreg --output transreg_clusters.yml
+./scripts/cluster_regions.py ... transreg --output transreg_clusters.yml
 
 # By state
-./cluster_regions.py ... st --output state_clusters.yml
+./scripts/cluster_regions.py ... st --output state_clusters.yml
 ```
 
 ### Selective clustering
 
 ```bash
 # Cluster Western regions only, keeping state-level separation
-./cluster_regions.py ... st \
+./scripts/cluster_regions.py ... st \
   --include_groups WA OR CA NV ID MT WY UT AZ NM CO \
   --output western_state_clusters.yml
 
 # Cluster Eastern PJM with specific rules
-./cluster_regions.py ... transgrp \
+./scripts/cluster_regions.py ... transgrp \
   --include_groups PJM_East \
   --no_cluster NYISO \
   --output pjm_east_clusters.yml

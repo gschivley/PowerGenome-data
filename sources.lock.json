@@ -57,14 +57,6 @@
       "path": "inputs/remote_files.csv",
       "repository": "ReEDS-Model/ReEDS"
     },
-    "reserves/prm_annual.csv": {
-      "checksum": "sha256:283c9da5ef494afb87a44794e56606e723d0fcfd095d02259980a76fa8d6cc18",
-      "commit": "cd0ee68f684ab61e107e07da6dbe4c8bf27c1389",
-      "kind": "github",
-      "path": "inputs/reserves/prm_annual.csv",
-      "release_tag": "2026.04.17",
-      "repository": "ReEDS-Model/ReEDS"
-    },
     "shapefiles/US_PCA/US_PCA.dbf": {
       "checksum": "sha256:4d422d9e344faf8f92ff4e1d0cda54d64c5b9bd5bc9da459b81e8442dfd2c3d6",
       "commit": "5bdbb89b31727c7f6eb55b93a56d14f8c3132890",

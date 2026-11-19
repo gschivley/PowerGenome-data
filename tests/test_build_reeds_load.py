@@ -8,7 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-SCRIPT = Path(__file__).parents[1] / "build_reeds_load.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "build_reeds_load.py"
 SPEC = importlib.util.spec_from_file_location("build_reeds_load", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

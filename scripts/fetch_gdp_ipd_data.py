@@ -11,13 +11,13 @@ GDP-IPD is used by AEO and ATB for their dollar-year adjustments.
 Usage
 -----
     # Update with any new years not already in the CSV
-    python fetch_gdp_ipd_data.py
+    python scripts/fetch_gdp_ipd_data.py
 
     # Refetch everything from scratch
-    python fetch_gdp_ipd_data.py --force
+    python scripts/fetch_gdp_ipd_data.py --force
 
     # Write to a different path
-    python fetch_gdp_ipd_data.py --output /path/to/dollar_year_adjustment.csv
+    python scripts/fetch_gdp_ipd_data.py --output /path/to/dollar_year_adjustment.csv
 """
 
 import argparse
@@ -32,7 +32,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-DATA_PATH = Path(__file__).parent / "data" / "dollar_year_adjustment.csv"
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "dollar_year_adjustment.csv"
 
 # FRED: GDP Implicit Price Deflator, Annual (Index 2017=100)
 # Public CSV endpoint — no API key required.

@@ -10,7 +10,7 @@ Generation profiles for existing wind and solar resources were generated with NR
 - **Existing onshore wind** — Vestas V82-1.65 MW turbine (rotor diameter 82 m, hub height 80 m), representative of the older existing onshore fleet, modeled as a 32-turbine, 52.8 MW farm.
 - **Existing offshore wind** — NREL Reference 12 MW turbine (rotor diameter 214 m, hub height 137 m) modeled as a 32-turbine, 384 MW farm.
 
-**Hydro (conventional and run-of-river)** was not simulated with reV: hourly profiles are based on monthly generation within each balancing area, with resources categorized by ReEDS hydro technology (see `transform_reeds_generators.py`), interpolated to hourly and smoothed with a 1-week window.
+**Hydro (conventional and run-of-river)** was not simulated with reV: hourly profiles are based on monthly generation within each balancing area, with resources categorized by ReEDS hydro technology (see `scripts/transform_reeds_generators.py`), interpolated to hourly and smoothed with a 1-week window.
 
 Monthly capacity factors are derived from PUDL `out_eia__monthly_generators.parquet`. Only generators with `prime_mover_code = 'HY'` are used (pumped-storage `'PS'` and co-located thermal generators are excluded, since they report negative or non-hydro net generation that would corrupt the hydro profile). The hours-in-month divisor is computed as the true calendar-month length, so December (and every month) gets a valid non-zero capacity factor.
 

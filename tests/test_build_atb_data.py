@@ -15,7 +15,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
-SCRIPT = Path(__file__).parents[1] / "build_atb_data.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "build_atb_data.py"
 SPEC = importlib.util.spec_from_file_location("build_atb_data", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

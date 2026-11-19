@@ -13,7 +13,7 @@ import pytest
 
 from locked_sources import SourceLock, ZENODO_TEMPLATE, receipt_path
 
-SCRIPT = Path(__file__).parents[1] / "build_new_pg_dg_inputs.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "build_new_pg_dg_inputs.py"
 SPEC = importlib.util.spec_from_file_location("build_new_pg_dg_inputs", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

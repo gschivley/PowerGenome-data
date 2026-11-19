@@ -12,7 +12,7 @@ from urllib.parse import quote, urlsplit
 
 import requests
 
-DEFAULT_LOCK = Path(__file__).with_name("sources.lock.json")
+DEFAULT_LOCK = Path(__file__).resolve().parents[1] / "sources.lock.json"
 DEFAULT_CACHE = Path("cache_data/reeds-sources")
 RECEIPT_SUFFIX = ".sources.json"
 ZENODO_TEMPLATE = "https://zenodo.org/records/{record_id}/files/{filename}"
@@ -25,7 +25,7 @@ def add_source_options(parser):
     )
     parser.add_argument(
         "--sources-lock", type=Path, default=DEFAULT_LOCK,
-        help="Input lockfile (default: sources.lock.json beside the builders)",
+        help="Input lockfile (default: sources.lock.json in the repository root)",
     )
 
 

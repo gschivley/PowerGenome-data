@@ -8,8 +8,8 @@ The manifest (``data/manifest.json``) records, for every file in ``data/``:
   database *and* ``county2zone.csv``). Human-maintained; the tool preserves edits made
   here across runs.
 * ``scripts`` -- repo-relative paths of the repository scripts that build the file
-  (e.g. ``build_atb_data.py``). Optional; declare it alongside ``sources`` so
-  ``publish_zenodo.py`` can pin the data to the code version that produced it.
+  (e.g. ``scripts/build_atb_data.py``). Optional; declare it alongside ``sources`` so
+  ``scripts/publish_zenodo.py`` can pin the data to the code version that produced it.
 * ``md5`` -- content hash of the file.
 * ``version`` and ``last_updated`` -- ISO date (``YYYY-MM-DD``) of the last change.
 * ``history`` -- append-only record of prior ``{version, last_updated, md5}`` entries.
@@ -22,15 +22,15 @@ It also tracks two top-level versions:
 
 Run from the repo root:
 
-    uv run python update_data_manifest.py
-    uv run python update_data_manifest.py --dry-run
-    uv run python update_data_manifest.py --date 2026-08-11
+    uv run python scripts/update_data_manifest.py
+    uv run python scripts/update_data_manifest.py --dry-run
+    uv run python scripts/update_data_manifest.py --date 2026-08-11
 
-Each Zenodo collection (see publish_zenodo.py) keeps its own manifest at the
+Each Zenodo collection (see scripts/publish_zenodo.py) keeps its own manifest at the
 top of its folder, so update collections independently:
 
-    uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
-    uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
+    uv run python scripts/update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+    uv run python scripts/update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ REEDS_ZONE_INPUTS = (
 )
 
 # Collection documentation, rendered into the Zenodo description by
-# publish_zenodo.py rather than released as a data element.
+# scripts/publish_zenodo.py rather than released as a data element.
 COLLECTION_README = "README.md"
 
 # Seed provenance for files that have never been seen before. Each file maps to a list of
@@ -85,7 +85,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             "source": (
                 "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), "
                 "aggregated county -> BA and converted DC to AC (ILR 1.1) by "
-                "build_new_pg_dg_inputs.py."
+                "scripts/build_new_pg_dg_inputs.py."
             ),
             "source_url": (
                 "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
@@ -107,7 +107,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             "source": (
                 "ReEDS hourly county distributed PV capacity factors (cf_distpv_county.h5), "
                 "resolved via ReEDS inputs/remote_files.csv and aggregated to z134 balancing "
-                "areas by build_new_pg_dg_inputs.py; fixed UTC−06:00 values shifted six hours "
+                "areas by scripts/build_new_pg_dg_inputs.py; fixed UTC−06:00 values shifted six hours "
                 "later within each weather year and labeled on the cyclic 8,760-hour UTC calendar."
             ),
             "source_url": "https://zenodo.org/records/18636038/files/cf_distpv_county.h5",
@@ -157,7 +157,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), "
-                "transformed by build_operational_constraints_reeds.py into PowerGenome"
+                "transformed by scripts/build_operational_constraints_reeds.py into PowerGenome"
                 " operational constraints."
             ),
             "source_url": (
@@ -170,7 +170,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) "
-                "as the plant list, joined to ReEDS zones by transform_reeds_generators.py."
+                "as the plant list, joined to ReEDS zones by scripts/transform_reeds_generators.py."
             ),
             "source_url": (
                 "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
@@ -192,7 +192,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) "
-                "cleaned and transformed by transform_reeds_generators.py."
+                "cleaned and transformed by scripts/transform_reeds_generators.py."
             ),
             "source_url": (
                 "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/"
@@ -241,7 +241,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "EIA capital cost AEO2025 PDF tables mapped to PowerGenome "
-                "technologies/regions by extract_location_variation.py."
+                "technologies/regions by scripts/extract_location_variation.py."
             ),
             "source_url": (
                 "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/"
@@ -249,23 +249,11 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             ),
         },
     ],
-    "reserve_margins.csv": [
-        {
-            "source": (
-                "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions "
-                "via the ReEDS hierarchy by build_reserve_margins.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/"
-                "prm_annual.csv"
-            ),
-        },
-    ],
     "technology_costs_atb.parquet": [
         {
             "source": (
                 "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
-                "OEDI data lake (rebuilt by build_atb_data.py)"
+                "OEDI data lake (rebuilt by scripts/build_atb_data.py)"
             ),
             "source_url": (
                 "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&"
@@ -286,7 +274,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         {
             "source": (
                 "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
-                "OEDI data lake (rebuilt by build_atb_data.py)"
+                "OEDI data lake (rebuilt by scripts/build_atb_data.py)"
             ),
             "source_url": (
                 "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&"
@@ -416,36 +404,35 @@ SOURCES: dict[str, list[dict[str, str]]] = {
 
 
 # Seed generating-script paths for files that have never been seen before, keyed by
-# filename like :data:`SOURCES`. Paths are repo-relative so ``publish_zenodo.py`` can
+# filename like :data:`SOURCES`. Paths are repo-relative so ``scripts/publish_zenodo.py`` can
 # compare each script against the release's git tag. Omit a file when no repository
 # script builds it (manual or externally generated data).
 SCRIPTS: dict[str, list[str]] = {
-    "distributed_capacity.parquet": ["build_new_pg_dg_inputs.py"],
-    "distributed_profiles.parquet": ["build_new_pg_dg_inputs.py"],
+    "distributed_capacity.parquet": ["scripts/build_new_pg_dg_inputs.py"],
+    "distributed_profiles.parquet": ["scripts/build_new_pg_dg_inputs.py"],
     "fuel_prices.parquet": [
         ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
     ],
     "nerc_reserve_margins.csv": [
         ".github/skills/nerc-reserve-margins/scripts/extract_nerc_reserve_margins.py"
     ],
-    "operational_constraints_reeds.csv": ["build_operational_constraints_reeds.py"],
-    "plant_region_map.csv": ["transform_reeds_generators.py"],
-    "reeds_generators_transformed.csv": ["transform_reeds_generators.py"],
-    "reeds_load_transformed.parquet": ["build_reeds_load.py"],
-    "regional_cost_multipliers.csv": ["extract_location_variation.py"],
-    "reserve_margins.csv": ["build_reserve_margins.py"],
-    "technology_costs_atb.parquet": ["build_atb_data.py"],
-    "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
-    "transmission_capacity_reeds.csv": ["build_reeds_transmission.py"],
-    "transmission_expansion_cost_reeds.csv": ["build_reeds_transmission.py"],
+    "operational_constraints_reeds.csv": ["scripts/build_operational_constraints_reeds.py"],
+    "plant_region_map.csv": ["scripts/transform_reeds_generators.py"],
+    "reeds_generators_transformed.csv": ["scripts/transform_reeds_generators.py"],
+    "reeds_load_transformed.parquet": ["scripts/build_reeds_load.py"],
+    "regional_cost_multipliers.csv": ["scripts/extract_location_variation.py"],
+    "technology_costs_atb.parquet": ["scripts/build_atb_data.py"],
+    "technology_heat_rates_nrelatb.csv": ["scripts/build_atb_data.py"],
+    "transmission_capacity_reeds.csv": ["scripts/build_reeds_transmission.py"],
+    "transmission_expansion_cost_reeds.csv": ["scripts/build_reeds_transmission.py"],
     # Existing resource groups (existing_resource_groups/) ---------------------------
     "hydro_conventional_2007_2013.parquet": [
-        "build_hydro_profiles.py",
-        "transform_reeds_generators.py",
+        "scripts/build_hydro_profiles.py",
+        "scripts/transform_reeds_generators.py",
     ],
     "hydro_run_of_river_2007_2013.parquet": [
-        "build_hydro_profiles.py",
-        "transform_reeds_generators.py",
+        "scripts/build_hydro_profiles.py",
+        "scripts/transform_reeds_generators.py",
     ],
 }
 

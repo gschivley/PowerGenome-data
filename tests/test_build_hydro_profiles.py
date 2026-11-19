@@ -20,7 +20,7 @@ from unittest import mock
 
 import pandas as pd
 
-SCRIPT = Path(__file__).parents[1] / "build_hydro_profiles.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "build_hydro_profiles.py"
 SPEC = importlib.util.spec_from_file_location("build_hydro_profiles", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

@@ -10,7 +10,7 @@ from unittest import mock
 
 import requests
 
-SCRIPT = Path(__file__).parents[1] / "publish_zenodo.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "publish_zenodo.py"
 SPEC = importlib.util.spec_from_file_location("publish_zenodo", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -1025,7 +1025,7 @@ class ScriptProvenanceTests(unittest.TestCase):
 
     def test_hydro_builder_drift_is_checked_for_both_profiles(self):
         manifest = json.loads(
-            (SCRIPT.parent / "existing_resource_groups" / "manifest.json").read_text()
+            (SCRIPT.parents[1] / "existing_resource_groups" / "manifest.json").read_text()
         )
         files = {
             name: manifest["files"][name]
@@ -1037,17 +1037,18 @@ class ScriptProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._init_repo(root)
-            (root / "build_hydro_profiles.py").write_text("original\n")
-            (root / "transform_reeds_generators.py").write_text("original\n")
+            (root / "scripts").mkdir()
+            (root / "scripts/build_hydro_profiles.py").write_text("original\n")
+            (root / "scripts/transform_reeds_generators.py").write_text("original\n")
             self._commit_all(root, "Initial scripts")
             subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
 
-            (root / "build_hydro_profiles.py").write_text("changed\n")
+            (root / "scripts/build_hydro_profiles.py").write_text("changed\n")
             provenance = MODULE.check_script_provenance(files, root)
 
         for filename in files:
-            self.assertIn("build_hydro_profiles.py", provenance["files"][filename])
-        self.assertTrue(provenance["scripts"]["build_hydro_profiles.py"]["changed"])
+            self.assertIn("scripts/build_hydro_profiles.py", provenance["files"][filename])
+        self.assertTrue(provenance["scripts"]["scripts/build_hydro_profiles.py"]["changed"])
         self.assertIsNotNone(MODULE.provenance_block_reason(provenance, False))
 
     def test_description_includes_code_tag_and_scripts(self):
