@@ -35,7 +35,7 @@ never falls back.
 
 Run from the repo root:
 
-    uv run python build_atb_data.py [--years 2023 2024 2025] [--verbose]
+    uv run python scripts/build_atb_data.py [--years 2023 2024 2025] [--verbose]
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
-ROOT: Final = Path(__file__).resolve().parent
+ROOT: Final = Path(__file__).resolve().parents[1]
 DATA_DIR: Final = ROOT / "data"
 DEFAULT_CACHE_DIR: Final = ROOT / "cache_data" / "atb"
 COST_OUTPUT_NAME: Final = "technology_costs_atb.parquet"

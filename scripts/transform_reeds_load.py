@@ -5,88 +5,21 @@ Reads hourly load data from ReEDS HDF5 file and transforms to tidy format
 matching the PowerGenome test data structure.
 """
 
-import os
+import argparse
 
 import pandas as pd
-import requests
+
+from locked_sources import SourceLock, add_source_options
+
+LOAD_SOURCE = "load/EER_IRAlow_load_hourly.h5"
 
 
-def download_h5_file(url, cache_dir="cache"):
-    """
-    Download HDF5 file from GitHub, handling Git LFS.
-
-    Args:
-        url: URL to the HDF5 file
-        cache_dir: Directory to cache downloaded files
-
-    Returns:
-        Path to the downloaded/cached file
-    """
-    # Create cache directory if it doesn't exist
-    os.makedirs(cache_dir, exist_ok=True)
-
-    # Generate cache filename from URL
-    filename = url.split("/")[-1]
-    cache_path = os.path.join(cache_dir, filename)
-
-    # Check if file already exists
-    if os.path.exists(cache_path):
-        print(f"Found cached file: {cache_path}")
-        # Verify it's a valid HDF5 file
-        with open(cache_path, "rb") as f:
-            if f.read(8) == b"\x89HDF\r\n\x1a\n":
-                print(f"  Using cached file ({os.path.getsize(cache_path):,} bytes)")
-                return cache_path
-            else:
-                print("  Cached file is invalid, re-downloading...")
-                os.remove(cache_path)
-
-    print(f"Downloading HDF5 file from {url}...")
-
-    # For Git LFS files on GitHub, we need to use the media URL
-    # Convert github.com/owner/repo/blob/branch/path to github.com/owner/repo/raw/branch/path
-    if "github.com" in url and "/blob/" in url:
-        url = url.replace("/blob/", "/raw/")
-
-    # Make initial request
-    response = requests.get(url, stream=True, allow_redirects=True)
-    response.raise_for_status()
-
-    # Check if we got a Git LFS pointer file
-    content_start = response.content[:200]
-    if b"version https://git-lfs.github.com/spec/" in content_start:
-        print("  Detected Git LFS pointer, following to actual file...")
-        # Parse the LFS pointer to get the actual download URL
-        # LFS files are served from media.githubusercontent.com
-        # We can use the GitHub media URL pattern
-        lfs_url = url.replace("github.com", "media.githubusercontent.com").replace(
-            "/raw/", "/media/"
-        )
-
-        print(f"  Downloading from LFS: {lfs_url}")
-        response = requests.get(lfs_url, stream=True, allow_redirects=True)
-        response.raise_for_status()
-
-    # Verify it's an HDF5 file (starts with HDF5 signature)
-    if not response.content[:8] == b"\x89HDF\r\n\x1a\n":
-        raise ValueError("Downloaded file is not a valid HDF5 file")
-
-    print(f"  Downloaded {len(response.content):,} bytes")
-
-    # Save to cache
-    with open(cache_path, "wb") as f:
-        f.write(response.content)
-    print(f"  Cached to: {cache_path}")
-
-    return cache_path
-
-
-def load_reeds_load_data(url, weather_years=None):
+def load_reeds_load_data(h5_path, weather_years=None):
     """
     Load ReEDS hourly load data from HDF5 file.
 
     Args:
-        url: URL to the HDF5 file
+        h5_path: Local path to the HDF5 file
         weather_years: List of weather years to load (default: [2007, 2008, 2009, 2010, 2011, 2012, 2013])
 
     Returns:
@@ -94,9 +27,6 @@ def load_reeds_load_data(url, weather_years=None):
     """
     if weather_years is None:
         weather_years = [2007, 2008, 2009, 2010, 2011, 2012, 2013]
-
-    # Download or get cached file
-    h5_path = download_h5_file(url)
 
     try:
         print("Loading HDF5 data...")
@@ -226,21 +156,25 @@ def main():
     print("ReEDS Load Data Transformation")
     print("=" * 60)
 
-    # Configuration
-    url = "https://github.com/NREL/ReEDS-2.0/blob/main/inputs/load/EER_IRAlow_load_hourly.h5"
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
+
     weather_years = [2007, 2008, 2009, 2010, 2011, 2012, 2013]
     scenario = "IRA_low"
     output_file = "reeds_load_transformed.parquet"
 
     # Load data
-    df = load_reeds_load_data(url, weather_years=weather_years)
+    df = load_reeds_load_data(sources.fetch(LOAD_SOURCE), weather_years=weather_years)
 
     # Transform to tidy format
     tidy_df = transform_to_tidy_format(df, scenario=scenario)
 
     # Export to parquet
     print(f"\nExporting to {output_file}...")
-    tidy_df.to_parquet(output_file, index=False, compression="zstd")
+    with sources.output(output_file, (LOAD_SOURCE,)) as output:
+        tidy_df.to_parquet(output, index=False, compression="zstd")
 
     # Summary
     print("\n" + "=" * 60)

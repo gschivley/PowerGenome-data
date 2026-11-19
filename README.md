@@ -1,6 +1,6 @@
 # PowerGenome-data
 
-Utilities and reference data for preparing PowerGenome inputs. Top-level Python scripts download and transform ReEDS/PUDL/EIA sources into the CSVs and parquet files used by PowerGenome.
+Utilities and reference data for preparing PowerGenome inputs. Python scripts in `scripts/` download and transform ReEDS/PUDL/EIA sources into the CSVs and parquet files used by PowerGenome.
 
 - Documentation: [https://gschivley.github.io/PowerGenome-data/](https://gschivley.github.io/PowerGenome-data/)
 - Repo: [https://github.com/gschivley/PowerGenome-data](https://github.com/gschivley/PowerGenome-data)
@@ -15,7 +15,7 @@ See the docs site for a script-by-script map of which files are generated and th
 
 ## Publishing to Zenodo
 
-Data is published to Zenodo as one deposit per collection via `publish_zenodo.py` (sandbox by default, `--publish --production` for a real release):
+Data is published to Zenodo as one deposit per collection via `scripts/publish_zenodo.py` (sandbox by default, `--publish --production` for a real release):
 
 - **PowerGenome Input Data** — core input tables from `data/`
 - **PowerGenome Renewable Resource Profiles** — hourly new-build renewable profiles from `resource_profiles/`
@@ -31,7 +31,7 @@ collections, are release artifacts rather than Git LFS files. A fresh checkout d
 include them. Download the matching Zenodo release or build the artifacts locally before
 publishing; the manifest records the expected checksums. See the docs site for rebuild commands.
 
-Before releasing, `publish_zenodo.py` requires a git tag reachable from HEAD and checks that every
+Before releasing, `scripts/publish_zenodo.py` requires a git tag reachable from HEAD and checks that every
 Python script declared in each manifest file's `scripts` list (or named in its source descriptions,
 for files that have not been declared) is unchanged since that tag (pass `--allow-script-drift` to
 override). The tag is recorded in each Zenodo description next to the scripts that produced the

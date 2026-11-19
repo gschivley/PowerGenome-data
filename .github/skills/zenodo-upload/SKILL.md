@@ -14,7 +14,7 @@ compatibility:
 
 # Zenodo Upload
 
-This project publishes its data to Zenodo with `publish_zenodo.py` (repo root),
+This project publishes its data to Zenodo with `scripts/publish_zenodo.py` (repo root),
 which creates **one Zenodo deposit per data collection** and keeps each record
 in sync with the collection's manifest across releases. Use this skill to
 prepare and run a release, or to fall back to the generic helper for ad-hoc
@@ -38,7 +38,7 @@ collection actually has data.
 
 - Default to the Zenodo sandbox unless the user explicitly opts into production.
 - Never hardcode tokens or write them into files.
-- Prefer `publish_zenodo.py`; invoke it from bash.
+- Prefer `scripts/publish_zenodo.py`; invoke it from bash.
 - Stop before publish unless the user explicitly confirms publish.
 - Reuse release state and metadata from the workspace `.zenodo.json`.
 
@@ -75,7 +75,7 @@ Recommended defaults if the user does not specify:
   path is not tracked; tag the code first or pass `--allow-script-drift` (not
   recommended).
 - The script verifies manifest md5s against the files on disk; run
-  `update_data_manifest.py` before releasing if they mismatch.
+  `scripts/update_data_manifest.py` before releasing if they mismatch.
 - Zenodo limits: at most 100 files and 50 GB per record (checked by the script).
 
 ## Workflow
@@ -85,14 +85,14 @@ Recommended defaults if the user does not specify:
 Each collection's manifest records `sources`, `version`, `last_updated`, `md5`,
 `license`, `scripts`, and `history` per file, plus the collection `data_version`.
 Declare `scripts` (repo-relative paths of the scripts that build the file) so
-releases can be pinned to a code version; `update_data_manifest.py` preserves
+releases can be pinned to a code version; `scripts/update_data_manifest.py` preserves
 hand-edited lists and backfills known files from a seed map. Update the manifest
 after changing data files:
 
 ```bash
-uv run python update_data_manifest.py
-uv run python update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
-uv run python update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
+uv run python scripts/update_data_manifest.py
+uv run python scripts/update_data_manifest.py --data-dir resource_profiles --manifest resource_profiles/manifest.json
+uv run python scripts/update_data_manifest.py --data-dir existing_resource_groups --manifest existing_resource_groups/manifest.json
 ```
 
 ### 2. Dry run
@@ -103,18 +103,18 @@ declared script path that is not tracked, exiting non-zero if the release would
 be blocked:
 
 ```bash
-uv run python publish_zenodo.py --dry-run
-uv run python publish_zenodo.py --dry-run --collection profiles
+uv run python scripts/publish_zenodo.py --dry-run
+uv run python scripts/publish_zenodo.py --dry-run --collection profiles
 ```
 
 ### 3. Create/update the draft
 
 ```bash
 # All collections (sandbox by default); prints draft URL + pre-reserved DOI.
-uv run python publish_zenodo.py
+uv run python scripts/publish_zenodo.py
 
 # Limit to one collection (repeatable).
-uv run python publish_zenodo.py --collection profiles
+uv run python scripts/publish_zenodo.py --collection profiles
 ```
 
 Without `--publish` the script leaves each deposition as a draft. If a draft
@@ -126,10 +126,10 @@ checksum already matches the draft are skipped. Pass `--save-state` to write
 
 ```bash
 # Publish the draft (irreversible in production) and record release state.
-uv run python publish_zenodo.py --publish
+uv run python scripts/publish_zenodo.py --publish
 
 # Publish to production Zenodo.
-uv run python publish_zenodo.py --publish --production
+uv run python scripts/publish_zenodo.py --publish --production
 ```
 
 Re-running `--publish` after an identical release is a no-op.
@@ -244,7 +244,7 @@ sandbox draft resumes it.
 ## Requirements
 
 - A plain Python environment with the `requests` package (e.g.
-  `uv run python publish_zenodo.py` or a `.venv` with `requests` installed).
+  `uv run python scripts/publish_zenodo.py` or a `.venv` with `requests` installed).
 - A Zenodo personal access token with `deposit:write` and `deposit:actions`
   scopes: `ZENODO_SANDBOX_API_KEY` for the sandbox and `ZENODO_API_KEY` for
   production. Tokens may be loaded from a local `.env` file via
@@ -259,16 +259,16 @@ generic helper lives at `scripts/zenodo_upload.py` (in this skill folder). It
 uses `ZENODO_TOKEN` and supports `create-draft`, `new-version`, and `publish`
 subcommands. See `references/api-reference.md` for the manual `curl` workflow
 and `references/metadata-template.json` for a metadata template. Prefer
-`publish_zenodo.py` for project data releases.
+`scripts/publish_zenodo.py` for project data releases.
 
 ## Agent Execution Notes
 
-- Prefer `publish_zenodo.py` for project data; use the generic helper only for
+- Prefer `scripts/publish_zenodo.py` for project data; use the generic helper only for
   ad-hoc uploads outside the manifest workflow.
 - Run `--dry-run` first, then the draft run, inspect the JSON output, then ask
   the user for confirmation before running `--publish`.
 - If the script exits with a manifest md5 mismatch, run
-  `update_data_manifest.py` for that collection before retrying.
+  `scripts/update_data_manifest.py` for that collection before retrying.
 - If the script exits because release files differ from git HEAD, commit the
   changes first (or ask the user before using `--allow-dirty`).
 - If the script exits because no git tag is reachable from HEAD, ask the user to

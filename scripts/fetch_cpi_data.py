@@ -8,13 +8,13 @@ for each year, matching the format expected by PowerGenome.
 Usage
 -----
     # Update with any new years not already in the CSV
-    python fetch_cpi_data.py
+    python scripts/fetch_cpi_data.py
 
     # Refetch everything from scratch
-    python fetch_cpi_data.py --force
+    python scripts/fetch_cpi_data.py --force
 
     # Write to a different path
-    python fetch_cpi_data.py --output /path/to/cpi_data.csv
+    python scripts/fetch_cpi_data.py --output /path/to/cpi_data.csv
 """
 
 import argparse
@@ -29,7 +29,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-DATA_PATH = Path(__file__).parent / "data" / "cpi_data.csv"
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "cpi_data.csv"
 
 # FRED: CPI for All Urban Consumers, All Items, Not Seasonally Adjusted
 # Public CSV endpoint — no API key required.

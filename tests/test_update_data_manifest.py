@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).parents[1] / "update_data_manifest.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "update_data_manifest.py"
 SPEC = importlib.util.spec_from_file_location("update_data_manifest", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -136,7 +136,7 @@ class ManifestTests(unittest.TestCase):
         )
 
     def test_seeded_scripts_exist_in_the_repository(self):
-        repo_root = SCRIPT.parent
+        repo_root = SCRIPT.parents[1]
         for filename, scripts in MODULE.SCRIPTS.items():
             self.assertTrue(scripts, f"SCRIPTS[{filename}] is empty")
             for script in scripts:

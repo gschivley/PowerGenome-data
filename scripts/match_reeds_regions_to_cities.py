@@ -12,24 +12,22 @@ This script:
 5. Exports region-to-city mapping to CSV
 """
 
+import argparse
 import json
 import time
-from io import BytesIO
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 import pdfplumber
-import requests
 from geopy.geocoders import Nominatim
-from shapely.geometry import Point
 from tqdm import tqdm
 
-# URLs for ReEDS shapefiles
-SHAPEFILE_BASE_URL = (
-    "https://github.com/ReEDS-Model/ReEDS/raw/main/inputs/shapefiles/US_PCA"
+from locked_sources import SourceLock, add_source_options
+
+SHAPEFILE_SOURCES = tuple(
+    f"shapefiles/US_PCA/US_PCA.{extension}" for extension in ("shp", "shx", "dbf", "prj")
 )
-SHAPEFILE_FILES = ["US_PCA.shp", "US_PCA.shx", "US_PCA.dbf", "US_PCA.prj"]
 
 # PDF path
 PDF_PATH = Path(
@@ -120,45 +118,6 @@ def extract_cities_from_pdf(pdf_path, page_number=162):
     print(f"  Sample cities: {df.head(10).to_dict('records')}")
 
     return df
-
-
-def download_shapefile(output_dir="cache_data/shapefiles"):
-    """
-    Download ReEDS US_PCA shapefile components from GitHub.
-
-    Args:
-        output_dir: Directory to save shapefile components
-
-    Returns:
-        Path to the .shp file
-    """
-    print("\nDownloading ReEDS US_PCA shapefile...")
-
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    for filename in SHAPEFILE_FILES:
-        file_path = output_path / filename
-
-        if file_path.exists():
-            print(f"  {filename} already exists, skipping download")
-            continue
-
-        url = f"{SHAPEFILE_BASE_URL}/{filename}"
-        print(f"  Downloading {filename}...")
-
-        response = requests.get(url)
-        response.raise_for_status()
-
-        with open(file_path, "wb") as f:
-            f.write(response.content)
-
-        print(f"    Saved to {file_path}")
-
-    shp_path = output_path / "US_PCA.shp"
-    print(f"\n  Shapefile ready at: {shp_path}")
-
-    return shp_path
 
 
 def load_reeds_regions(shapefile_path):
@@ -257,7 +216,6 @@ def geocode_cities(cities_df, delay=1.5):
                         "state": state,
                         "latitude": location.latitude,
                         "longitude": location.longitude,
-                        "geometry": Point(location.longitude, location.latitude),
                     }
                 )
 
@@ -290,7 +248,9 @@ def geocode_cities(cities_df, delay=1.5):
             "No cities could be geocoded. Check city names and internet connection."
         )
 
-    gdf = gpd.GeoDataFrame(geocoded_data, crs="EPSG:4326")
+    coordinates = pd.DataFrame(geocoded_data)
+    geometry = gpd.points_from_xy(coordinates.longitude, coordinates.latitude)
+    gdf = gpd.GeoDataFrame(coordinates, geometry=geometry, crs="EPSG:4326")
 
     print(f"\n  Successfully geocoded {len(gdf)} / {len(cities_df)} cities")
 
@@ -397,6 +357,11 @@ def match_regions_to_cities(regions_gdf, cities_gdf):
 
 def main():
     """Main execution function."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
+
     print("=" * 70)
     print("ReEDS Region to EIA City Matching")
     print("=" * 70)
@@ -405,7 +370,7 @@ def main():
     cities_df = extract_cities_from_pdf(PDF_PATH)
 
     # Step 2: Download and load ReEDS shapefile
-    shapefile_path = download_shapefile()
+    shapefile_path, *_ = [sources.fetch(source_id) for source_id in SHAPEFILE_SOURCES]
     regions_gdf = load_reeds_regions(shapefile_path)
 
     # Step 3: Geocode cities
@@ -415,8 +380,8 @@ def main():
     mapping_df = match_regions_to_cities(regions_gdf, cities_gdf)
 
     # Step 5: Export mapping
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    mapping_df.to_csv(OUTPUT_PATH, index=False)
+    with sources.output(OUTPUT_PATH, SHAPEFILE_SOURCES) as output:
+        mapping_df.to_csv(output, index=False)
 
     print(f"\n{'=' * 70}")
     print(f"✓ Exported mapping to {OUTPUT_PATH}")

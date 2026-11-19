@@ -120,8 +120,8 @@
       "license": "cc-by-4.0",
       "md5": "36780b764b9282cca8ade50e2cf1e1a6",
       "scripts": [
-        "build_hydro_profiles.py",
-        "transform_reeds_generators.py"
+        "scripts/build_hydro_profiles.py",
+        "scripts/transform_reeds_generators.py"
       ],
       "sources": [
         {
@@ -147,8 +147,8 @@
       "license": "cc-by-4.0",
       "md5": "c882a5172e36079c15456227fb47de21",
       "scripts": [
-        "build_hydro_profiles.py",
-        "transform_reeds_generators.py"
+        "scripts/build_hydro_profiles.py",
+        "scripts/transform_reeds_generators.py"
       ],
       "sources": [
         {

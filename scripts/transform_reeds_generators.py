@@ -11,15 +11,15 @@ This script:
 6. Exports to CSV matching the target format
 """
 
-from io import StringIO
+import argparse
 
 import numpy as np
 import pandas as pd
-import requests
 
-# URLs
-REEDS_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-COUNTY2ZONE_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/zones/z134/county2zone.csv"
+from locked_sources import SourceLock, add_source_options
+
+GENERATOR_SOURCE = "capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+COUNTY2ZONE_SOURCE = "zones/z134/county2zone.csv"
 EIA_URL = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
 
 
@@ -87,13 +87,11 @@ def reverse_excel_date_conversion(value, zero_pad=False, uppercase_format=False)
     return value
 
 
-def fetch_reeds_data():
+def fetch_reeds_data(sources):
     """Fetch ReEDS generator database from GitHub."""
     print("Fetching ReEDS data...")
-    response = requests.get(REEDS_URL)
-    response.raise_for_status()
     # Force T_UID to be read as string to prevent further Excel date conversion
-    df = pd.read_csv(StringIO(response.text), dtype={"T_UID": str})
+    df = pd.read_csv(sources.fetch(GENERATOR_SOURCE), dtype={"T_UID": str})
     print(f"  Loaded {len(df):,} rows from ReEDS")
     return df
 
@@ -120,12 +118,10 @@ def fetch_eia_technology_names():
     return df[["plant_id_eia", "generator_id", "technology_description"]]
 
 
-def fetch_county_to_zone_mapping():
+def fetch_county_to_zone_mapping(sources):
     """Fetch county to BA zone mapping from ReEDS."""
     print("Fetching county to zone mapping...")
-    response = requests.get(COUNTY2ZONE_URL)
-    response.raise_for_status()
-    df = pd.read_csv(StringIO(response.text))
+    df = pd.read_csv(sources.fetch(COUNTY2ZONE_SOURCE))
     print(f"  Loaded {len(df):,} county mappings")
 
     # New ReEDS county2zone.csv uses column name "r" for the BA
@@ -520,14 +516,19 @@ def create_plant_region_map(reeds_df, county_zone_df):
 
 def main():
     """Main execution function."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+    sources = SourceLock(args.cache_dir, args.sources_lock)
+
     print("=" * 60)
     print("ReEDS to PowerGenome Generator Data Transformation")
     print("=" * 60)
 
     # Fetch data
-    reeds_df = fetch_reeds_data()
+    reeds_df = fetch_reeds_data(sources)
     eia_tech_df = fetch_eia_technology_names()
-    county_zone_df = fetch_county_to_zone_mapping()
+    county_zone_df = fetch_county_to_zone_mapping(sources)
 
     # Transform
     transformed_df = transform_reeds_data(reeds_df, eia_tech_df)
@@ -540,12 +541,14 @@ def main():
 
     # Export generators
     output_file = "data/reeds_generators_transformed.csv"
-    transformed_df.to_csv(output_file, index=False)
+    with sources.output(output_file, (GENERATOR_SOURCE,)) as output:
+        transformed_df.to_csv(output, index=False)
     print(f"\n✓ Exported {len(transformed_df):,} rows to {output_file}")
 
     # Export plant-region mapping
     region_map_file = "data/plant_region_map.csv"
-    plant_region_map.to_csv(region_map_file, index=False)
+    with sources.output(region_map_file, (GENERATOR_SOURCE, COUNTY2ZONE_SOURCE)) as output:
+        plant_region_map.to_csv(output, index=False)
     print(
         f"✓ Exported {len(plant_region_map):,} plant-region mappings to {region_map_file}"
     )

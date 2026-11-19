@@ -8,9 +8,14 @@ from tempfile import NamedTemporaryFile
 import geopandas as gpd
 import pandas as pd
 
-from build_reeds_load import REEDS_INPUTS, ZONE_SETS, fetch
+from build_reeds_load import ZONE_SETS
+from locked_sources import SourceLock, add_source_options
 
-TIGER_URL = "https://www2.census.gov/geo/tiger/TIGER2022/COUNTY/tl_2022_us_county.zip"
+TIGER_SOURCE = "tl_2022_us_county.zip"
+HVDC_SOURCE = "transmission/hvdc_existing.csv"
+INTERFACE_LIMITS_SOURCE = "transmission/itl_NARIS.csv"
+ROUTE_COSTS_SOURCE = "transmission/transmission_cost_distance.csv"
+DOLLAR_YEAR_SOURCE = "transmission/dollaryear.csv"
 COLUMNS = ["region_from", "region_to", "firm_ttc_mw", "notes", "zone_set"]
 
 
@@ -88,35 +93,48 @@ def expansion_costs(routes, hashes, dollar_year, zone_set):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
-    parser.add_argument("--cache-dir", type=Path, default=Path("cache_data/reeds-transmission"))
+    add_source_options(parser)
     args = parser.parse_args()
 
-    def read(path, zone_set=None, **kwargs):
-        cache = args.cache_dir / zone_set if zone_set else args.cache_dir
-        return pd.read_csv(fetch(f"{REEDS_INPUTS}/{path}", cache), **kwargs)
+    sources = SourceLock(args.cache_dir, args.sources_lock)
 
-    counties = gpd.read_file(fetch(TIGER_URL, args.cache_dir), columns=["GEOID"])
-    lines = read("transmission/hvdc_existing.csv")
-    itls = read("transmission/itl_NARIS.csv")
-    routes = read("transmission/transmission_cost_distance.csv")
-    dollar_year = read("transmission/dollaryear.csv").set_index("filename").loc[
+    def read(source_id, **kwargs):
+        return pd.read_csv(sources.fetch(source_id), **kwargs)
+
+    counties = gpd.read_file(sources.fetch(TIGER_SOURCE), columns=["GEOID"])
+    lines = read(HVDC_SOURCE)
+    itls = read(INTERFACE_LIMITS_SOURCE)
+    routes = read(ROUTE_COSTS_SOURCE)
+    dollar_year = read(DOLLAR_YEAR_SOURCE).set_index("filename").loc[
         "transmission_cost_distance.csv", "US_dollar_year"
     ]
     capacity, costs = [], []
+    capacity_sources = [TIGER_SOURCE, HVDC_SOURCE, INTERFACE_LIMITS_SOURCE]
+    cost_sources = [ROUTE_COSTS_SOURCE, DOLLAR_YEAR_SOURCE]
     for zone_set, count in ZONE_SETS.items():
         prefix = f"zones/{zone_set}"
-        hashes = read(f"{prefix}/zonehash.csv", zone_set).set_index("r").md5
+        hash_source = f"{prefix}/zonehash.csv"
+        interface_source = f"{prefix}/interfaces_r.csv"
+        county_source = f"{prefix}/county2zone.csv"
+        b2b_source = f"{prefix}/b2b.csv"
+        capacity_sources.extend((hash_source, interface_source, county_source, b2b_source))
+        cost_sources.append(hash_source)
+        hashes = read(hash_source).set_index("r").md5
         if len(hashes) != count or not hashes.index.is_unique or not hashes.is_unique:
             raise ValueError(f"Invalid official {zone_set} zone hashes")
-        ac = ac_rows(read(f"{prefix}/interfaces_r.csv", zone_set), hashes, itls)
-        county_zones = read(f"{prefix}/county2zone.csv", zone_set, dtype={"FIPS": str}).set_index("FIPS").r
+        ac = ac_rows(read(interface_source), hashes, itls)
+        county_zones = read(county_source, dtype={"FIPS": str}).set_index("FIPS").r
         hvdc = hvdc_rows(lines, counties, county_zones)
-        b2b = read(f"{prefix}/b2b.csv", zone_set)
+        b2b = read(b2b_source)
         capacity.append(combine_capacity(ac, hvdc, b2b, hashes.index, zone_set))
         costs.append(expansion_costs(routes, hashes, dollar_year, zone_set))
         print(f"{zone_set}: {len(capacity[-1])} capacity rows and {len(costs[-1])} expansion routes")
-    write_csv(args.data_dir / "transmission_capacity_reeds.csv", pd.concat(capacity))
-    write_csv(args.data_dir / "transmission_expansion_cost_reeds.csv", pd.concat(costs))
+    capacity_path = args.data_dir / "transmission_capacity_reeds.csv"
+    costs_path = args.data_dir / "transmission_expansion_cost_reeds.csv"
+    with sources.output(capacity_path, capacity_sources) as output:
+        write_csv(output, pd.concat(capacity))
+    with sources.output(costs_path, cost_sources) as output:
+        write_csv(output, pd.concat(costs))
 
 
 if __name__ == "__main__":
