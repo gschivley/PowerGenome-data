@@ -18,8 +18,8 @@ import pandas as pd
 import requests
 
 # URLs
-REEDS_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
-COUNTY2ZONE_URL = "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv"
+REEDS_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+COUNTY2ZONE_URL = "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/zones/z134/county2zone.csv"
 EIA_URL = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
 
 
@@ -128,6 +128,8 @@ def fetch_county_to_zone_mapping():
     df = pd.read_csv(StringIO(response.text))
     print(f"  Loaded {len(df):,} county mappings")
 
+    # New ReEDS county2zone.csv uses column name "r" for the BA
+    df = df.rename(columns={"r": "ba"})
     # Keep only FIPS and ba columns
     df = df[["FIPS", "ba"]].copy()
 
@@ -334,6 +336,26 @@ def transform_reeds_data(reeds_df, eia_tech_df):
 
     transformed["technology"] = transformed.apply(get_technology, axis=1)
 
+    # Fill missing storage energy for batteries with 4-hour duration
+    battery_mask = transformed["technology"].str.contains(
+        "batter", case=False, na=False
+    )
+    missing_energy = battery_mask & transformed["capacity_mwh"].isna()
+    if missing_energy.any():
+        transformed.loc[missing_energy, "capacity_mwh"] = (
+            transformed.loc[missing_energy, "capacity_mw"] * 4
+        )
+
+    # Overwrite capacity_mwh for pumped hydro to 15.5 hour duration by default
+    # https://sandia.gov/ess-ssl/gesdb/public/statistics.html
+    pumped_hydro_mask = transformed["technology"].str.contains(
+        "pumped", case=False, na=False
+    )
+    if pumped_hydro_mask.any():
+        transformed.loc[pumped_hydro_mask, "capacity_mwh"] = (
+            transformed.loc[pumped_hydro_mask, "capacity_mw"] * 15.5
+        )
+
     # Reorder columns and drop helper columns
     output_columns = [
         "technology",
@@ -517,12 +539,12 @@ def main():
     all_checks_passed = perform_data_quality_checks(transformed_df)
 
     # Export generators
-    output_file = "reeds_generators_transformed.csv"
+    output_file = "data/reeds_generators_transformed.csv"
     transformed_df.to_csv(output_file, index=False)
     print(f"\n✓ Exported {len(transformed_df):,} rows to {output_file}")
 
     # Export plant-region mapping
-    region_map_file = "plant_region_map.csv"
+    region_map_file = "data/plant_region_map.csv"
     plant_region_map.to_csv(region_map_file, index=False)
     print(
         f"✓ Exported {len(plant_region_map):,} plant-region mappings to {region_map_file}"

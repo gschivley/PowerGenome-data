@@ -17,9 +17,9 @@ import pdfplumber
 
 # Paths
 PDF_PATH = Path(
-    "cache/capital_cost_AEO2025.pdf"
+    "cache_data/capital_cost_AEO2025.pdf"
 )  # https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf
-REGION_CITY_MAP_PATH = Path("cache/reeds_region_to_eia_city.csv")
+REGION_CITY_MAP_PATH = Path("cache_data/reeds_region_to_eia_city.csv")
 OUTPUT_PATH = Path("data/regional_cost_multipliers.csv")
 
 # Table configuration: page number and technology name
@@ -61,20 +61,20 @@ atb_tech_map = {
         "NaturalGas_F-Frame CT",
     ],
     "Combined-Cycle 2x2x1": [
-        "NaturalGas_Combined Cycle 2-on-1",
+        "NaturalGas_2-on-1 Combined Cycle",
         "NaturalGas_F-Frame CC",
         "NaturalGas_H-Frame CC",
     ],
     "Combined-Cycle 1x1x1, Single Shaft": [
-        "NaturalGas_Combined Cycle 1-on-1",
+        "NaturalGas_1-on-1 Combined Cycle",
     ],
     "Combined Cycle 1x1x1, Single Shaft 95% Carbon Capture": [
-        "NaturalGas_Combined Cycle 1-on-1 (H-Frame) 95% CCS",
-        "NaturalGas_Combined Cycle 1-on-1 (H-Frame) 97% CCS",
-        "NaturalGas_Combined Cycle 2-on-1 (F-Frame) 95% CCS",
-        "NaturalGas_Combined Cycle 2-on-1 (F-Frame) 97% CCS",
-        "NaturalGas_Combined Cycle 2-on-1 (H-Frame) 95% CCS",
-        "NaturalGas_Combined Cycle 2-on-1 (H-Frame) 97% CCS",
+        "NaturalGas_1-on-1 Combined Cycle (H-Frame) 95% CCS",
+        "NaturalGas_1-on-1 Combined Cycle (H-Frame) 97% CCS",
+        "NaturalGas_2-on-1 Combined Cycle (F-Frame) 95% CCS",
+        "NaturalGas_2-on-1 Combined Cycle (F-Frame) 97% CCS",
+        "NaturalGas_2-on-1 Combined Cycle (H-Frame) 95% CCS",
+        "NaturalGas_2-on-1 Combined Cycle (H-Frame) 97% CCS",
         "NaturalGas_F-Frame CC 95% CCS",
         "NaturalGas_H-Frame CC 95% CCS",
         "NaturalGas_F-Frame CC 97% CCS",

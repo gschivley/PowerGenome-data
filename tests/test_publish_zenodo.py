@@ -1,7 +1,10 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack, chdir
+from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
@@ -190,6 +193,25 @@ class StateMigrationTests(unittest.TestCase):
     def test_legacy_state_has_no_non_core_sections(self):
         self.assertEqual(MODULE.section_release(LEGACY_STATE, "profiles"), {})
 
+    def test_legacy_core_preserves_complete_payload_in_either_environment(self):
+        for environment in ("sandbox", "production"):
+            with self.subTest(environment=environment):
+                state = deepcopy(LEGACY_STATE)
+                state["zenodo_release"].update(
+                    environment=environment,
+                    versions=["2026.08.14.v1"],
+                    removal_notes={"retired.csv": "superseded"},
+                    manifest_meta_hash="hash",
+                )
+                normalized = MODULE.normalize_release_state(state)
+                self.assertEqual(
+                    normalized["releases"]["core"]["environments"][environment],
+                    state["zenodo_release"],
+                )
+                self.assertEqual(
+                    MODULE.normalize_release_state(normalized), normalized
+                )
+
     def test_new_releases_state_wins_over_legacy(self):
         state = dict(LEGACY_STATE)
         state["releases"] = {"core": {"deposition_id": "700002", "published": False}}
@@ -200,6 +222,355 @@ class StateMigrationTests(unittest.TestCase):
         released = MODULE.section_release(NEW_STATE, "profiles")
         self.assertEqual(released["deposition_id"], "600001")
         self.assertEqual(MODULE.section_release(NEW_STATE, "core"), {})
+
+    def test_flat_records_migrate_losslessly_and_idempotently(self):
+        for environment in ("sandbox", "production"):
+            with self.subTest(environment=environment):
+                payload = dict(
+                    LEGACY_STATE["zenodo_release"],
+                    environment=environment,
+                    versions=["2026.08.14.v1"],
+                    manifest_meta_hash="hash",
+                    removal_notes={"old.csv": "superseded"},
+                    future_field={"preserve": True},
+                )
+                state = {"releases": {"core": payload}}
+                original = deepcopy(state)
+                normalized = MODULE.normalize_release_state(state)
+                self.assertEqual(
+                    normalized["releases"]["core"],
+                    {"environments": {environment: payload}},
+                )
+                self.assertEqual(
+                    MODULE.normalize_release_state(normalized), normalized
+                )
+                self.assertEqual(state, original)
+                self.assertEqual(
+                    MODULE.section_release(state, "core", environment), payload
+                )
+                other = "sandbox" if environment == "production" else "production"
+                self.assertEqual(MODULE.section_release(state, "core", other), {})
+
+    def test_missing_environment_defaults_to_sandbox_without_doi_inference(self):
+        payload = {"deposition_id": "123", "doi": "10.5281/zenodo.123"}
+        state = {"releases": {"core": payload}}
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), payload)
+        self.assertEqual(MODULE.section_release(state, "core", "production"), {})
+
+    def test_nested_key_supplies_missing_payload_environment(self):
+        payload = {"deposition_id": "production-id"}
+        state = {"releases": {"core": {"environments": {"production": payload}}}}
+        self.assertEqual(
+            MODULE.section_release(state, "core", "production"), payload
+        )
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), {})
+
+    def test_nested_selection_and_collection_precedence(self):
+        state = deepcopy(LEGACY_STATE)
+        production = {"environment": "production", "deposition_id": "prod"}
+        state["releases"] = {
+            "core": {"environments": {"production": production}},
+        }
+        self.assertEqual(
+            MODULE.section_release(state, "core", "production"), production
+        )
+        # Do not resurrect legacy sandbox state when a core container exists.
+        self.assertEqual(MODULE.section_release(state, "core", "sandbox"), {})
+        state["releases"]["core"] = {}
+        self.assertEqual(MODULE.section_release(state, "core"), {})
+
+
+class EnvironmentPersistenceTests(unittest.TestCase):
+    """Exercise the real release/read/modify/save flow with no network access."""
+
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        self.state_path = self.root / ".zenodo.json"
+        self.manifests = {}
+        for section in ("core", "profiles"):
+            directory = self.root / MODULE.COLLECTIONS[section]["data_dir"]
+            directory.mkdir()
+            data = directory / "example.csv"
+            data.write_text("example\n")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "example.csv": {
+                        "md5": MODULE.md5_for_file(data),
+                        "version": "v1",
+                        "license": "cc-zero",
+                        "sources": [{"source": "Test fixture"}],
+                    }
+                },
+            }
+            path = directory / "manifest.json"
+            path.write_text(json.dumps(manifest))
+            self.manifests[section] = path
+        self.stack.enter_context(mock.patch.object(Path, "cwd", return_value=self.root))
+        # run_release changes these globals; restore them after each test.
+        self.stack.enter_context(mock.patch.object(MODULE, "PROJECT_ROOT", self.root))
+        self.stack.enter_context(mock.patch.object(MODULE, "STATE_PATH", self.state_path))
+        for name in ("load_dotenv", "log"):
+            self.stack.enter_context(mock.patch.object(MODULE, name))
+        self.stack.enter_context(mock.patch("builtins.print"))
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "truthy_env", return_value=False)
+        )
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "load_token", return_value="test-token")
+        )
+        self.session = mock.Mock(spec=requests.Session)
+        self.session.request.side_effect = AssertionError("Unexpected network operation")
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "make_session", return_value=self.session)
+        )
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "uncommitted_release_files", return_value=[])
+        )
+        self.stack.enter_context(
+            mock.patch.object(
+                MODULE,
+                "check_script_provenance",
+                return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+            )
+        )
+        self.remote = {}
+        self.next_id = 100
+        for name in ("create_deposition", "create_new_version", "get_deposition"):
+            self.remote[name] = self.stack.enter_context(
+                mock.patch.object(
+                    MODULE,
+                    name,
+                    side_effect=lambda *a, operation=name: self.deposition(operation, *a),
+                )
+            )
+        for name, result in (
+            ("existing_draft_files", {}),
+            ("upload_file", {}),
+            ("set_metadata", {}),
+        ):
+            self.remote[name] = self.stack.enter_context(
+                mock.patch.object(
+                    MODULE, name, side_effect=lambda *a, r=result, **k: deepcopy(r)
+                )
+            )
+        self.remote["publish_deposition"] = self.stack.enter_context(
+            mock.patch.object(
+                MODULE,
+                "publish_deposition",
+                side_effect=lambda session, base, dep: {"doi": f"test:{base}/{dep}"},
+            )
+        )
+        # Keep the actual suffix calculation; only mock its remote search.
+        response = mock.Mock()
+        response.json.return_value = {"hits": {"hits": []}}
+        self.stack.enter_context(
+            mock.patch.object(MODULE, "retry_request", return_value=response)
+        )
+
+    def deposition(self, operation, session, base_url, deposition_id=None):
+        if operation != "get_deposition":
+            self.next_id += 1
+            deposition_id = str(self.next_id)
+        return {
+            "id": deposition_id,
+            "conceptrecid": "concept",
+            "links": {"bucket": "https://bucket.invalid", "files": "https://files.invalid"},
+        }
+
+    def payload(self, environment, published=True):
+        return {
+            "environment": environment,
+            "data_version": "2026.08.13",
+            "release_version": "2026.08.14.v2",
+            "deposition_id": f"{environment}-original",
+            "doi": f"test:{environment}",
+            "published": published,
+            "versions": ["2026.08.14.v1", "2026.08.14.v2"],
+            "files": {"old.csv": {"md5": "old", "license": "cc-zero"}},
+            "manifest_meta_hash": "old-hash",
+            "removal_notes": {"old.csv": "retired"},
+            "extra": {"must_survive": [1, 2]},
+        }
+
+    def write_state(self, state):
+        self.state_path.write_text(json.dumps(state))
+
+    def read_state(self):
+        return json.loads(self.state_path.read_text())
+
+    def run_release(self, environment, *, publish=True, save=True, section="core"):
+        flags = ["--collection", section, "--sleep-seconds", "0"]
+        if environment == "production":
+            flags.append("--production")
+        if publish:
+            flags.append("--publish")
+        if save:
+            flags.append("--save-state")
+        MODULE.run_release(MODULE.build_parser().parse_args(flags))
+        self.session.request.assert_not_called()
+        return self.read_state()
+
+    def test_alternating_environments_preserve_lineage_and_independent_histories(self):
+        for original_env, target_env in (
+            ("production", "sandbox"),
+            ("sandbox", "production"),
+        ):
+            with self.subTest(original=original_env):
+                original = self.payload(original_env)
+                untouched = {"environments": {"production": self.payload("production")}}
+                metadata = deepcopy(NEW_STATE["metadata"])
+                self.write_state({
+                    "metadata": metadata,
+                    "releases": {"core": original, "profiles": untouched},
+                })
+                self.remote["create_deposition"].reset_mock()
+                saved = self.run_release(target_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.assertEqual(environments[original_env], original)
+                self.assertEqual(environments[target_env]["versions"], ["2026.08.14.v1"])
+                self.assertEqual(saved["releases"]["profiles"], untouched)
+                self.assertEqual(saved["metadata"], metadata)
+                target = deepcopy(environments[target_env])
+                self.remote["create_deposition"].assert_called_once_with(
+                    self.session, MODULE.resolve_base(target_env == "production")
+                )
+
+                self.remote["create_new_version"].reset_mock()
+                saved = self.run_release(original_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.remote["create_new_version"].assert_called_once_with(
+                    self.session,
+                    MODULE.resolve_base(original_env == "production"),
+                    original["deposition_id"],
+                )
+                self.assertEqual(environments[target_env], target)
+                self.assertEqual(
+                    environments[original_env]["versions"],
+                    original["versions"] + ["2026.08.14.v3"],
+                )
+                self.assertEqual(saved["releases"]["profiles"], untouched)
+                self.assertEqual(saved["metadata"], metadata)
+
+                # Returning to the other published environment is a no-op.
+                before = deepcopy(saved)
+                self.remote["create_new_version"].reset_mock()
+                self.assertEqual(self.run_release(target_env), before)
+                self.remote["create_new_version"].assert_not_called()
+                self.assertEqual(self.run_release(original_env), before)
+                self.remote["create_new_version"].assert_not_called()
+
+                # A same-day metadata change versions each saved lineage with
+                # its own counter, never the other environment's history.
+                path = self.manifests["core"]
+                manifest = json.loads(path.read_text())
+                manifest["files"]["example.csv"]["version"] += "-updated"
+                path.write_text(json.dumps(manifest))
+                self.remote["create_new_version"].reset_mock()
+                saved = self.run_release(target_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.remote["create_new_version"].assert_called_once_with(
+                    self.session,
+                    MODULE.resolve_base(target_env == "production"),
+                    target["deposition_id"],
+                )
+                self.assertEqual(
+                    environments[original_env],
+                    before["releases"]["core"]["environments"][original_env],
+                )
+                self.assertEqual(
+                    environments[target_env]["versions"],
+                    ["2026.08.14.v1", "2026.08.14.v2"],
+                )
+                target = deepcopy(environments[target_env])
+                saved = self.run_release(original_env)
+                environments = saved["releases"]["core"]["environments"]
+                self.assertEqual(environments[target_env], target)
+                self.assertEqual(
+                    environments[original_env]["versions"],
+                    original["versions"] + ["2026.08.14.v3", "2026.08.14.v4"],
+                )
+
+    def test_saved_sandbox_draft_resumes_after_production_release(self):
+        production = self.payload("production")
+        self.write_state({
+            "metadata": NEW_STATE["metadata"],
+            "releases": {"core": production},
+        })
+        saved = self.run_release("sandbox", publish=False)
+        draft = saved["releases"]["core"]["environments"]["sandbox"]
+        self.assertFalse(draft["published"])
+        self.assertEqual(draft["versions"], [])
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["production"], production
+        )
+        saved = self.run_release("production")
+        production = deepcopy(saved["releases"]["core"]["environments"]["production"])
+        self.assertEqual(saved["releases"]["core"]["environments"]["sandbox"], draft)
+        self.remote["get_deposition"].reset_mock()
+        saved = self.run_release("sandbox", publish=False)
+        self.remote["get_deposition"].assert_called_once_with(
+            self.session, MODULE.resolve_base(False), draft["deposition_id"]
+        )
+        self.assertEqual(saved["releases"]["core"]["environments"]["sandbox"], draft)
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["production"], production
+        )
+
+    def test_non_core_save_preserves_legacy_core_and_reads_do_not_write(self):
+        self.write_state(LEGACY_STATE)
+        before = self.state_path.read_bytes()
+        normalized = MODULE.load_state()
+        self.assertEqual(self.state_path.read_bytes(), before)
+        self.assertEqual(
+            normalized["releases"]["core"]["environments"]["sandbox"],
+            LEGACY_STATE["zenodo_release"],
+        )
+        self.run_release("sandbox", publish=False, save=False, section="profiles")
+        self.assertEqual(self.state_path.read_bytes(), before)
+        saved = self.run_release("sandbox", publish=False, section="profiles")
+        self.assertEqual(
+            saved["releases"]["core"]["environments"]["sandbox"],
+            LEGACY_STATE["zenodo_release"],
+        )
+        self.assertNotIn("zenodo_release", saved)
+        self.assertEqual(MODULE.load_state(), saved)
+
+    def test_invalid_state_refused_before_any_remote_mutation_or_save(self):
+        invalid_records = [
+            None,
+            [],
+            {"environment": "staging"},
+            {"environment": None},
+            {"environments": None},
+            {"environments": []},
+            {"environments": {"staging": {}}},
+            {"environments": {"sandbox": None}},
+            {"environments": {"production": {"environment": "sandbox"}}},
+            {"environments": {"sandbox": {"environment": None}}},
+            {"environments": {}, "deposition_id": "ambiguous"},
+            {"environments": {"sandbox": {"environments": {}}}},
+        ]
+        states = [
+            {"releases": {"core": self.payload("production"), "profiles": record}}
+            for record in invalid_records
+        ] + [
+            [],
+            {"releases": None},
+            {"zenodo_release": None},
+        ]
+        for state in states:
+            with self.subTest(state=state):
+                self.write_state(state)
+                before = self.state_path.read_bytes()
+                with self.assertRaisesRegex(SystemExit, "Repair .zenodo.json"):
+                    self.run_release("sandbox")
+                self.assertEqual(self.state_path.read_bytes(), before)
+                for remote in self.remote.values():
+                    remote.assert_not_called()
+                self.session.request.assert_not_called()
 
 
 class MetadataTests(unittest.TestCase):
@@ -218,9 +589,7 @@ class MetadataTests(unittest.TestCase):
 class CreatorResolutionTests(unittest.TestCase):
     def test_default_creators_from_git_user_name(self):
         with mock.patch.object(MODULE, "git_user_name", return_value="Greg Schivley"):
-            self.assertEqual(
-                MODULE.default_creators(), [{"name": "Schivley, Greg"}]
-            )
+            self.assertEqual(MODULE.default_creators(), [{"name": "Schivley, Greg"}])
 
     def test_default_creators_exits_without_git_user_name(self):
         with mock.patch.object(MODULE, "git_user_name", return_value=""):
@@ -323,7 +692,9 @@ class DescriptionTests(unittest.TestCase):
             "gone.csv": {
                 "version": "2026-07-01",
                 "license": "cc-by-4.0",
-                "sources": [{"source": "Prior source", "source_url": "https://example.com"}],
+                "sources": [
+                    {"source": "Prior source", "source_url": "https://example.com"}
+                ],
                 "md5": "old",
             }
         }
@@ -351,7 +722,9 @@ class DescriptionTests(unittest.TestCase):
         }
         original = MODULE.manifest_meta_hash(manifest, "<p>README one</p>")
         manifest["files"]["a.csv"]["license"] = "cc-zero"
-        self.assertNotEqual(original, MODULE.manifest_meta_hash(manifest, "<p>README one</p>"))
+        self.assertNotEqual(
+            original, MODULE.manifest_meta_hash(manifest, "<p>README one</p>")
+        )
         self.assertNotEqual(
             MODULE.manifest_meta_hash(manifest, "<p>README one</p>"),
             MODULE.manifest_meta_hash(manifest, "<p>README two</p>"),
@@ -363,6 +736,554 @@ class DescriptionTests(unittest.TestCase):
         )
         self.assertEqual(normalized["old.csv"], {"md5": "abc"})
         self.assertEqual(normalized["new.csv"]["version"], "2026-08-01")
+
+
+class ScriptProvenanceTests(unittest.TestCase):
+    def _init_repo(self, root: Path) -> None:
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=root, check=True
+        )
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "commit.gpgsign", "false"], cwd=root, check=True
+        )
+
+    def _commit_all(self, root: Path, message: str) -> None:
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", message], cwd=root, check=True)
+
+    def test_referenced_scripts_extracts_bare_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "build_atb_data.py").write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "costs.csv": {
+                    "sources": [{"source": "rebuilt by build_atb_data.py."}]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {"costs.csv": ["build_atb_data.py"]},
+            )
+
+    def test_referenced_scripts_resolves_directory_to_scripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = (
+                root
+                / ".github"
+                / "skills"
+                / "eia-fuel-prices"
+                / "scripts"
+                / "fetch_eia_fuel_prices.py"
+            )
+            script.parent.mkdir(parents=True)
+            script.write_text("print('x')\n")
+            test_script = (
+                root
+                / ".github"
+                / "skills"
+                / "eia-fuel-prices"
+                / "tests"
+                / "test_fetch_eia_fuel_prices.py"
+            )
+            test_script.parent.mkdir(parents=True)
+            test_script.write_text("print('test')\n")
+            self._commit_all(root, "add skill")
+            files = {
+                "fuel_prices.parquet": {
+                    "sources": [{"source": "mapped by .github/skills/eia-fuel-prices."}]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {
+                    "fuel_prices.parquet": [
+                        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+                    ]
+                },
+            )
+
+    def test_referenced_scripts_ignores_upstream_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "transform_reeds_generators.py").write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "gen.csv": {
+                    "sources": [
+                        {
+                            "source": (
+                                "ReEDS-2.0/inputs/capacity_exogenous/"
+                                "ReEDS_generator_database_final_EIA-NEMS.csv joined by "
+                                "transform_reeds_generators.py."
+                            )
+                        }
+                    ]
+                }
+            }
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root),
+                {"gen.csv": ["transform_reeds_generators.py"]},
+            )
+
+    def test_referenced_scripts_prefers_declared_list_over_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            (root / "b.py").write_text("print('b')\n")
+            self._commit_all(root, "add scripts")
+            files = {
+                "x.csv": {
+                    "scripts": ["b.py"],
+                    "sources": [{"source": "legacy prose naming a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {"x.csv": ["b.py"]})
+
+    def test_referenced_scripts_falls_back_to_prose_when_undeclared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            for scripts in (None, [], [""]):
+                info = {"sources": [{"source": "built by a.py."}]}
+                if scripts is not None:
+                    info["scripts"] = scripts
+                self.assertEqual(
+                    MODULE.referenced_scripts({"x.csv": info}, root),
+                    {"x.csv": ["a.py"]},
+                )
+
+    def test_referenced_scripts_resolves_declared_basename_to_tracked_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "sub" / "build_x.py"
+            script.parent.mkdir()
+            script.write_text("print('x')\n")
+            self._commit_all(root, "add script")
+            files = {"x.csv": {"scripts": ["build_x.py"]}}
+            self.assertEqual(
+                MODULE.referenced_scripts(files, root), {"x.csv": ["sub/build_x.py"]}
+            )
+
+    def test_unresolved_declared_scripts_reports_unknown_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {"scripts": ["typo.py"]},
+                "y.csv": {"scripts": ["a.py"]},
+            }
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_unresolvable_declaration_does_not_fall_back_to_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "add script")
+            files = {
+                "x.csv": {
+                    "scripts": ["typo.py"],
+                    "sources": [{"source": "built by a.py."}],
+                }
+            }
+            self.assertEqual(MODULE.referenced_scripts(files, root), {})
+            self.assertEqual(
+                MODULE.unresolved_declared_scripts(files, root), {"x.csv": ["typo.py"]}
+            )
+
+    def test_check_script_provenance_records_missing_declarations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            files = {"x.csv": {"scripts": ["typo.py"]}}
+            provenance = MODULE.check_script_provenance(files, root)
+            self.assertEqual(provenance["missing"], {"x.csv": ["typo.py"]})
+            self.assertIsNotNone(MODULE.provenance_block_reason(provenance, False))
+            self.assertIsNone(MODULE.provenance_block_reason(provenance, True))
+
+    def test_latest_reachable_tag_returns_nearest_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            (root / "a.py").write_text("print('b')\n")
+            self._commit_all(root, "second")
+            subprocess.run(["git", "tag", "v1.1.0"], cwd=root, check=True)
+            self.assertEqual(MODULE.latest_reachable_tag(root), "v1.1.0")
+
+    def test_latest_reachable_tag_none_without_tags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            self.assertIsNone(MODULE.latest_reachable_tag(root))
+
+    def test_script_changed_since_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            self.assertFalse(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+            (root / "a.py").write_text("print('b')\n")
+            self._commit_all(root, "second")
+            self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+
+    def test_script_changed_since_tag_detects_staged_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            script = root / "a.py"
+            script.write_text("print('a')\n")
+            self._commit_all(root, "first")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+            script.write_text("print('b')\n")
+            subprocess.run(["git", "add", "a.py"], cwd=root, check=True)
+            script.write_text("print('a')\n")
+            self.assertTrue(MODULE.script_changed_since_tag("a.py", "v1.0.0", root))
+
+    def test_check_script_provenance_missing_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "a.py").write_text("print('a')\n")
+            self._commit_all(root, "first")
+            files = {"x.csv": {"sources": [{"source": "by a.py."}]}}
+            provenance = MODULE.check_script_provenance(files, root)
+            self.assertIsNone(provenance["tag"])
+            self.assertFalse(provenance["scripts"]["a.py"]["changed"])
+
+    def test_provenance_block_reason(self):
+        ok = {"tag": "v1.0.0", "scripts": {"a.py": {"changed": False}}, "files": {}}
+        self.assertIsNone(MODULE.provenance_block_reason(ok, False))
+        drifted = {"tag": "v1.0.0", "scripts": {"a.py": {"changed": True}}, "files": {}}
+        self.assertIsNotNone(MODULE.provenance_block_reason(drifted, False))
+        self.assertIsNone(MODULE.provenance_block_reason(drifted, True))
+        no_tag = {"tag": None, "scripts": {}, "files": {}}
+        self.assertIsNotNone(MODULE.provenance_block_reason(no_tag, True))
+
+    def test_release_section_blocks_without_tag(self):
+        args = mock.Mock()
+        args.deposition_id = None
+        args.allow_dirty = True
+        args.allow_script_drift = False
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+        session = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "core_a.csv").write_text("a")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "core_a.csv": {
+                        "version": "2026-08-11",
+                        "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    }
+                },
+            }
+            with self.assertRaisesRegex(SystemExit, "no git tag"):
+                MODULE.release_section(
+                    args,
+                    session,
+                    "https://zenodo.org/api",
+                    "sandbox",
+                    manifest,
+                    "core",
+                    manifest["files"],
+                    data_dir,
+                    root,
+                    {},
+                )
+        session.request.assert_not_called()
+
+    def test_hydro_builder_drift_is_checked_for_both_profiles(self):
+        manifest = json.loads(
+            (SCRIPT.parent / "existing_resource_groups" / "manifest.json").read_text()
+        )
+        files = {
+            name: manifest["files"][name]
+            for name in (
+                "hydro_conventional_2007_2013.parquet",
+                "hydro_run_of_river_2007_2013.parquet",
+            )
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init_repo(root)
+            (root / "build_hydro_profiles.py").write_text("original\n")
+            (root / "transform_reeds_generators.py").write_text("original\n")
+            self._commit_all(root, "Initial scripts")
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=root, check=True)
+
+            (root / "build_hydro_profiles.py").write_text("changed\n")
+            provenance = MODULE.check_script_provenance(files, root)
+
+        for filename in files:
+            self.assertIn("build_hydro_profiles.py", provenance["files"][filename])
+        self.assertTrue(provenance["scripts"]["build_hydro_profiles.py"]["changed"])
+        self.assertIsNotNone(MODULE.provenance_block_reason(provenance, False))
+
+    def test_description_includes_code_tag_and_scripts(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "license": "cc-zero",
+                "sources": [{"source": "rebuilt by build_atb_data.py."}],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {"build_atb_data.py": {"changed": False}},
+            "files": {"costs.csv": ["build_atb_data.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("code tag <code>v1.2.0</code>", description)
+        self.assertIn("build_atb_data.py</code> @ <code>v1.2.0</code>", description)
+        self.assertNotIn("changed since tag", description)
+        self.assertIn("Files grouped by license:", description)
+        self.assertIn("<strong>CC0 (public domain dedication):</strong>", description)
+        self.assertNotIn("Last updated", description)
+
+    def test_description_marks_changed_scripts(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "sources": [{"source": "rebuilt by build_atb_data.py."}],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {"build_atb_data.py": {"changed": True}},
+            "files": {"costs.csv": ["build_atb_data.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("changed since tag", description)
+        self.assertIn("have changed since", description)
+
+    def test_manifest_meta_hash_includes_provenance(self):
+        manifest = {"data_version": "2026.08.20", "files": {"a.csv": {"md5": "x"}}}
+        base = MODULE.manifest_meta_hash(
+            manifest, "", {"tag": "v1.0.0", "scripts": {}, "files": {}}
+        )
+        changed = MODULE.manifest_meta_hash(
+            manifest, "", {"tag": "v1.1.0", "scripts": {}, "files": {}}
+        )
+        self.assertNotEqual(base, changed)
+
+    def test_manifest_meta_hash_includes_declared_scripts(self):
+        provenance = {"tag": "v1.0.0", "scripts": {}, "files": {}}
+        before = MODULE.manifest_meta_hash(
+            {"data_version": "2026.08.20", "files": {"a.csv": {"md5": "x"}}},
+            "",
+            provenance,
+        )
+        after = MODULE.manifest_meta_hash(
+            {
+                "data_version": "2026.08.20",
+                "files": {"a.csv": {"md5": "x", "scripts": ["a.py"]}},
+            },
+            "",
+            provenance,
+        )
+        self.assertNotEqual(before, after)
+
+    def test_description_notes_unverified_script_paths(self):
+        files = {
+            "costs.csv": {
+                "version": "2026-08-11",
+                "last_updated": "2026-08-11",
+                "md5": "x",
+                "scripts": ["typo.py"],
+            }
+        }
+        provenance = {
+            "tag": "v1.2.0",
+            "scripts": {},
+            "files": {},
+            "missing": {"costs.csv": ["typo.py"]},
+        }
+        description = MODULE.build_description(
+            {"data_version": "2026.08.14", "files": files},
+            "core",
+            files,
+            ["costs.csv"],
+            [],
+            [],
+            True,
+            provenance=provenance,
+        )
+        self.assertIn("not found in the repository", description)
+        self.assertIn("<code>typo.py</code>", description)
+
+    def test_parser_exposes_allow_script_drift(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(["--allow-script-drift"])
+        self.assertTrue(args.allow_script_drift)
+
+
+class ReleaseSafetyTests(unittest.TestCase):
+    def test_undocumented_files_flags_missing_license(self):
+        files = {
+            "a.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+            "b.csv": {"sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), ["b.csv"])
+
+    def test_undocumented_files_flags_placeholder_sources(self):
+        files = {
+            "a.csv": {
+                "license": "cc-zero",
+                "sources": [{"source": "Unknown - document me"}],
+            },
+            "b.csv": {"license": "cc-zero", "sources": []},
+            "c.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), ["a.csv", "b.csv"])
+
+    def test_undocumented_files_ok_when_documented(self):
+        files = {
+            "a.csv": {"license": "cc-zero", "sources": [{"source": "EIA"}]},
+        }
+        self.assertEqual(MODULE.undocumented_files(files), [])
+
+    def test_production_release_guards_are_independent(self):
+        args = mock.Mock()
+        args.deposition_id = None
+        args.allow_dirty = True
+        args.allow_undocumented = False
+        args.allow_script_drift = False
+        args.publish = False
+        args.sleep_seconds = 0
+        args.upload_retries = 0
+        args.upload_retry_delay = 0
+        session = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "core_a.csv").write_text("a")
+            manifest = {
+                "data_version": "2026.08.14",
+                "files": {
+                    "core_a.csv": {
+                        "version": "2026-08-11",
+                        "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    }
+                },
+            }
+            for allow_undocumented, reason in (
+                (False, "Refusing production release"),
+                (True, "no git tag"),
+            ):
+                with self.subTest(allow_undocumented=allow_undocumented):
+                    args.allow_undocumented = allow_undocumented
+                    with self.assertRaisesRegex(SystemExit, reason):
+                        MODULE.release_section(
+                            args,
+                            session,
+                            "https://zenodo.org/api",
+                            "production",
+                            manifest,
+                            "core",
+                            manifest["files"],
+                            data_dir,
+                            root,
+                            {},
+                        )
+        # Refusal happens before any Zenodo API call.
+        session.request.assert_not_called()
+
+    def test_parser_exposes_allow_undocumented(self):
+        parser = MODULE.build_parser()
+        args = parser.parse_args(["--allow-undocumented"])
+        self.assertTrue(args.allow_undocumented)
+        self.assertFalse(parser.parse_args([]).allow_undocumented)
+
+
+class LicensingAndDescriptionTests(unittest.TestCase):
+    def test_licensing_paragraph_groups_files_by_license(self):
+        files = {
+            "a.csv": {"license": "cc-zero"},
+            "b.csv": {"license": "cc-by-4.0"},
+            "c.csv": {"license": "cc-zero"},
+        }
+        paragraph = MODULE.licensing_paragraph(files)
+        self.assertIn(
+            "Creative Commons Zero (CC0, public domain dedication)", paragraph
+        )
+        self.assertIn("CC0 (public domain dedication)", paragraph)
+        self.assertIn(
+            "Creative Commons Attribution 4.0 International (CC BY 4.0)", paragraph
+        )
+        self.assertIn("<code>a.csv</code>", paragraph)
+        self.assertIn("<code>c.csv</code>", paragraph)
+        self.assertIn("<code>b.csv</code>", paragraph)
+
+    def test_licensing_paragraph_handles_missing_license(self):
+        paragraph = MODULE.licensing_paragraph({"a.csv": {}})
+        self.assertIn("Not specified", paragraph)
+
+    def test_describe_file_omits_redundant_last_updated_row(self):
+        html = MODULE.describe_file(
+            "a.csv", {"version": "2026-08-11", "last_updated": "2026-08-11"}
+        )
+        self.assertNotIn("Last updated", html)
+
+    def test_describe_file_shows_last_updated_when_divergent(self):
+        html = MODULE.describe_file(
+            "a.csv", {"version": "2026-08-11", "last_updated": "2026-08-12"}
+        )
+        self.assertIn("Last updated", html)
+        self.assertIn("2026-08-12", html)
 
 
 class ManifestEntryTests(unittest.TestCase):
@@ -422,9 +1343,14 @@ class DryRunTests(unittest.TestCase):
             manifest_path = root / "data" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    MODULE.dry_run(_mkargs(manifest_path))
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    out = io.StringIO()
+                    with redirect_stdout(out):
+                        MODULE.dry_run(_mkargs(manifest_path))
             text = out.getvalue()
         self.assertIn("[core] PowerGenome Input Data", text)
         self.assertIn("ok      core_a.csv", text)
@@ -458,7 +1384,14 @@ class DryRunTests(unittest.TestCase):
             }
             manifest_path = root / "data" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest))
-            with mock.patch.object(MODULE.Path, "cwd", return_value=root):
+            with (
+                mock.patch.object(MODULE.Path, "cwd", return_value=root),
+                mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ),
+            ):
                 out = io.StringIO()
                 with redirect_stdout(out):
                     MODULE.dry_run(_mkargs(manifest_path, ["profiles"]))
@@ -497,11 +1430,16 @@ class CollectionFilterTests(unittest.TestCase):
                 json.dumps(profiles_manifest)
             )
             with mock.patch.object(MODULE.Path, "cwd", return_value=root):
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    MODULE.dry_run(
-                        _mkargs(root / "data" / "manifest.json", ["profiles"])
-                    )
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    out = io.StringIO()
+                    with redirect_stdout(out):
+                        MODULE.dry_run(
+                            _mkargs(root / "data" / "manifest.json", ["profiles"])
+                        )
             text = out.getvalue()
         self.assertNotIn("[core]", text)
         self.assertIn("[profiles] PowerGenome Renewable Resource Profiles", text)
@@ -589,17 +1527,23 @@ class DepositionOverrideTests(unittest.TestCase):
                 },
             }
             with mock.patch.object(MODULE.time, "sleep"):
-                result = MODULE.release_section(
-                    args,
-                    session,
-                    "https://zenodo.org/api",
-                    "production",
-                    manifest,
-                    "core",
-                    manifest["files"],
-                    data_dir,
-                    state,
-                )
+                with mock.patch.object(
+                    MODULE,
+                    "check_script_provenance",
+                    return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+                ):
+                    result = MODULE.release_section(
+                        args,
+                        session,
+                        "https://zenodo.org/api",
+                        "production",
+                        manifest,
+                        "core",
+                        manifest["files"],
+                        data_dir,
+                        root,
+                        state,
+                    )
         self.assertEqual(result["summary"]["deposition_id"], "22233228")
         # The resumed draft must be fetched (not a new version created), then
         # records search, draft files, upload, and metadata update follow.
@@ -625,14 +1569,18 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
     """
 
     def _args(self):
-        args = mock.Mock()
-        args.deposition_id = "22233228"
-        args.allow_dirty = True
-        args.publish = False
-        args.sleep_seconds = 0
-        args.upload_retries = 0
-        args.upload_retry_delay = 0
-        return args
+        return MODULE.build_parser().parse_args(
+            ["--deposition-id", "22233228", "--allow-dirty", "--sleep-seconds", "0"]
+        )
+
+    def setUp(self):
+        provenance = mock.patch.object(
+            MODULE,
+            "check_script_provenance",
+            return_value={"tag": "v1.0.0", "scripts": {}, "files": {}},
+        )
+        provenance.start()
+        self.addCleanup(provenance.stop)
 
     def _response(self, status=200, payload=None):
         response = mock.Mock()
@@ -643,7 +1591,7 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
         response.json.return_value = payload if payload is not None else {}
         return response
 
-    def _setup(self, root):
+    def _setup(self, root, manifest_name="manifest.json"):
         data_dir = root / "data"
         data_dir.mkdir()
         (data_dir / "core_a.csv").write_text("a")
@@ -653,10 +1601,12 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
                 "core_a.csv": {
                     "version": "2026-08-11",
                     "md5": MODULE.md5_for_file(data_dir / "core_a.csv"),
+                    "license": "cc-zero",
+                    "sources": [{"source": "Test fixture"}],
                 }
             },
         }
-        manifest_path = data_dir / "manifest.json"
+        manifest_path = data_dir / manifest_name
         manifest_path.write_text(json.dumps(manifest))
         return manifest, manifest_path, data_dir
 
@@ -682,10 +1632,10 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
             },
         }
 
-    def _run(self, draft_files):
+    def _run(self, draft_files, manifest_name="manifest.json"):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            manifest, manifest_path, data_dir = self._setup(root)
+            manifest, manifest_path, data_dir = self._setup(root, manifest_name)
             manifest_md5 = MODULE.md5_for_file(manifest_path)
             data_md5 = MODULE.md5_for_file(data_dir / "core_a.csv")
 
@@ -711,6 +1661,7 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
                     "core",
                     manifest["files"],
                     data_dir,
+                    root,
                     self._state(),
                     manifest_path=manifest_path,
                 )
@@ -729,6 +1680,17 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
         self.assertIn("https://bucket.example/core_a.csv", puts)
         self.assertIn("https://bucket.example/manifest.json", puts)
 
+    def test_custom_manifest_is_uploaded_under_the_canonical_filename(self):
+        calls = self._run([], manifest_name="custom-release.json")
+        uploads = {
+            url for method, url in calls
+            if method == "PUT" and url.startswith("https://bucket.example/")
+        }
+        self.assertEqual(
+            uploads,
+            {"https://bucket.example/core_a.csv", "https://bucket.example/manifest.json"},
+        )
+
     def test_manifest_in_the_draft_is_kept_and_not_re_uploaded(self):
         """Being absent from the manifest's file list must not mark it removed."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -740,10 +1702,11 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
         self.assertNotIn("https://bucket.example/manifest.json", [u for m, u in calls if m == "PUT"])
         self.assertEqual([url for method, url in calls if method == "DELETE"], [])
 
-    def test_no_manifest_path_uploads_only_data(self):
+    def test_missing_manifest_path_uploads_only_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            manifest, _, data_dir = self._setup(root)
+            manifest, manifest_path, data_dir = self._setup(root)
+            manifest_path.unlink()
             session = mock.Mock()
             session.request.side_effect = [
                 self._response(payload=self._draft()),
@@ -766,7 +1729,9 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
                     "core",
                     manifest["files"],
                     data_dir,
+                    root,
                     self._state(),
+                    manifest_path=manifest_path,
                 )
         self.assertNotIn(
             "https://bucket.example/manifest.json",
@@ -803,10 +1768,49 @@ class ManifestShippedWithDepositTests(unittest.TestCase):
                     "core",
                     manifest["files"],
                     data_dir,
+                    root,
                     self._state(),
                     manifest_path=manifest_path,
                 )
         self.assertEqual(list(result["release"]["files"]), ["core_a.csv"])
+
+    def test_manifest_git_checks_do_not_hide_dirty_data_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp).resolve()
+            root = parent / "repo"
+            root.mkdir()
+            manifest, manifest_path, data_dir = self._setup(root)
+            outside = parent / "outside.json"
+            outside.write_bytes(manifest_path.read_bytes())
+            (root / ".gitignore").write_text("ignored.json\n")
+            ignored = root / "ignored.json"
+            ignored.write_bytes(manifest_path.read_bytes())
+            with chdir(root):
+                subprocess.run(["git", "init", "-q"], check=True)
+                subprocess.run(["git", "add", "data"], check=True)
+                subprocess.run(
+                    ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                     "-c", "commit.gpgsign=false", "commit", "-qm", "Initial commit"],
+                    check=True,
+                )
+                self.assertEqual(
+                    MODULE.uncommitted_release_files(manifest["files"], data_dir, manifest_path),
+                    [],
+                )
+                manifest_path.write_text("{}")
+                self.assertEqual(
+                    MODULE.uncommitted_release_files(manifest["files"], data_dir, manifest_path),
+                    [" M data/manifest.json"],
+                )
+                (data_dir / "core_a.csv").write_text("changed")
+                for custom_path in (outside, ignored):
+                    with self.subTest(custom_path=custom_path):
+                        self.assertCountEqual(
+                            MODULE.uncommitted_release_files(
+                                manifest["files"], data_dir, custom_path
+                            ),
+                            [f"?? {custom_path}", " M data/core_a.csv"],
+                        )
 
 
 class UploadRetryTests(unittest.TestCase):

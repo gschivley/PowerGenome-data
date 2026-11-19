@@ -145,8 +145,12 @@ YEAR_SETTINGS: Final = {
     },
     2025: {
         "parquet_url": (
-            "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2025/v1.0.0/ATBe.parquet"
+            "https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2025/v2.0.0/ATBe.parquet"
         ),
+        # Still the v1 workbook: NREL has not published a v2 workbook (checked
+        # 2026-11-17; v2 filename guesses 404 while this URL still serves the
+        # v1 file). This is safe because the v2 tidy data changes no battery
+        # values, so the workbook-derived battery costs are unaffected.
         "workbook_url": (
             "https://data.openei.org/files/8759/2025_v1_Workbook_08-27-2026.xlsx"
         ),
@@ -627,7 +631,7 @@ def build(
     cost_backup = backup_dir / COST_OUTPUT_NAME
     heat_rate_backup = backup_dir / HEAT_RATE_OUTPUT_NAME
     try:
-        costs.to_parquet(cost_tmp, index=False)
+        costs.to_parquet(cost_tmp, index=False, compression="zstd")
         heat_rates.to_csv(heat_rate_tmp, index=False)
         if cost_path.exists():
             shutil.copy2(cost_path, cost_backup)

@@ -69,6 +69,11 @@ Recommended defaults if the user does not specify:
 - Refuse to proceed if the required token is missing.
 - The script refuses to run when any release file differs from git HEAD; commit
   first or pass `--allow-dirty` (not recommended).
+- The script refuses to run when no git tag is reachable from HEAD, when a
+  Python script declared in a manifest file's `scripts` list (or named in its
+  source descriptions) has changed since that tag, or when a declared script
+  path is not tracked; tag the code first or pass `--allow-script-drift` (not
+  recommended).
 - The script verifies manifest md5s against the files on disk; run
   `update_data_manifest.py` before releasing if they mismatch.
 - Zenodo limits: at most 100 files and 50 GB per record (checked by the script).
@@ -78,7 +83,10 @@ Recommended defaults if the user does not specify:
 ### 1. Update the manifest (if data changed)
 
 Each collection's manifest records `sources`, `version`, `last_updated`, `md5`,
-`license`, and `history` per file, plus the collection `data_version`. Update it
+`license`, `scripts`, and `history` per file, plus the collection `data_version`.
+Declare `scripts` (repo-relative paths of the scripts that build the file) so
+releases can be pinned to a code version; `update_data_manifest.py` preserves
+hand-edited lists and backfills known files from a seed map. Update the manifest
 after changing data files:
 
 ```bash
@@ -89,7 +97,10 @@ uv run python update_data_manifest.py --data-dir existing_resource_groups --mani
 
 ### 2. Dry run
 
-Show what the release would contain without calling the Zenodo API:
+Show what the release would contain without calling the Zenodo API. The dry
+run also reports the code tag, each referenced script's status, and any
+declared script path that is not tracked, exiting non-zero if the release would
+be blocked:
 
 ```bash
 uv run python publish_zenodo.py --dry-run
@@ -136,7 +147,9 @@ Re-running `--publish` after an identical release is a no-op.
   `README.md` rendered as HTML (the descriptive body, if present), a licensing
   paragraph (compilation is CC0; individual files retain their source license),
   and a per-file table of each element's `version`, `last_updated`, `md5`,
-  `license`, and `sources`. Custom prose from
+  `license`, `sources`, and `scripts` (each script shown as
+  `script @ <code tag>`). The intro paragraph names the code tag the release was
+  built from. Custom prose from
   `metadata.sections.<section>.description` in `.zenodo.json` is prepended.
 - Uploads **only files that changed** since the last published release
   (compared by md5); the initial release uploads everything. Files released
@@ -151,6 +164,14 @@ Re-running `--publish` after an identical release is a no-op.
   already-submitted record as success.
 - Refuses to run when any release file differs from git HEAD; pass
   `--allow-dirty` to override.
+- Checks script provenance before releasing: it reads each file's declared
+  `scripts` list, falling back to the Python scripts named in the `sources`
+  prose for undeclared files, and resolves them to tracked repository files. A
+  git tag reachable from HEAD is required. If any script changed since that
+  tag, a declared path is not tracked, or no tag exists, the release is blocked
+  unless `--allow-script-drift` is passed. The tag is recorded in the Zenodo
+  description next to each script, and drifted scripts are marked as changed
+  since the tag.
 
 ## CLI reference
 
@@ -164,6 +185,7 @@ Re-running `--publish` after an identical release is a no-op.
 | `--deposition-id` | Resume a specific draft deposition id (e.g. after a run died mid-upload before state was saved). |
 | `--collection` | Only release this collection; repeatable. Choices: `core`, `profiles`, `existing_resource_groups`. |
 | `--allow-dirty` | Publish even when release files differ from git HEAD. |
+| `--allow-script-drift` | Publish even when referenced scripts changed since the latest git tag or a declared script path is not tracked (a reachable tag is still required; the description marks the drift). |
 | `--sleep-seconds` | Delay between file uploads (default 1.0). |
 | `--upload-retries` | Retries for a failed file upload (default 3). |
 | `--upload-retry-delay` | Base delay in seconds between upload retries (default 5.0; doubles each retry). |
@@ -173,12 +195,36 @@ Re-running `--publish` after an identical release is a no-op.
 
 On the first publish the script writes `.zenodo.json` in the repo root with
 shared Zenodo metadata plus a `releases` object keyed by collection section.
-Each `releases.<section>` block tracks the environment (`sandbox` or
-`production`), the published `data_version`, the `release_version` (the version
+Each `releases.<section>.environments.<sandbox|production>` block tracks the
+environment, the published `data_version`, the `release_version` (the version
 string actually recorded on Zenodo, suffix included), the `deposition_id`, the
 resolved `doi`, the `versions` history (every release version string published
-in this environment), and the per-file `md5`s that were released. The legacy
-single-deposit `zenodo_release` block is migrated into `releases.core` on load.
+in this environment), and the per-file metadata/checksums, publication status,
+manifest metadata hash, and removal notes. Both environments can coexist:
+
+```json
+{
+  "releases": {
+    "core": {
+      "environments": {
+        "sandbox": {"environment": "sandbox", "deposition_id": "123", "published": false},
+        "production": {"environment": "production", "deposition_id": "456", "published": true}
+      }
+    }
+  }
+}
+```
+
+Historical flat `releases.<section>` records are wrapped under their stored
+environment without dropping payload fields. The legacy single-deposit
+`zenodo_release` block supplies core only when `releases.core` is absent.
+Missing environments retain the historical sandbox default, with no DOI
+inference. Migration happens in memory on load; reads do not rewrite the file.
+The nested layout is persisted on the next normal save (`--publish` or
+`--save-state`), preserving legacy core even during a non-core release.
+Malformed containers, unknown environments, mixed flat/nested state, and
+contradictory environment fields are rejected before remote mutation; repair
+the state rather than starting a replacement lineage.
 
 The metadata block carries fields shared by every deposit — `creators`,
 `access_right`, and the compilation `license` (e.g. `cc-zero`) — plus
@@ -189,7 +235,11 @@ contains no secrets and is committed to the repo.
 Release state is tracked **per environment**: sandbox and production
 deposition ids, DOIs, and version suffix counters are independent, so you can
 publish to both sites from the same `.zenodo.json` without one release
-interfering with the other.
+interfering with the other. Each save updates only the target environment,
+preserving the entire inactive payload and unselected collections. Change
+detection and published/no-op checks also use only the target environment.
+Returning to production versions its saved deposition; returning to a saved
+sandbox draft resumes it.
 
 ## Requirements
 
@@ -221,6 +271,12 @@ and `references/metadata-template.json` for a metadata template. Prefer
   `update_data_manifest.py` for that collection before retrying.
 - If the script exits because release files differ from git HEAD, commit the
   changes first (or ask the user before using `--allow-dirty`).
+- If the script exits because no git tag is reachable from HEAD, ask the user to
+  tag the code version before releasing. If it exits because scripts changed
+  since the tag, prefer tagging the new code version; use
+  `--allow-script-drift` only when the user accepts a description that marks the
+  scripts as changed since the tag. A declared `scripts` path that is not
+  tracked is a manifest typo, not drift: fix the path.
 - If Zenodo returns `400`, inspect the metadata first. Missing `title`,
   `upload_type`, `description`, or creator names are the common causes.
 - If Zenodo returns `401` or `403`, verify the token scopes `deposit:write`

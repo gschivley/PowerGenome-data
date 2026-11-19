@@ -16,9 +16,17 @@ site/
 
 # Local secrets (e.g., Zenodo API token). Never commit.
 .env
-# Large generated resource profiles (not committed to git; published to Zenodo
-# via publish_zenodo.py --collection profiles).
-resource_profiles/*.parquet
+# Release artifacts are built or downloaded locally, not stored in Git LFS.
+/data/reeds_load_transformed.parquet
+/data/distributed_profiles.parquet
+/existing_resource_groups/*.parquet
+/resource_profiles/*.parquet
 
 # Cached downloads from reproducible ATB builders
 cache_data/atb/
+
+# Downloaded ReEDS inputs
+cache_data/reeds-z90-load/
+cache_data/reeds-z90-transmission/
+cache_data/reeds-load/
+cache_data/reeds-transmission/

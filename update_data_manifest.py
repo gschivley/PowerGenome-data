@@ -7,6 +7,9 @@ The manifest (``data/manifest.json``) records, for every file in ``data/``:
   came from. A file may rely on one or many upstream sources (e.g. the ReEDS generator
   database *and* ``county2zone.csv``). Human-maintained; the tool preserves edits made
   here across runs.
+* ``scripts`` -- repo-relative paths of the repository scripts that build the file
+  (e.g. ``build_atb_data.py``). Optional; declare it alongside ``sources`` so
+  ``publish_zenodo.py`` can pin the data to the code version that produced it.
 * ``md5`` -- content hash of the file.
 * ``version`` and ``last_updated`` -- ISO date (``YYYY-MM-DD``) of the last change.
 * ``history`` -- append-only record of prior ``{version, last_updated, md5}`` entries.
@@ -40,6 +43,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MANIFEST_VERSION = 1
+REEDS_ZONE_INPUTS = (
+    "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/"
+    "5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/"
+)
+
+# Collection documentation, rendered into the Zenodo description by
+# publish_zenodo.py rather than released as a data element.
+COLLECTION_README = "README.md"
 
 # Seed provenance for files that have never been seen before. Each file maps to a list of
 # {source, source_url} objects (one per upstream). The tool preserves any edits made in
@@ -183,14 +194,28 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "reeds_load_transformed.parquet": [
         {
             "source": (
-                "ReEDS hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS-backed), filtered "
-                "to weather years 2007-2013 and model years 2020-2050 by "
-                "transform_reeds_load.py."
+                "ReEDS EER2025 IRA-low hourly state end-use load, model years "
+                "2021/2025/2030/2035/2040/2045/2050 and weather years 2007–2013. "
+                "Fixed UTC−06:00 values shifted six hours later independently within "
+                "each model/weather-year block; datetime_utc labels interval starts "
+                "on the cyclic 8,760-hour UTC calendar."
             ),
-            "source_url": (
-                "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/load/"
-                "EER_IRAlow_load_hourly.h5"
-            ),
+            "source_url": "https://zenodo.org/records/18435264/files/demand_EER2025_IRAlow.h5",
+        },
+        *[
+            {
+                "source": f"{zone_set}: Pinned ReEDS county-to-zone mapping used to allocate state load.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/county2zone.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "Pinned ReEDS county-to-state mapping.",
+            "source_url": REEDS_ZONE_INPUTS + "zones/county_state.csv",
+        },
+        {
+            "source": "ReEDS county population weights from 2021 Census estimates.",
+            "source_url": REEDS_ZONE_INPUTS + "disaggregation/county_population.csv",
         },
     ],
     "regional_cost_multipliers.csv": [
@@ -220,7 +245,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "technology_costs_atb.parquet": [
         {
             "source": (
-                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
                 "OEDI data lake (rebuilt by build_atb_data.py)"
             ),
             "source_url": (
@@ -230,7 +255,10 @@ SOURCES: dict[str, list[dict[str, str]]] = {
         },
         {
             "source": (
-                "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs)"
+                "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs). "
+                "The 2025 utility-scale battery costs still come from the v1 workbook because "
+                "NREL has not published a v2 workbook (as of 2026-11-17); the v2 tidy data "
+                "leaves battery values unchanged."
             ),
             "source_url": "https://atb.nrel.gov/electricity/2025/data",
         },
@@ -238,7 +266,7 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     "technology_heat_rates_nrelatb.csv": [
         {
             "source": (
-                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v1.0.0), "
+                "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), "
                 "OEDI data lake (rebuilt by build_atb_data.py)"
             ),
             "source_url": (
@@ -253,24 +281,61 @@ SOURCES: dict[str, list[dict[str, str]]] = {
     ],
     "transmission_capacity_reeds.csv": [
         {
-            "source": (
-                "ReEDS AC transmission capacity files merged by "
-                "merge_transmission_capacity.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
-                "transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
-            ),
+            "source": "Native ReEDS forward and reverse AC interface transfer limits (MW), averaged before combining with existing non-AC capacity.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/itl_NARIS.csv",
         },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone-level AC interface list and corresponding zone hashes.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/interfaces_r.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone hashes used to join the AC transfer-limit database.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/zonehash.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
         {
-            "source": (
-                "ReEDS non-AC transmission capacity files merged by "
-                "merge_transmission_capacity.py."
-            ),
-            "source_url": (
-                "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/"
-                "transmission/transmission_capacity_init_nonAC_ba.csv"
-            ),
+            "source": "ReEDS existing HVDC projects and endpoint coordinates.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/hvdc_existing.csv",
+        },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS back-to-back converter capacities (MW).",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/b2b.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        *[
+            {
+                "source": f"{zone_set}: ReEDS county-to-zone mapping for HVDC endpoints.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/county2zone.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "2022 Census TIGER/Line county boundaries for HVDC endpoint assignment.",
+            "source_url": "https://www2.census.gov/geo/tiger/TIGER2022/COUNTY/tl_2022_us_county.zip",
+        },
+    ],
+    "transmission_expansion_cost_reeds.csv": [
+        {
+            "source": "ReEDS representative greenfield interzonal route costs and distances from reVRt.",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/transmission_cost_distance.csv",
+        },
+        *[
+            {
+                "source": f"{zone_set}: ReEDS zone hashes used to identify the representative route endpoints.",
+                "source_url": REEDS_ZONE_INPUTS + f"zones/{zone_set}/zonehash.csv",
+            }
+            for zone_set in ("z134", "z90")
+        ],
+        {
+            "source": "ReEDS source cost dollar year (2024 US dollars).",
+            "source_url": REEDS_ZONE_INPUTS + "transmission/dollaryear.csv",
         },
     ],
     # Renewable resource profiles (resource_profiles/) ---------------------------------
@@ -331,6 +396,41 @@ SOURCES: dict[str, list[dict[str, str]]] = {
 }
 
 
+# Seed generating-script paths for files that have never been seen before, keyed by
+# filename like :data:`SOURCES`. Paths are repo-relative so ``publish_zenodo.py`` can
+# compare each script against the release's git tag. Omit a file when no repository
+# script builds it (manual or externally generated data).
+SCRIPTS: dict[str, list[str]] = {
+    "distributed_capacity.parquet": ["build_new_pg_dg_inputs.py"],
+    "distributed_profiles.parquet": ["build_new_pg_dg_inputs.py"],
+    "fuel_prices.parquet": [
+        ".github/skills/eia-fuel-prices/scripts/fetch_eia_fuel_prices.py"
+    ],
+    "nerc_reserve_margins.csv": [
+        ".github/skills/nerc-reserve-margins/scripts/extract_nerc_reserve_margins.py"
+    ],
+    "operational_constraints_reeds.csv": ["build_operational_constraints_reeds.py"],
+    "plant_region_map.csv": ["transform_reeds_generators.py"],
+    "reeds_generators_transformed.csv": ["transform_reeds_generators.py"],
+    "reeds_load_transformed.parquet": ["build_reeds_load.py"],
+    "regional_cost_multipliers.csv": ["extract_location_variation.py"],
+    "reserve_margins.csv": ["build_reserve_margins.py"],
+    "technology_costs_atb.parquet": ["build_atb_data.py"],
+    "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
+    "transmission_capacity_reeds.csv": ["build_reeds_transmission.py"],
+    "transmission_expansion_cost_reeds.csv": ["build_reeds_transmission.py"],
+    # Existing resource groups (existing_resource_groups/) ---------------------------
+    "hydro_conventional_2007_2013.parquet": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
+    "hydro_run_of_river_2007_2013.parquet": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
+}
+
+
 def md5_of(path: Path) -> str:
     """Return the lowercase hex MD5 of a file's contents."""
     h = hashlib.md5()
@@ -357,6 +457,18 @@ def git_tracked_filenames(data_dir: Path) -> set[str] | None:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
     return {Path(line).name for line in output.splitlines() if line.strip()}
+
+
+def is_git_ignored(path: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", path.name],
+            cwd=path.parent,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return False
+    return result.returncode == 0
 
 
 def _normalize_sources(raw_sources: list[dict]) -> list[dict]:
@@ -389,18 +501,46 @@ def _prior_sources(prior: dict) -> list[dict]:
     return _normalize_sources([item])
 
 
+def _normalize_scripts(raw_scripts: list) -> list[str]:
+    """Return a clean, de-duplicated list of repo-relative script paths."""
+    out: list[str] = []
+    for script in raw_scripts or []:
+        text = str(script).strip()
+        if text.startswith("./"):
+            text = text[2:]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _resolve_scripts(filename: str, prior: dict) -> list[str]:
+    """Declared scripts to keep for an entry, backfilling from :data:`SCRIPTS`.
+
+    A human-maintained ``scripts`` list is preserved verbatim; an absent or empty
+    one is seeded so reruns converge on the declared provenance.
+    """
+    scripts = _normalize_scripts(prior.get("scripts") or [])
+    if not scripts:
+        scripts = _normalize_scripts(SCRIPTS.get(filename) or [])
+    return scripts
+
+
 def build_new_entry(filename: str, md5: str, date_str: str) -> dict:
     """Create a fresh manifest entry for a file never seen before."""
     seed = SOURCES.get(filename)
     if seed is None:
         seed = [{"source": "Unknown - document me"}]
-    return {
+    entry = {
         "sources": _normalize_sources(seed),
         "last_updated": date_str,
         "version": date_str,
         "md5": md5,
         "history": [],
     }
+    scripts = _resolve_scripts(filename, {})
+    if scripts:
+        entry["scripts"] = scripts
+    return entry
 
 
 def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
@@ -424,13 +564,18 @@ def advance_entry(prior: dict, md5: str, date_str: str) -> dict:
     # survive a data update, unlike version/last_updated/md5.
     if prior.get("license"):
         entry["license"] = prior["license"]
+    if prior.get("scripts"):
+        entry["scripts"] = _normalize_scripts(prior["scripts"])
     return entry
 
 
 def _advance_entry(filename: str, prior: dict, md5: str, date_str: str) -> dict:
-    """Like :func:`advance_entry` but applies placeholder source backfill."""
+    """Like :func:`advance_entry` but applies placeholder source and script backfill."""
     entry = advance_entry(prior, md5, date_str)
     entry["sources"] = _resolve_sources(filename, prior)
+    scripts = _resolve_scripts(filename, prior)
+    if scripts:
+        entry["scripts"] = scripts
     return entry
 
 
@@ -442,6 +587,16 @@ def _migrate_entry(prior: dict) -> dict:
     entry["sources"] = _prior_sources(prior)
     entry.pop("source", None)
     entry.pop("source_url", None)
+    return entry
+
+
+def _with_declared_scripts(filename: str, entry: dict) -> dict:
+    """Attach the declared ``scripts`` list to an entry, backfilling from the seed."""
+    scripts = _resolve_scripts(filename, entry)
+    if scripts:
+        entry["scripts"] = scripts
+    else:
+        entry.pop("scripts", None)
     return entry
 
 
@@ -498,7 +653,7 @@ def update_manifest(
     files: dict[str, dict] = {}
     changed_any = False
     for path in sorted(data_dir.iterdir()):
-        if not path.is_file() or path.name == manifest_path.name:
+        if not path.is_file() or path.name in (manifest_path.name, COLLECTION_README):
             continue
         filename = path.name
         if tracked is not None and filename not in tracked and filename not in old_files:
@@ -517,6 +672,7 @@ def update_manifest(
         elif prior.get("md5") == md5:
             entry = _migrate_entry(prior)
             entry["sources"] = _resolve_sources(filename, prior)
+            entry = _with_declared_scripts(filename, entry)
             files[filename] = entry
             print(f"[unchanged] {filename}")
         else:
@@ -526,8 +682,11 @@ def update_manifest(
         if not files[filename].get("license"):
             print(f"[warn]     {filename}: no 'license' set (add one manually)")
 
-    # Drop files that no longer exist in data/.
     for filename in sorted(set(old_files) - set(files)):
+        if filename.endswith(".parquet") and is_git_ignored(data_dir / filename):
+            files[filename] = old_files[filename]
+            print(f"[retained] {filename} (Git-ignored release artifact, not on disk)")
+            continue
         print(f"[removed]  {filename} (no longer in {data_dir.name}/)")
         changed_any = True
 

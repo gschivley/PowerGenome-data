@@ -32,6 +32,18 @@ class ManifestTests(unittest.TestCase):
         MODULE.update_manifest(data_dir, manifest_path, date_str)
         return json.loads(manifest_path.read_text())
 
+    def test_collection_readme_is_not_a_data_file(self):
+        # publish_zenodo.py renders README.md into the Zenodo description, so
+        # it must not be tracked (or versioned) as a data element.
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "README.md": "# Docs"})
+        first = self._run(data_dir, "2026-08-11")
+        self.assertNotIn("README.md", first["files"])
+
+        (data_dir / "README.md").write_text("# Docs, edited")
+        second = self._run(data_dir, "2026-08-12")
+        self.assertNotIn("README.md", second["files"])
+        self.assertEqual(second["data_version"], "2026.08.11")
+
     def test_initial_run_seeds_sources_and_sets_version(self):
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "unknown.csv": "b"})
         manifest = self._run(data_dir, "2026-08-11")
@@ -89,6 +101,49 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(sources[0]["source"], "Custom edited text")
         self.assertEqual(sources[1]["source"], "A hand-added second source")
         self.assertEqual(sources[1]["source_url"], "https://example.com/x")
+
+    def test_scripts_are_seeded_for_known_files_only(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a", "unknown.csv": "b"})
+        manifest = self._run(data_dir, "2026-08-11")
+        self.assertEqual(
+            manifest["files"][SINGLE_SOURCE_FILE]["scripts"],
+            MODULE.SCRIPTS[SINGLE_SOURCE_FILE],
+        )
+        self.assertNotIn("scripts", manifest["files"]["unknown.csv"])
+
+    def test_script_edits_are_preserved_on_change(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        manifest["files"][SINGLE_SOURCE_FILE]["scripts"] = ["custom_builder.py"]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        (data_dir / SINGLE_SOURCE_FILE).write_text("different")
+        result = self._run(data_dir, "2026-10-01")
+        self.assertEqual(
+            result["files"][SINGLE_SOURCE_FILE]["scripts"], ["custom_builder.py"]
+        )
+
+    def test_scripts_are_backfilled_onto_unchanged_entries(self):
+        data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
+        manifest = self._run(data_dir, "2026-08-11")
+        del manifest["files"][SINGLE_SOURCE_FILE]["scripts"]
+        (data_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        result = self._run(data_dir, "2026-08-11")
+        self.assertEqual(
+            result["files"][SINGLE_SOURCE_FILE]["scripts"],
+            MODULE.SCRIPTS[SINGLE_SOURCE_FILE],
+        )
+
+    def test_seeded_scripts_exist_in_the_repository(self):
+        repo_root = SCRIPT.parent
+        for filename, scripts in MODULE.SCRIPTS.items():
+            self.assertTrue(scripts, f"SCRIPTS[{filename}] is empty")
+            for script in scripts:
+                self.assertTrue(
+                    (repo_root / script).is_file(),
+                    f"SCRIPTS[{filename}] names a missing file: {script}",
+                )
 
     def test_no_change_preserves_data_version_and_versions(self):
         data_dir = self._make_data_dir({SINGLE_SOURCE_FILE: "a"})
@@ -219,6 +274,25 @@ class GitTrackedTests(unittest.TestCase):
         )
         manifest = json.loads(manifest_path.read_text())
         self.assertIn("scratch.csv", manifest["files"])
+
+    def test_missing_ignored_release_artifact_is_retained(self):
+        data_dir = self._make_git_collection("data")
+        manifest_path = data_dir / "manifest.json"
+        (data_dir.parent / ".gitignore").write_text("/data/profiles.parquet\n")
+        artifact = data_dir / "profiles.parquet"
+        artifact.write_bytes(b"profiles")
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-11", include_untracked=True)
+        before = json.loads(manifest_path.read_text())
+        artifact.unlink()
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        after = json.loads(manifest_path.read_text())
+        self.assertEqual(after["files"][artifact.name], before["files"][artifact.name])
+        self.assertEqual(after["data_version"], before["data_version"])
+        (data_dir / "scratch.csv").unlink()
+        MODULE.update_manifest(data_dir, manifest_path, "2026-08-12")
+        after = json.loads(manifest_path.read_text())
+        self.assertNotIn("scratch.csv", after["files"])
+        self.assertIn(artifact.name, after["files"])
 
     def test_manifested_untracked_file_remains_managed(self):
         data_dir = self._make_git_collection("data")

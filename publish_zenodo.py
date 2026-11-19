@@ -30,17 +30,31 @@ Each release is driven by its collection's manifest:
     listing files added, updated, and removed in this release, plus one
     file/version/last-updated/sources table per data element, using each
     file's own "version" key (the date that data element was last updated).
+    Files are grouped by license.
   * Only files whose md5 changed since the last release are uploaded. The
     first release (no prior state) uploads all manifest files. Files
     previously released but no longer in the manifest are removed from the
     draft so Zenodo mirrors the manifest.
+  * Before releasing, the script checks that a git tag is reachable from HEAD
+    and that every Python script declared in each manifest file's "scripts"
+    list (or named in its source descriptions, for undeclared files) is
+    unchanged since that tag. The tag is recorded in the Zenodo description
+    next to each script. Releases are blocked when the tag is missing, a
+    script drifted, or a declared script path is not tracked, unless
+    --allow-script-drift is passed.
 
 Release state (per-section data_version, deposition id, per-file md5s, publish
 status) is stored in .zenodo.json in the project root, under a "releases"
-object keyed by section. The legacy single-deposit "zenodo_release" object is
-migrated into ``releases.core`` on load. .zenodo.json contains no secrets and
+object at ``releases.<section>.environments.<sandbox|production>``. Flat collection
+records and the legacy single-deposit "zenodo_release" object are migrated in
+memory on load and written on the next normal state save. Both environments'
+lineages are retained independently. .zenodo.json contains no secrets and
 is safe to commit. If a draft was created but not yet published, the draft is
 resumed on the next run instead of creating a duplicate.
+
+Files missing a "license" or carrying only placeholder sources ("Unknown -
+document me") are flagged: a warning in the sandbox, and a refusal in
+production unless --allow-undocumented is passed.
 
 Defaults to the Zenodo sandbox. Production requires --production or
 USE_PRODUCTION=true. Publishing requires --publish; without it a draft is
@@ -60,11 +74,12 @@ import hashlib
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import urllib.parse
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import BinaryIO
 
@@ -284,21 +299,82 @@ def load_manifests(args, project_root: Path) -> dict[str, dict]:
 
 def load_state() -> dict:
     if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return normalize_release_state(
+            json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        )
     return {}
 
 
-def section_release(state: dict, section: str) -> dict:
-    """Release state for one collection, migrating the legacy single-deposit
-    ``zenodo_release`` object into ``releases.core``."""
-    releases = state.get("releases")
-    if isinstance(releases, dict) and isinstance(releases.get(section), dict):
-        return releases[section]
-    if section == CORE_SECTION:
-        legacy = state.get("zenodo_release")
-        if isinstance(legacy, dict) and legacy:
-            return legacy
-    return {}
+def normalize_release_state(state: dict) -> dict:
+    """Copy state into the environment layout without changing release payloads.
+
+    Validate every collection before any remote mutation, including unselected
+    collections: an ambiguous record must never silently start a new lineage.
+    Collection records take precedence over the legacy core fallback.
+    """
+
+    def invalid(path: str) -> None:
+        sys.exit(
+            f"Invalid Zenodo release state at {path}. Expected release records under "
+            "releases.<section>.environments.<sandbox|production> with matching "
+            "environment fields (legacy flat records default to sandbox). "
+            "Repair .zenodo.json before releasing; no remote changes were made."
+        )
+
+    if not isinstance(state, dict):
+        invalid("root")
+    releases = state.get("releases", {})
+    if not isinstance(releases, dict):
+        invalid("releases")
+    releases = dict(releases)
+    if CORE_SECTION not in releases and "zenodo_release" in state:
+        releases[CORE_SECTION] = state["zenodo_release"]
+
+    normalized = {}
+    for section, record in releases.items():
+        path = f"releases.{section}"
+        if not isinstance(record, dict):
+            invalid(path)
+        if "environments" in record:
+            # Mixing flat fields with the new container is ambiguous.
+            if set(record) != {"environments"}:
+                invalid(path)
+            environments = record["environments"]
+            if not isinstance(environments, dict):
+                invalid(f"{path}.environments")
+        elif record:
+            environment = record.get("environment", "sandbox")
+            if environment not in ("sandbox", "production"):
+                invalid(f"{path}.environment")
+            environments = {environment: record}
+        else:
+            environments = {}
+        for environment, payload in environments.items():
+            if (
+                environment not in ("sandbox", "production")
+                or not isinstance(payload, dict)
+                or payload.get("environment", environment) != environment
+                or "environments" in payload
+            ):
+                invalid(f"{path}.environments.{environment}")
+        normalized[section] = {
+            "environments": {
+                environment: dict(payload)
+                for environment, payload in environments.items()
+            }
+        }
+    result = dict(state)
+    result.pop("zenodo_release", None)
+    result["releases"] = normalized
+    return result
+
+
+def section_release(state: dict, section: str, environment: str = "sandbox") -> dict:
+    """Return only the target environment's release, accepting historical layouts."""
+    if environment not in ("sandbox", "production"):
+        sys.exit(f"Unknown Zenodo environment: {environment}")
+    releases = normalize_release_state(state)["releases"]
+    return releases.get(section, {}).get("environments", {}).get(environment, {})
 
 
 def section_metadata(state: dict, section: str) -> dict:
@@ -346,7 +422,14 @@ LICENSE_LABELS = {
 }
 
 
-def describe_file(filename: str, info: dict, note: str | None = None) -> str:
+def describe_file(
+    filename: str,
+    info: dict,
+    note: str | None = None,
+    scripts: list[str] | None = None,
+    code_tag: str | None = None,
+    changed_scripts: set[str] | None = None,
+) -> str:
     esc = html.escape
     sources = info.get("sources") or []
     source_items = []
@@ -369,29 +452,66 @@ def describe_file(filename: str, info: dict, note: str | None = None) -> str:
         LICENSE_LABELS.get(license_key) or esc(license_key) or "Not specified"
     )
     note_html = f"<p><strong>Note:</strong> {esc(note)}</p>" if note else ""
+    script_rows = ""
+    if scripts:
+        items = []
+        for script in scripts:
+            label = f"<code>{esc(script)}</code>"
+            if code_tag:
+                label += f" @ <code>{esc(code_tag)}</code>"
+            if changed_scripts and script in changed_scripts:
+                label += " <strong>(changed since tag)</strong>"
+            items.append(f"<li>{label}</li>")
+        script_rows = (
+            "<tr><th>Scripts</th><td><ul>" + "".join(items) + "</ul></td></tr>"
+        )
+    version = info.get("version") or "Unknown"
+    last_updated = info.get("last_updated") or "Unknown"
+    # In the current manifest schema version == last_updated; only show the
+    # row when they diverge so the table doesn't repeat itself.
+    updated_row = (
+        f"<tr><th>Last updated</th><td>{esc(last_updated)}</td></tr>"
+        if last_updated != version
+        else ""
+    )
     return (
         f"<h3><code>{esc(filename)}</code></h3>"
         f"<table>"
-        f"<tr><th>Data element version</th><td>{esc(info.get('version') or 'Unknown')}</td></tr>"
-        f"<tr><th>Last updated</th><td>{esc(info.get('last_updated') or 'Unknown')}</td></tr>"
+        f"<tr><th>Data element version</th><td>{esc(version)}</td></tr>"
+        f"{updated_row}"
         f"<tr><th>md5</th><td><code>{esc(info.get('md5') or 'Unknown')}</code></td></tr>"
         f"<tr><th>License</th><td>{esc(license_label)}</td></tr>"
+        f"{script_rows}"
         f"</table>"
         f"{note_html}{sources_html}"
     )
 
 
-def manifest_meta_hash(manifest: dict, readme_html: str = "") -> str:
+def manifest_meta_hash(
+    manifest: dict, readme_html: str = "", provenance: dict | None = None
+) -> str:
     """Stable hash of all description-relevant collection metadata."""
     relevant = {
         "files": {
             name: {
                 key: info.get(key)
-                for key in ("version", "last_updated", "license", "sources", "md5")
+                for key in (
+                    "version",
+                    "last_updated",
+                    "license",
+                    "sources",
+                    "scripts",
+                    "md5",
+                )
             }
             for name, info in manifest["files"].items()
         },
         "readme_html": readme_html,
+        "code_tag": (provenance or {}).get("tag"),
+        "scripts": {
+            script: info.get("changed")
+            for script, info in (provenance or {}).get("scripts", {}).items()
+        },
     }
     payload = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -422,6 +542,43 @@ def readme_to_html(data_dir: Path) -> str:
     )
 
 
+def undocumented_files(manifest_files: dict) -> list[str]:
+    """Files missing a license or carrying only placeholder sources."""
+    bad = []
+    for name, info in sorted(manifest_files.items()):
+        if not info.get("license"):
+            bad.append(name)
+            continue
+        sources = info.get("sources") or []
+        if not sources or all(
+            not str(s.get("source", "")).strip()
+            or str(s.get("source", "")).strip() == "Unknown - document me"
+            for s in sources
+        ):
+            bad.append(name)
+    return bad
+
+
+def licensing_paragraph(files: dict) -> str:
+    """CC0 compilation preamble + files grouped by their per-file license."""
+    esc = html.escape
+    groups: dict[str, list[str]] = {}
+    for name, info in sorted(files.items()):
+        groups.setdefault(info.get("license") or "", []).append(name)
+    parts = []
+    for key in sorted(groups, key=lambda k: (not k, k)):
+        label = LICENSE_LABELS.get(key) or key or "Not specified"
+        names = ", ".join(f"<code>{esc(n)}</code>" for n in groups[key])
+        parts.append(f"<p><strong>{esc(label)}:</strong> {names}.</p>")
+    return (
+        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
+        "Creative Commons Zero (CC0, public domain dedication). Because the files "
+        "assemble public data from a variety of sources, each file retains the "
+        "license of its underlying source. Files grouped by license:</p>"
+        + "".join(parts)
+    )
+
+
 def build_description(
     manifest: dict,
     section: str,
@@ -433,12 +590,20 @@ def build_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
+    provenance: dict | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
     esc = html.escape
     removed_details = removed_details or {}
     removal_notes = removal_notes or {}
+    provenance = provenance or {}
+    code_tag = provenance.get("tag")
+    changed_scripts = {
+        script
+        for script, info in provenance.get("scripts", {}).items()
+        if info.get("changed")
+    }
 
     def names_html(names: list[str]) -> str:
         return "".join(f"<li><code>{esc(name)}</code></li>" for name in names)
@@ -479,8 +644,39 @@ def build_description(
             "".join(changes_html) or "<p><em>No file changes in this release.</em></p>"
         )
 
+    drift_note = ""
+    if changed_scripts:
+        drift_note = (
+            "<p><strong>Note:</strong> the following scripts have changed since "
+            f"code tag <code>{esc(code_tag)}</code> and were used to build this "
+            "release: "
+            + ", ".join(f"<code>{esc(s)}</code>" for s in sorted(changed_scripts))
+            + ".</p>"
+        )
+
+    missing_scripts = {
+        path
+        for paths in (provenance.get("missing") or {}).values()
+        for path in paths
+    }
+    missing_note = ""
+    if missing_scripts:
+        missing_note = (
+            "<p><strong>Note:</strong> these declared script paths were not found "
+            "in the repository, so their version could not be verified: "
+            + ", ".join(f"<code>{esc(s)}</code>" for s in sorted(missing_scripts))
+            + ".</p>"
+        )
+
     file_sections = "\n".join(
-        describe_file(filename, info) for filename, info in sorted(files.items())
+        describe_file(
+            filename,
+            info,
+            scripts=provenance.get("files", {}).get(filename),
+            code_tag=code_tag,
+            changed_scripts=changed_scripts,
+        )
+        for filename, info in sorted(files.items())
     )
     removed_sections = "\n".join(
         describe_file(name, removed_details.get(name, {}), removal_notes.get(name))
@@ -492,19 +688,18 @@ def build_description(
         else ""
     )
 
+    code_note = (
+        f" and code tag <code>{esc(code_tag)}</code>" if code_tag else ""
+    )
     return (
         f"<p>{esc(title)}: PowerGenome input data assembled from public sources. "
         "This release corresponds to a PowerGenome-data manifest at data version "
-        f"<code>{esc(data_version)}</code>.</p>"
+        f"<code>{esc(data_version)}</code>{code_note}.</p>"
         f"{change_note}"
+        f"{drift_note}"
+        f"{missing_note}"
         f"{readme_html}"
-        "<p><strong>Licensing:</strong> this compilation as a whole is released under "
-        "Creative Commons Zero (CC0, public domain dedication). Because the files assemble "
-        "public data from a variety of sources, each file retains the license of its "
-        "underlying source: U.S. government works (e.g. EIA, BEA, FRED) are in the public "
-        "domain, and data derived from ReEDS / NREL (including the NREL ATB and PUDL) is "
-        "Creative Commons Attribution 4.0 International (CC BY 4.0). See each file's "
-        "License row below.</p>"
+        f"{licensing_paragraph(files)}"
         f"{removed_block}"
         "<p>Each data element's own version key records when that element was "
         "last updated; the per-file sources below document where it came from.</p>"
@@ -615,7 +810,7 @@ def next_release_version(
     releases that already carry this data_version (bare or ``.vN``-suffixed):
     the versions published on Zenodo for this concept (via the
     eventually-consistent records search) and the release versions recorded
-    locally in the saved state (``zenodo_release.versions``). The local
+    locally in ``releases.<section>.environments.<environment>.versions``. The local
     history closes the window where a fast follow-up release would not yet be
     indexed by Zenodo's search, preventing two releases from reusing a
     suffix. A brand-new deposition (no concept yet) gets ".v1".
@@ -832,35 +1027,323 @@ def validate_constraints(files_by_name: dict[str, Path]) -> None:
 def uncommitted_release_files(
     manifest_files: dict,
     data_dir: Path,
-    extra_paths: Sequence[Path] = (),
+    manifest_path: Path | None = None,
 ) -> list[str]:
-    """Names of files in a manifest section that differ from git HEAD.
+    """Report release files (including the shipped manifest) that differ from HEAD."""
+    paths = [data_dir / name for name in manifest_files]
+    dirty = []
+    try:
+        if manifest_path is not None:
+            # git status omits ignored files and fails for paths outside the repo.
+            tracked = subprocess.run(
+                [
+                    "git",
+                    "--literal-pathspecs",
+                    "ls-files",
+                    "--error-unmatch",
+                    "--",
+                    str(manifest_path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if tracked.returncode == 0:
+                paths.append(manifest_path)
+            else:
+                dirty.append(f"?? {manifest_path}")
+        out = subprocess.check_output(
+            ["git", "--literal-pathspecs", "status", "--porcelain", "--"]
+            + [str(p) for p in paths],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return dirty
+    return dirty + [line for line in out.splitlines() if line.strip()]
 
-    ``extra_paths`` are files released alongside the manifest's data files
-    (the manifest itself), checked the same way.
 
-    Publishing a release whose files are not in git history means the Zenodo
-    record has no reproducible commit behind it. Returns ``[]`` when git is
-    unavailable or the tree is clean for every file.
-    """
-    paths = [data_dir / name for name in manifest_files] + list(extra_paths)
+# ---------------------------------------------------------------------------
+# Script provenance (git tag checks)
+# ---------------------------------------------------------------------------
+
+SCRIPT_TOKEN_RE = re.compile(r"[\w./-]+")
+
+
+def _source_texts(info: dict) -> list[str]:
+    """Prose strings from a manifest file entry that may name scripts."""
+    texts = []
+    for source in info.get("sources") or []:
+        if isinstance(source, dict):
+            text = source.get("source")
+            if text:
+                texts.append(str(text))
+    if not texts and info.get("source"):
+        texts.append(str(info["source"]))
+    return texts
+
+
+def _tracked_python_files(project_root: Path) -> list[Path]:
+    """Repo-relative paths of all tracked ``.py`` files."""
     try:
         out = subprocess.check_output(
-            ["git", "status", "--porcelain", "--"] + [str(p) for p in paths],
+            ["git", "ls-files"],
+            cwd=project_root,
             text=True,
             stderr=subprocess.DEVNULL,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
-    dirty = []
-    for line in out.splitlines():
-        if not line.strip():
+    return [Path(line) for line in out.splitlines() if line.strip().endswith(".py")]
+
+
+def _script_tokens(text: str) -> list[str]:
+    """Candidate script/path tokens in prose.
+
+    Only tokens that look like a ``.py`` file or a path (contains ``/``) are
+    returned; URL fragments are ignored.
+    """
+    tokens = []
+    for token in SCRIPT_TOKEN_RE.findall(text):
+        token = token.rstrip(".,;:()[]\"'")
+        if not token:
             continue
-        # porcelain format: XY <path>; X = staged, Y = worktree. '', M, D, A,
-        # or '?' (untracked) all mean the file differs from HEAD.
-        if line[0] in "MAD?" or line[1:2] in "MD":
-            dirty.append(line)
-    return dirty
+        if "://" in token or token.startswith("http"):
+            continue
+        if token.endswith(".py") or "/" in token:
+            tokens.append(token)
+    return tokens
+
+
+def _is_test_script(path: str) -> bool:
+    """True for test/helper files that are not data-generation scripts."""
+    p = Path(path)
+    return (
+        "tests" in p.parts
+        or p.name.startswith("test_")
+        or p.name == "conftest.py"
+    )
+
+
+def _resolve_script_token(
+    token: str, tracked: list[Path], by_basename: dict[str, list[str]]
+) -> list[str]:
+    """Resolve a prose token to tracked repo-relative script paths.
+
+    Returns ``[]`` when the token does not clearly name a tracked script. A
+    bare basename must be unambiguous; a path-like token may name a file or a
+    directory (in which case all tracked scripts under it are returned, minus
+    test files).
+    """
+    if token.startswith("./"):
+        token = token[2:]
+    if token.endswith(".py"):
+        if "/" in token:
+            return [token] if token in {str(p) for p in tracked} else []
+        matches = by_basename.get(Path(token).name, [])
+        return matches if len(matches) == 1 else []
+    if "/" in token:
+        prefix = token.rstrip("/") + "/"
+        return sorted(
+            str(p)
+            for p in tracked
+            if str(p).startswith(prefix) and not _is_test_script(str(p))
+        )
+    return []
+
+
+def _declared_scripts(info: dict) -> list[str]:
+    """Repo-relative script paths explicitly declared on a manifest entry.
+
+    The ``scripts`` field is the authoritative provenance source; an absent or
+    empty list means the entry has not been declared and prose is used instead.
+    """
+    raw = info.get("scripts")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text.startswith("./"):
+            text = text[2:]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _resolve_declared_script(
+    token: str, tracked: list[Path], by_basename: dict[str, list[str]]
+) -> list[str]:
+    """Resolve a declared script path to tracked repo-relative paths.
+
+    An exact tracked path wins; otherwise a bare basename is accepted when it is
+    unambiguous. A declaration that matches nothing is left unresolved so the
+    caller can report it rather than silently skipping the check.
+    """
+    tracked_set = {str(p) for p in tracked}
+    if token in tracked_set:
+        return [token]
+    if "/" not in token:
+        matches = by_basename.get(Path(token).name, [])
+        if len(matches) == 1:
+            return matches
+    return []
+
+
+def unresolved_declared_scripts(
+    manifest_files: dict, project_root: Path
+) -> dict[str, list[str]]:
+    """Map filename -> declared script paths that are not tracked in the repo.
+
+    A typo in a ``scripts`` declaration would otherwise disable the provenance
+    check for that file without any signal, so callers treat these as errors.
+    """
+    tracked = _tracked_python_files(project_root)
+    by_basename: dict[str, list[str]] = {}
+    for path in tracked:
+        by_basename.setdefault(path.name, []).append(str(path))
+    result: dict[str, list[str]] = {}
+    for filename, info in manifest_files.items():
+        declared = _declared_scripts(info)
+        if not declared:
+            continue
+        missing = [
+            token
+            for token in declared
+            if not _resolve_declared_script(token, tracked, by_basename)
+        ]
+        if missing:
+            result[filename] = missing
+    return result
+
+
+def referenced_scripts(manifest_files: dict, project_root: Path) -> dict[str, list[str]]:
+    """Map manifest filename -> repo-relative paths of scripts that built it.
+
+    Each file's declared ``scripts`` list is authoritative when non-empty.
+    Otherwise the prose in ``sources`` (or the legacy ``source`` field) is
+    scanned, so older manifests keep working. Only tracked repository Python
+    files are considered, so upstream paths in prose are ignored.
+    """
+    tracked = _tracked_python_files(project_root)
+    by_basename: dict[str, list[str]] = {}
+    for path in tracked:
+        by_basename.setdefault(path.name, []).append(str(path))
+    result: dict[str, list[str]] = {}
+    for filename, info in manifest_files.items():
+        scripts: list[str] = []
+        declared = _declared_scripts(info)
+        if declared:
+            # A non-empty declaration is authoritative even when nothing
+            # resolves; falling back to prose would mask the bad path.
+            for token in declared:
+                for script in _resolve_declared_script(token, tracked, by_basename):
+                    if script not in scripts:
+                        scripts.append(script)
+            if scripts:
+                result[filename] = scripts
+            continue
+        for text in _source_texts(info):
+            for token in _script_tokens(text):
+                for script in _resolve_script_token(token, tracked, by_basename):
+                    if script not in scripts:
+                        scripts.append(script)
+        if scripts:
+            result[filename] = scripts
+    return result
+
+
+def latest_reachable_tag(project_root: Path) -> str | None:
+    """Name of the nearest git tag reachable from HEAD, or ``None``.
+
+    Uses ``git describe --tags --abbrev=0``, which returns the closest
+    reachable tag by commit distance (the "latest version" of the code).
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return out or None
+
+
+def script_changed_since_tag(script: str, tag: str, project_root: Path) -> bool:
+    """True when the tracked script differs from its state at ``tag``.
+
+    Compares both the index and working tree against the tag, so staged and
+    unstaged edits are both flagged.
+    """
+    try:
+        for extra_args in ((), ("--cached",)):
+            result = subprocess.run(
+                ["git", "diff", "--quiet", *extra_args, tag, "--", script],
+                cwd=project_root,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return True
+        return False
+    except FileNotFoundError:
+        return False
+
+
+def check_script_provenance(manifest_files: dict, project_root: Path) -> dict:
+    """Check referenced scripts against the latest reachable git tag.
+
+    Returns ``{"tag": str | None, "scripts": {script: {"changed": bool}},
+    "files": {filename: [scripts]}, "missing": {filename: [declared paths]}}``.
+    ``changed`` is False when no tag exists (callers must still block on the
+    missing tag).
+    """
+    files = referenced_scripts(manifest_files, project_root)
+    tag = latest_reachable_tag(project_root)
+    scripts: dict[str, dict] = {}
+    for script_list in files.values():
+        for script in script_list:
+            if script not in scripts:
+                scripts[script] = {
+                    "changed": bool(tag)
+                    and script_changed_since_tag(script, tag, project_root)
+                }
+    return {
+        "tag": tag,
+        "scripts": scripts,
+        "files": files,
+        "missing": unresolved_declared_scripts(manifest_files, project_root),
+    }
+
+
+def provenance_block_reason(provenance: dict, allow_drift: bool) -> str | None:
+    """Reason a release must be blocked by the script-provenance check, or None."""
+    tag = provenance.get("tag")
+    if not tag:
+        return (
+            "no git tag is reachable from HEAD; create a version tag "
+            "(e.g. `git tag v1.0.0`) before releasing"
+        )
+    missing = provenance.get("missing") or {}
+    if missing and not allow_drift:
+        details = "; ".join(
+            f"{filename}: {', '.join(paths)}" for filename, paths in sorted(missing.items())
+        )
+        return (
+            "manifest 'scripts' entries do not match any tracked file "
+            f"({details}); fix the paths or re-run with --allow-script-drift"
+        )
+    changed = [
+        script
+        for script, info in provenance.get("scripts", {}).items()
+        if info.get("changed")
+    ]
+    if changed and not allow_drift:
+        return (
+            f"referenced scripts changed since tag {tag}: {', '.join(changed)}. "
+            "Tag the new code version, or re-run with --allow-script-drift."
+        )
+    return None
 
 
 def build_release_description(
@@ -875,6 +1358,7 @@ def build_release_description(
     readme_html: str = "",
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
+    provenance: dict | None = None,
 ) -> str:
     """Full Zenodo description for a deposit.
 
@@ -895,6 +1379,7 @@ def build_release_description(
         readme_html,
         removed_details,
         removal_notes,
+        provenance,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -911,6 +1396,7 @@ def release_section(
     section: str,
     manifest_files: dict,
     data_dir: Path,
+    project_root: Path,
     state: dict,
     manifest_path: Path | None = None,
 ) -> dict:
@@ -923,28 +1409,20 @@ def release_section(
 
     Returns ``{"section": ..., "summary": ..., "release": ..., "metadata": ...}``
     where ``summary`` is the per-section run report, ``release`` is the new
-    state to persist under ``releases.<section>``, and ``metadata`` is the
-    Zenodo metadata that was set (or would be set) for the deposit.
+    state to persist under ``releases.<section>.environments.<environment>``,
+    and ``metadata`` is the Zenodo metadata that was set (or would be set)
+    for the deposit.
     """
     data_version = manifest["data_version"]
 
-    released = section_release(state, section)
-    # Release state is environment-specific: deposition ids, DOIs, and the
-    # version suffix counter differ between sandbox and production. Treat a
-    # stored release from the *other* environment as absent so each environment
-    # starts its own first release, while keeping shared metadata like creators.
-    stored_environment = released.get("environment", "sandbox")
-    if released and stored_environment != environment:
-        log(
-            f"[{section}] stored release state is for {stored_environment}, "
-            f"target is {environment}; ignoring it"
-        )
-        released = {}
+    released = section_release(state, section, environment)
     previously_published = bool(released.get("published"))
     # Only diff against md5s of a previous *published* release. An unpublished
     # draft is resumed by re-uploading everything (idempotent bucket overwrite).
     released_files = (
-        normalize_released_files(released.get("files", {})) if previously_published else {}
+        normalize_released_files(released.get("files", {}))
+        if previously_published
+        else {}
     )
     deposition_id = released.get("deposition_id")
     # Allow resuming a specific draft (e.g. one created by an earlier run that
@@ -976,21 +1454,21 @@ def release_section(
 
     # The manifest itself travels with the deposit. Its checksum is compared
     # against the draft like any other file, so a resume does not re-upload it.
-    provenance_paths: dict[str, Path] = {}
+    upload_paths = dict(local_paths)
     if manifest_path is not None:
-        if manifest_path.exists():
-            provenance_paths[MANIFEST_FILENAME] = manifest_path
+        if manifest_path.is_file():
+            if MANIFEST_FILENAME in upload_paths:
+                sys.exit(
+                    f"[{section}] {MANIFEST_FILENAME} is reserved for the collection manifest."
+                )
+            upload_paths[MANIFEST_FILENAME] = manifest_path
             local_md5s[MANIFEST_FILENAME] = md5_for_file(manifest_path)
         else:
             log(
                 f"[{section}] manifest {manifest_path} not found; the deposit "
                 "will not carry per-file provenance"
             )
-
-    # Files are uploaded to the deposit bucket with plain filenames (Zenodo's
-    # bucket API does not support subdirectories); each collection has its own
-    # deposit, so filenames cannot collide across collections.
-    release_keys = set(manifest_files) | set(provenance_paths)
+            manifest_path = None
 
     # Determine which files were updated in this release.
     added = [name for name in manifest_files if name not in released_files]
@@ -1000,10 +1478,11 @@ def release_section(
         if name in released_files and released_files[name].get("md5") != info.get("md5")
     ]
     changed = added + updated
-    removed = [key for key in released_files if key not in release_keys]
+    removed = [key for key in released_files if key not in manifest_files]
     initial = not released_files
     readme_html = readme_to_html(data_dir)
-    metadata_hash = manifest_meta_hash(manifest, readme_html)
+    provenance = check_script_provenance(manifest_files, project_root)
+    metadata_hash = manifest_meta_hash(manifest, readme_html, provenance)
     metadata_changed = released.get("manifest_meta_hash") != metadata_hash
 
     log(f"[{section}] data version: {data_version}")
@@ -1049,11 +1528,25 @@ def release_section(
             "metadata": section_metadata(state, section),
         }
 
+    # Refuse to publish files whose source documentation is incomplete
+    # (production only; sandbox warns).
+    undocumented = undocumented_files(manifest_files)
+    if undocumented:
+        message = "files missing a license or with placeholder sources: " + ", ".join(
+            undocumented
+        )
+        if environment == "production" and not getattr(
+            args, "allow_undocumented", False
+        ):
+            sys.exit(
+                f"[{section}] Refusing production release: {message}. Document them in "
+                "the manifest, or re-run with --allow-undocumented."
+            )
+        log(f"[{section}] warning: {message}")
+
     # Publishing files that aren't in git history leaves a record with no
     # reproducible commit behind it. Refuse unless --allow-dirty is passed.
-    dirty = uncommitted_release_files(
-        manifest_files, data_dir, extra_paths=list(provenance_paths.values())
-    )
+    dirty = uncommitted_release_files(manifest_files, data_dir, manifest_path)
     if dirty and not getattr(args, "allow_dirty", False):
         log(f"[{section}] uncommitted changes vs git HEAD in release files:")
         for line in dirty:
@@ -1063,6 +1556,16 @@ def release_section(
             "re-run with --allow-dirty. Publishing an uncommitted release leaves "
             "no reproducible commit for the Zenodo record."
         )
+
+    # Referenced scripts must be traceable to a tagged code version. Refuse
+    # when no tag exists or a script changed since the tag, unless
+    # --allow-script-drift is passed (the description then marks the drift).
+    block_reason = provenance_block_reason(
+        provenance, getattr(args, "allow_script_drift", False)
+    )
+    if block_reason:
+        log(f"[{section}] script provenance check failed: {block_reason}")
+        sys.exit(f"[{section}] {block_reason}")
 
     # Resolve the target draft.
     if deposition_id and not previously_published:
@@ -1090,7 +1593,7 @@ def release_section(
     # files and any leftovers in a resumed draft / previous version).
     present = existing_draft_files(session, deposition)
     for key, (file_id, _checksum) in present.items():
-        if key in release_keys:
+        if key in upload_paths:
             continue
         file_url = deposition["links"]["files"] + "/" + file_id
         log(f"[{section}] removing {key} (no longer in manifest)")
@@ -1099,7 +1602,6 @@ def release_section(
     # Upload files whose local checksum differs from what the draft already
     # holds (skips files unchanged since a prior draft copy / new-version).
     uploads = []
-    upload_paths = {**local_paths, **provenance_paths}
     for index, (filename, local_path) in enumerate(upload_paths.items()):
         local_md5 = local_md5s[filename]
         _, draft_checksum = present.get(filename, (None, None))
@@ -1113,6 +1615,7 @@ def release_section(
             session,
             bucket_url,
             local_path,
+            key=filename,
             retries=args.upload_retries,
             retry_delay=args.upload_retry_delay,
         )
@@ -1134,7 +1637,9 @@ def release_section(
         base_metadata,
         readme_html=readme_html,
         removed_details={name: released_files[name] for name in removed},
-        removal_notes=released.get("removal_notes") or base_metadata.get("removal_notes"),
+        removal_notes=released.get("removal_notes")
+        or base_metadata.get("removal_notes"),
+        provenance=provenance,
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
@@ -1255,7 +1760,7 @@ def run_release(args) -> None:
         if section not in sections:
             log(f"[{section}] not present in manifest; skipping")
 
-    state = load_state()
+    state = normalize_release_state(load_state())
     save_state = args.publish or args.save_state
 
     results = []
@@ -1279,6 +1784,7 @@ def run_release(args) -> None:
                 section,
                 manifest_files,
                 data_dir,
+                PROJECT_ROOT,
                 state,
                 manifest_path=collection_manifest_path(
                     PROJECT_ROOT, section, flag_manifest
@@ -1301,19 +1807,15 @@ def run_release(args) -> None:
         # shared fields (creators, license, access_right, ...) only.
         for per_release_field in ("title", "description", "version"):
             project_metadata.pop(per_release_field, None)
-        # Merge with existing release state so a run limited to one collection
-        # (e.g. --collection core) does not clobber other collections' state.
-        existing_releases = state.get("releases", {}) if isinstance(state, dict) else {}
-        if not isinstance(existing_releases, dict):
-            existing_releases = {}
-        merged_releases = dict(existing_releases)
-        merged_releases.update(
-            {result["section"]: result["release"] for result in results}
-        )
-        new_state = {
-            "metadata": project_metadata,
-            "releases": merged_releases,
-        }
+        # Merge only the target environment, retaining inactive lineages and
+        # normalized legacy core state even when core was not selected.
+        new_state = normalize_release_state(state)
+        for result in results:
+            collection = new_state["releases"].setdefault(
+                result["section"], {"environments": {}}
+            )
+            collection["environments"][environment] = result["release"]
+        new_state["metadata"] = project_metadata
         STATE_PATH.write_text(
             json.dumps(new_state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -1401,6 +1903,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Publish even when release files differ from git HEAD.",
     )
     parser.add_argument(
+        "--allow-script-drift",
+        action="store_true",
+        help=(
+            "Allow releasing when referenced scripts have changed since the "
+            "latest git tag or a declared script path is not tracked. The "
+            "description marks those scripts. A reachable tag is still required."
+        ),
+    )
+    parser.add_argument(
+        "--allow-undocumented",
+        action="store_true",
+        help=(
+            "Proceed even when files lack a license or have placeholder sources "
+            "(only needed for production releases; the sandbox only warns)."
+        ),
+    )
+    parser.add_argument(
         "--collection",
         action="append",
         choices=list(COLLECTIONS),
@@ -1423,8 +1942,10 @@ def build_parser() -> argparse.ArgumentParser:
 def dry_run(args) -> None:
     project_root = Path.cwd()
     manifests = load_manifests(args, project_root)
+    flag_manifest = resolve_flag_manifest(args, project_root)
     sections = requested_sections(args)
     print(f"data version: {manifests[CORE_SECTION]['data_version']}")
+    blocked = False
     for section in sections:
         if section not in manifests:
             print(f"\n[{section}] not present in manifest; skipping")
@@ -1453,15 +1974,30 @@ def dry_run(args) -> None:
             (data_dir / n).stat().st_size for n in files if (data_dir / n).exists()
         )
         print(f"  total bytes: {total / 1e6:.1f} MB")
-        manifest_path = collection_manifest_path(
-            project_root, section, resolve_flag_manifest(args, project_root)
-        )
+        manifest_path = collection_manifest_path(project_root, section, flag_manifest)
         print(
             f"  ships with deposit: {MANIFEST_FILENAME}"
-            if manifest_path.exists()
+            if manifest_path.is_file()
             else f"  WARNING: {manifest_path} not found; the deposit would carry "
             "no per-file provenance"
         )
+        provenance = check_script_provenance(files, project_root)
+        tag = provenance.get("tag")
+        print(f"  code tag: {tag or 'NONE (no reachable git tag)'}")
+        for script, info in sorted(provenance["scripts"].items()):
+            status = "changed since tag" if info["changed"] else "unchanged"
+            print(f"    {script} @ {tag or 'NONE'} ({status})")
+        for filename, paths in sorted((provenance.get("missing") or {}).items()):
+            for path in paths:
+                print(f"    {path} @ {tag or 'NONE'} (not tracked, declared by {filename})")
+        block_reason = provenance_block_reason(
+            provenance, getattr(args, "allow_script_drift", False)
+        )
+        if block_reason:
+            print(f"  ERROR: {block_reason}")
+            blocked = True
+    if blocked:
+        sys.exit("script provenance check failed; see errors above")
 
 
 def main() -> None:
