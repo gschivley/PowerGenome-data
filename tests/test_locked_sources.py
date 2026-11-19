@@ -228,3 +228,17 @@ def test_failed_build_preserves_previous_output_and_receipt(tmp_path):
             raise RuntimeError("build failed")
     assert output.read_bytes() == b"good"
     assert receipt_path(output).read_bytes() == receipt
+
+
+def test_receipt_and_output_can_be_written_to_a_new_directory(tmp_path):
+    lock = source_lock(tmp_path, {"source": github()})
+    lock.fetch("source", local_path=seed(lock, "source", PAYLOAD))
+    output = tmp_path / "new" / "nested" / "output.csv"
+
+    with lock.output(output, ["source"]) as staged:
+        staged.write_bytes(b"new output")
+
+    assert output.read_bytes() == b"new output"
+    receipt = json.loads(receipt_path(output).read_text())
+    assert receipt["output_md5"] == hashlib.md5(b"new output").hexdigest()
+    assert receipt["input_pins"] == {"source": github()}

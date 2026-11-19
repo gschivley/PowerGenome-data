@@ -18,8 +18,11 @@ RECEIPT_SUFFIX = ".sources.json"
 ZENODO_TEMPLATE = "https://zenodo.org/records/{record_id}/files/{filename}"
 
 
-def add_source_options(parser, cache_dir=DEFAULT_CACHE):
-    parser.add_argument("--cache-dir", type=Path, default=cache_dir)
+def add_source_options(parser):
+    parser.add_argument(
+        "--cache-dir", type=Path, default=DEFAULT_CACHE,
+        help=f"Verified input cache (default: {DEFAULT_CACHE})",
+    )
     parser.add_argument(
         "--sources-lock", type=Path, default=DEFAULT_LOCK,
         help="Input lockfile (default: sources.lock.json beside the builders)",
@@ -186,6 +189,7 @@ class SourceLock:
         """Stage the output and record verified pins for the bytes this build wrote."""
         output = Path(output)
         pins = {source_id: self.used[source_id] for source_id in source_ids}
+        output.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as temp:
             staged_output = Path(temp.name)
         try:

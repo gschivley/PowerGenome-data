@@ -59,13 +59,14 @@ def parse_nonac(csv_text):
 
 def main():
     """Main execution function."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_source_options(parser)
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Merging ReEDS Transmission Capacity Data")
     print("=" * 60)
 
-    parser = argparse.ArgumentParser(description=__doc__)
-    add_source_options(parser)
-    args = parser.parse_args()
     sources = SourceLock(args.cache_dir, args.sources_lock)
     ac_text = sources.fetch(AC_SOURCE).read_text(encoding="utf-8")
     nonac_text = sources.fetch(NONAC_SOURCE).read_text(encoding="utf-8")
@@ -96,7 +97,6 @@ def main():
     # Write output
     out_file = "transmission_capacity_reeds_legacy.csv"
     out_path = Path(out_file)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     with sources.output(out_path, (AC_SOURCE, NONAC_SOURCE)) as output:
         agg_df.to_csv(output, index=False)
 

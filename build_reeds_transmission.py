@@ -93,7 +93,7 @@ def expansion_costs(routes, hashes, dollar_year, zone_set):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
-    add_source_options(parser, Path("cache_data/reeds-transmission"))
+    add_source_options(parser)
     args = parser.parse_args()
 
     sources = SourceLock(args.cache_dir, args.sources_lock)

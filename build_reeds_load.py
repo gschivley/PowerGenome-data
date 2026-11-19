@@ -109,7 +109,7 @@ def build_load(source, weights_by_zone_set, output, **hourly_options):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("data/reeds_load_transformed.parquet"))
-    add_source_options(parser, Path("cache_data/reeds-load"))
+    add_source_options(parser)
     args = parser.parse_args()
 
     sources = SourceLock(args.cache_dir, args.sources_lock)

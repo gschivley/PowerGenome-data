@@ -6,9 +6,9 @@ settings (``operational_constraints_table: operational_constraints_reeds.csv``)
 from the ReEDS plant characterization module (PCM) defaults pinned in sources.lock.json.
 
 What it does:
-1. Fetches ``pcm_defaults.json`` from the ReEDS repo (or reads a local copy via
-   ``--pcm-path``) and turns one row per technology into PowerGenome/GenX-style
-   operational constraints columns (Min_Power, Eff_Up, Ramp_Up_Percentage, etc.).
+1. Verifies the pinned ``pcm_defaults.json`` from a download, the cache, or a local
+   copy supplied via ``--pcm-path``. Converts each technology row into
+   PowerGenome/GenX-style operational constraints.
 2. Drops all concentrating solar power (CSP) technologies (``csp*``) because
    PowerGenome does not use CSP-specific operational constraints.
 3. Applies the ``tech_map``: for each new-build ATB/EIA technology name (key),
@@ -368,7 +368,6 @@ def main() -> None:
     pcm = read_pcm_defaults(sources.fetch(PCM_SOURCE, local_path=args.pcm_path))
 
     constraints = build_operational_constraints_reeds(pcm)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
     with sources.output(args.output, (PCM_SOURCE,)) as output:
         constraints.to_csv(output, index=False)
     print(f"Saved {len(constraints)} rows to {args.output}")

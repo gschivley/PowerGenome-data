@@ -64,12 +64,16 @@ In the table, `5bdbb89b` refers to ReEDS-Model/ReEDS commit
 | `build_reserve_margins.py` | `prm_annual.csv` from ReEDS-Model/ReEDS release `2026.04.17`, plus the checked-in `cache_data/hierarchy.csv`. |
 | `transform_reeds_load.py`, `merge_transmission_capacity.py` | Legacy `EER_IRAlow_load_hourly.h5` and initial AC/non-AC transmission capacity CSVs from NatLabRockies/ReEDS-2.0 release `v2025.7.0`. Use the z134/z90 builders for the current load and transmission products. |
 
-Most ReEDS builders default to `cache_data/reeds-sources/`. Load and transmission use
-`cache_data/reeds-load/` and `cache_data/reeds-transmission/`. Pass `--cache-dir` to select a
-different cache. The cache includes the repository, commit, and relative file path for GitHub
-inputs and the record ID and filename for Zenodo inputs. To reuse a download from an older flat
-cache, copy it to the path returned by `SourceLock(cache_dir).cache_path(source_id)` using the
-input's key in the lockfile. A checksum mismatch stops the build and identifies the file. After
+The current builders use ReEDS-Model/ReEDS and its associated Zenodo records. The reserve-margin
+builder uses the earlier release of the same repository because that release reproduces the
+published margins. The legacy load and transmission builders retain the original ReEDS-2.0
+release pins for reproducing those products.
+
+All ReEDS builders share `cache_data/reeds-sources/` when run from the same working
+directory. Pass `--cache-dir` to select a different cache. The cache includes the repository, commit, and relative file path for GitHub
+inputs and the record ID and filename for Zenodo inputs. To reuse an input from an older cache,
+copy it to the path returned by `SourceLock(cache_dir).cache_path(source_id)`, where `cache_dir`
+is the destination cache and `source_id` is the input's lockfile key. A checksum mismatch stops the build and identifies the file. After
 investigating, remove a corrupt cache copy to retry the same pinned download.
 
 ### Refresh a pin for review

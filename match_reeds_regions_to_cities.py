@@ -380,7 +380,6 @@ def main():
     mapping_df = match_regions_to_cities(regions_gdf, cities_gdf)
 
     # Step 5: Export mapping
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sources.output(OUTPUT_PATH, SHAPEFILE_SOURCES) as output:
         mapping_df.to_csv(output, index=False)
 
