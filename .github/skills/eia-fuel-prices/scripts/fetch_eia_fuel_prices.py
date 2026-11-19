@@ -297,7 +297,7 @@ def main() -> None:
         print(f"\nRemoved {before - after:,} duplicate rows")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_parquet(args.output, index=False)
+    combined.to_parquet(args.output, index=False, compression="zstd")
     print(f"\nSaved {len(combined):,} rows to {args.output}")
     new_net = after - (
         len(existing) - (before - after - (len(new_data) - (before - after)))

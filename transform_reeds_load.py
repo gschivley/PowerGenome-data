@@ -240,7 +240,7 @@ def main():
 
     # Export to parquet
     print(f"\nExporting to {output_file}...")
-    tidy_df.to_parquet(output_file, index=False)
+    tidy_df.to_parquet(output_file, index=False, compression="zstd")
 
     # Summary
     print("\n" + "=" * 60)
