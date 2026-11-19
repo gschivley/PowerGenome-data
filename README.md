@@ -22,7 +22,9 @@ Data is published to Zenodo as one deposit per collection via `publish_zenodo.py
 - **PowerGenome Existing Renewable Resource Groups** — existing renewable resource group files from `existing_resource_groups/`
 
 Each collection keeps its own manifest (`<folder>/manifest.json`) with its own `data_version`, so
-collections version independently and deposits are only created once a collection has files. See the docs site for details.
+collections version independently and deposits are only created once a collection has files. Each
+deposit includes its collection's manifest, so downloads carry the per-file data versions,
+licenses and upstream sources.
 
 Before releasing, `publish_zenodo.py` requires a git tag reachable from HEAD and checks that every
 Python script declared in each manifest file's `scripts` list (or named in its source descriptions,

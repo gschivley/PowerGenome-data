@@ -119,6 +119,13 @@ USER_AGENT = (
     "PowerGenome-data/publish_zenodo.py (https://github.com/gschivley/PowerGenome-data)"
 )
 
+# Each collection's manifest is uploaded into its own deposit alongside the data
+# files, so a download carries per-file provenance (data version, license,
+# upstream sources) with it instead of only living in git. PowerGenome's
+# ``download_zenodo`` reads this copy first and falls back to GitHub when the
+# deposit predates it.
+MANIFEST_FILENAME = "manifest.json"
+
 # One Zenodo deposit per data collection (manifest section). ``data_dir`` is
 # relative to the repo root. Files are uploaded to the deposit bucket with
 # their plain filenames (Zenodo's bucket API only supports flat filenames, no
@@ -256,6 +263,14 @@ def collection_manifest_path(
     return project_root / COLLECTIONS[section]["data_dir"] / "manifest.json"
 
 
+def resolve_flag_manifest(args, project_root: Path) -> Path:
+    """Absolute path to the ``--manifest`` file (the core collection's)."""
+    flag_manifest = Path(args.manifest).expanduser()
+    if not flag_manifest.is_absolute():
+        flag_manifest = project_root / flag_manifest
+    return flag_manifest
+
+
 def load_manifests(args, project_root: Path) -> dict[str, dict]:
     """Per-collection manifests: ``{section: {"data_version", "files"}}``.
 
@@ -263,9 +278,7 @@ def load_manifests(args, project_root: Path) -> dict[str, dict]:
     the older single-file layout, a collection without a local manifest is
     populated from ``sections.<name>`` in the core manifest.
     """
-    flag_manifest = Path(args.manifest).expanduser()
-    if not flag_manifest.is_absolute():
-        flag_manifest = project_root / flag_manifest
+    flag_manifest = resolve_flag_manifest(args, project_root)
     core = load_manifest(flag_manifest)
 
     manifests = {CORE_SECTION: core}
@@ -1011,23 +1024,42 @@ def validate_constraints(files_by_name: dict[str, Path]) -> None:
         )
 
 
-def uncommitted_release_files(manifest_files: dict, data_dir: Path) -> list[str]:
-    """Names of files in a manifest section that differ from git HEAD.
-
-    Publishing a release whose files are not in git history means the Zenodo
-    record has no reproducible commit behind it. Returns ``[]`` when git is
-    unavailable or the tree is clean for every file.
-    """
+def uncommitted_release_files(
+    manifest_files: dict,
+    data_dir: Path,
+    manifest_path: Path | None = None,
+) -> list[str]:
+    """Report release files (including the shipped manifest) that differ from HEAD."""
     paths = [data_dir / name for name in manifest_files]
+    dirty = []
     try:
+        if manifest_path is not None:
+            # git status omits ignored files and fails for paths outside the repo.
+            tracked = subprocess.run(
+                [
+                    "git",
+                    "--literal-pathspecs",
+                    "ls-files",
+                    "--error-unmatch",
+                    "--",
+                    str(manifest_path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if tracked.returncode == 0:
+                paths.append(manifest_path)
+            else:
+                dirty.append(f"?? {manifest_path}")
         out = subprocess.check_output(
-            ["git", "status", "--porcelain", "--"] + [str(p) for p in paths],
+            ["git", "--literal-pathspecs", "status", "--porcelain", "--"]
+            + [str(p) for p in paths],
             text=True,
             stderr=subprocess.DEVNULL,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return []
-    return [line for line in out.splitlines() if line.strip()]
+        return dirty
+    return dirty + [line for line in out.splitlines() if line.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -1366,8 +1398,14 @@ def release_section(
     data_dir: Path,
     project_root: Path,
     state: dict,
+    manifest_path: Path | None = None,
 ) -> dict:
     """Create/update/publish the Zenodo deposit for one manifest section.
+
+    ``manifest_path`` is the collection's ``manifest.json``; when given it is
+    uploaded with the data so the published record is self-describing. It is
+    not part of the manifest's file list, so it never shows up in release diffs
+    or tracked release state.
 
     Returns ``{"section": ..., "summary": ..., "release": ..., "metadata": ...}``
     where ``summary`` is the per-section run report, ``release`` is the new
@@ -1414,10 +1452,23 @@ def release_section(
         local_paths[filename] = local_path
     validate_constraints(local_paths)
 
-    # Files are uploaded to the deposit bucket with plain filenames (Zenodo's
-    # bucket API does not support subdirectories); each collection has its own
-    # deposit, so filenames cannot collide across collections.
-    release_keys = set(manifest_files)
+    # The manifest itself travels with the deposit. Its checksum is compared
+    # against the draft like any other file, so a resume does not re-upload it.
+    upload_paths = dict(local_paths)
+    if manifest_path is not None:
+        if manifest_path.is_file():
+            if MANIFEST_FILENAME in upload_paths:
+                sys.exit(
+                    f"[{section}] {MANIFEST_FILENAME} is reserved for the collection manifest."
+                )
+            upload_paths[MANIFEST_FILENAME] = manifest_path
+            local_md5s[MANIFEST_FILENAME] = md5_for_file(manifest_path)
+        else:
+            log(
+                f"[{section}] manifest {manifest_path} not found; the deposit "
+                "will not carry per-file provenance"
+            )
+            manifest_path = None
 
     # Determine which files were updated in this release.
     added = [name for name in manifest_files if name not in released_files]
@@ -1427,7 +1478,7 @@ def release_section(
         if name in released_files and released_files[name].get("md5") != info.get("md5")
     ]
     changed = added + updated
-    removed = [key for key in released_files if key not in release_keys]
+    removed = [key for key in released_files if key not in manifest_files]
     initial = not released_files
     readme_html = readme_to_html(data_dir)
     provenance = check_script_provenance(manifest_files, project_root)
@@ -1495,7 +1546,7 @@ def release_section(
 
     # Publishing files that aren't in git history leaves a record with no
     # reproducible commit behind it. Refuse unless --allow-dirty is passed.
-    dirty = uncommitted_release_files(manifest_files, data_dir)
+    dirty = uncommitted_release_files(manifest_files, data_dir, manifest_path)
     if dirty and not getattr(args, "allow_dirty", False):
         log(f"[{section}] uncommitted changes vs git HEAD in release files:")
         for line in dirty:
@@ -1542,7 +1593,7 @@ def release_section(
     # files and any leftovers in a resumed draft / previous version).
     present = existing_draft_files(session, deposition)
     for key, (file_id, _checksum) in present.items():
-        if key in release_keys:
+        if key in upload_paths:
             continue
         file_url = deposition["links"]["files"] + "/" + file_id
         log(f"[{section}] removing {key} (no longer in manifest)")
@@ -1551,7 +1602,7 @@ def release_section(
     # Upload files whose local checksum differs from what the draft already
     # holds (skips files unchanged since a prior draft copy / new-version).
     uploads = []
-    for index, (filename, local_path) in enumerate(local_paths.items()):
+    for index, (filename, local_path) in enumerate(upload_paths.items()):
         local_md5 = local_md5s[filename]
         _, draft_checksum = present.get(filename, (None, None))
         if draft_checksum == local_md5:
@@ -1564,12 +1615,13 @@ def release_section(
             session,
             bucket_url,
             local_path,
+            key=filename,
             retries=args.upload_retries,
             retry_delay=args.upload_retry_delay,
         )
         result["filename"] = filename
         uploads.append(result)
-        if index < len(local_paths) - 1 and args.sleep_seconds > 0:
+        if index < len(upload_paths) - 1 and args.sleep_seconds > 0:
             time.sleep(args.sleep_seconds)
 
     # Build + update metadata.
@@ -1698,6 +1750,7 @@ def run_release(args) -> None:
     base_url = resolve_base(use_production)
 
     manifests = load_manifests(args, PROJECT_ROOT)
+    flag_manifest = resolve_flag_manifest(args, PROJECT_ROOT)
     sections = {
         section: section_manifest["files"]
         for section, section_manifest in manifests.items()
@@ -1733,6 +1786,9 @@ def run_release(args) -> None:
                 data_dir,
                 PROJECT_ROOT,
                 state,
+                manifest_path=collection_manifest_path(
+                    PROJECT_ROOT, section, flag_manifest
+                ),
             )
         )
 
@@ -1886,6 +1942,7 @@ def build_parser() -> argparse.ArgumentParser:
 def dry_run(args) -> None:
     project_root = Path.cwd()
     manifests = load_manifests(args, project_root)
+    flag_manifest = resolve_flag_manifest(args, project_root)
     sections = requested_sections(args)
     print(f"data version: {manifests[CORE_SECTION]['data_version']}")
     blocked = False
@@ -1917,6 +1974,13 @@ def dry_run(args) -> None:
             (data_dir / n).stat().st_size for n in files if (data_dir / n).exists()
         )
         print(f"  total bytes: {total / 1e6:.1f} MB")
+        manifest_path = collection_manifest_path(project_root, section, flag_manifest)
+        print(
+            f"  ships with deposit: {MANIFEST_FILENAME}"
+            if manifest_path.is_file()
+            else f"  WARNING: {manifest_path} not found; the deposit would carry "
+            "no per-file provenance"
+        )
         provenance = check_script_provenance(files, project_root)
         tag = provenance.get("tag")
         print(f"  code tag: {tag or 'NONE (no reachable git tag)'}")

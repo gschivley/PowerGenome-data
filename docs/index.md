@@ -168,6 +168,13 @@ never bumps another deposit's release version. Files are uploaded with their pla
 filenames can never collide across collections. Collections with no files are skipped, so a deposit
 is only created once a collection actually has data.
 
+New releases include the collection's own `manifest.json` alongside the data files. Anyone who
+fetches a deposit can see the per-file `version`, `license` and upstream `sources` without cloning
+this repo. PowerGenome's `download_zenodo` CLI reads that copy (falling back to this repo when a
+deposit predates it) and records it locally, so a model run can report which data versions it used.
+The manifest itself is not listed in data-file changes or tracked release state. In the legacy
+single-manifest layout, a non-core collection without its own manifest is released without this copy.
+
 Each collection's files use the same entry schema (`sources`, `version`, `last_updated`, `md5`,
 `license`, `history`).
 
@@ -261,7 +268,7 @@ Without `--publish` the script leaves each deposition as a draft. If a draft alr
 (no duplicate is created), and files whose checksum already matches the draft are skipped. Re-running
 `--publish` after an identical release is a no-op.
 
-The script verifies that every file listed in the manifest is committed to git before it contacts Zenodo.
+The script checks the data files and the uploaded manifest against git before contacting Zenodo.
 If any release file differs from HEAD it prints the offending paths and exits; commit the changes first or
 pass `--allow-dirty`. This keeps each Zenodo record reproducible from the repository history.
 
