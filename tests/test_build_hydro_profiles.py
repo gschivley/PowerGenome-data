@@ -14,6 +14,7 @@ parquet, so no network access is required.
 """
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -49,6 +50,65 @@ def test_hydro_uses_only_z134_plant_regions(tmp_path, monkeypatch):
     assert MODULE.merge_plant_region_hydro_data().to_dict("records") == [
         {"plant_id": 1, "region": "p1", "hydro_type": "conventional"}
     ]
+
+
+def test_build_z90_aggregates_plants_and_writes_matching_resource_groups(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "plant_region_map.csv").write_text(
+        "plant_id,region,zone_set\n"
+        "1,p1,z134\n2,p2,z134\n3,p2,z134\n"
+        "1,WA_W,z90\n2,WA_W,z90\n3,WA_W,z90\n"
+    )
+    (data / "reeds_generators_transformed.csv").write_text(
+        "plant_id,technology,capacity_mw\n"
+        "1,Conventional Hydroelectric,15\n1,Conventional Hydroelectric,85\n"
+        "2,Conventional Hydroelectric,50\n3,Run of River Hydroelectric,200\n"
+        "3,Hydroelectric Pumped Storage,800\n"
+    )
+    source = tmp_path / "monthly.parquet"
+    pd.DataFrame(
+        {
+            "plant_id_eia": [1, 2, 3],
+            "report_date": pd.to_datetime(["2007-01-01"] * 3),
+            "prime_mover_code": ["HY"] * 3,
+            "net_generation_mwh": [7440, 29760, 14880],
+            "capacity_mw": [25, 75, 25],
+        }
+    ).to_parquet(source)
+    query = MODULE.query_pudl_monthly_capacity_factors
+    monkeypatch.setattr(
+        MODULE,
+        "query_pudl_monthly_capacity_factors",
+        lambda *, zone_set: query(str(source), [], zone_set=zone_set),
+    )
+
+    MODULE.build_hydro_profiles()
+    legacy = tmp_path / "existing_resource_groups"
+    original = {path.name: path.read_bytes() for path in legacy.iterdir()}
+    z134 = pd.read_parquet(legacy / "hydro_conventional_2007_2013.parquet")
+    assert set(z134["site_id"]) == {"p1", "p2"}
+
+    MODULE.build_hydro_profiles("z90")
+    assert {path.name: path.read_bytes() for path in legacy.iterdir()} == original
+    z90 = tmp_path / "existing_resource_groups_z90"
+    cases = [
+        ("regional_hydro_True.json", False, 150, 0.5),
+        ("regional_small_hydro_True.json", True, 200, 0.8),
+    ]
+    for filename, small, capacity, cf in cases:
+        descriptor = json.loads((z90 / filename).read_text())
+        assert descriptor["small"] is small
+        profiles = pd.read_parquet(z90 / descriptor["profiles"])
+        assert set(profiles["site_id"]) == {"WA_W"}
+        assert profiles["value"].sub(cf).abs().max() < 1e-12
+        metadata = pd.read_csv(z90 / descriptor["metadata"])
+        assert metadata.to_dict("records") == [
+            {"region": "WA_W", "id": "WA_W", "capacity_mw": capacity}
+        ]
 
 
 class TestHoursInMonth(unittest.TestCase):

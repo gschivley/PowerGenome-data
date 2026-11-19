@@ -20,6 +20,7 @@ site/
 /data/reeds_load_transformed.parquet
 /data/distributed_profiles.parquet
 /existing_resource_groups/*.parquet
+/existing_resource_groups_z90/
 /resource_profiles/*.parquet
 
 # Cached downloads from reproducible ATB builders

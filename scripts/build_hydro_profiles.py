@@ -8,6 +8,8 @@ This script:
 4. Outputs tidy parquet files with site_id, weather_year, time_index, value
 """
 
+import argparse
+import json
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -32,6 +34,8 @@ PUDL_S3_SETTINGS = [
     "SET s3_region='us-west-2'",
     "SET s3_use_ssl=true",
     "SET s3_url_style='path'",
+    "SET s3_access_key_id=''",
+    "SET s3_secret_access_key=''",
 ]
 
 # Constants
@@ -39,6 +43,7 @@ PUDL_PARQUET_URL = "s3://pudl.catalyst.coop/nightly/out_eia__monthly_generators.
 START_YEAR = 2007
 END_YEAR = 2013
 HOURS_PER_WEEK = 168
+ZONE_SETS = ("z134", "z90")
 
 # Hydro generator types to include
 HYDRO_TYPES = {
@@ -61,11 +66,21 @@ def hours_in_month(report_date) -> float:
     return (next_month_start - month_start).total_seconds() / 3600
 
 
-def load_plant_region_data() -> pd.DataFrame:
-    """Load the z134 plant-to-region mapping used by the hydro profiles."""
-    logger.info("Loading z134 plant-region mappings...")
+def load_plant_region_data(zone_set: str = "z134") -> pd.DataFrame:
+    """Load one zone set before joining plants to generations or capacities."""
+    if zone_set not in ZONE_SETS:
+        raise ValueError(f"Unsupported ReEDS zone set: {zone_set!r}")
+
+    logger.info("Loading %s plant-region mappings...", zone_set)
     plant_regions = pd.read_csv("data/plant_region_map.csv")
-    return plant_regions.loc[plant_regions["zone_set"].eq("z134"), ["plant_id", "region"]]
+    selected = plant_regions.loc[
+        plant_regions["zone_set"].eq(zone_set), ["plant_id", "region"]
+    ]
+    if selected.empty:
+        raise ValueError(f"No plant-region mappings found for {zone_set}")
+    if selected["plant_id"].duplicated().any():
+        raise ValueError(f"Duplicate plant-region mappings found for {zone_set}")
+    return selected
 
 
 def load_generator_data() -> pd.DataFrame:
@@ -83,15 +98,15 @@ def load_generator_data() -> pd.DataFrame:
     )
 
     logger.info(f"Found {len(generators)} hydroelectric generators")
-    return generators[["plant_id", "hydro_type"]].drop_duplicates()
+    return generators
 
 
-def merge_plant_region_hydro_data() -> pd.DataFrame:
+def merge_plant_region_hydro_data(zone_set: str = "z134") -> pd.DataFrame:
     """Merge plant-region and generator data."""
     logger.info("Merging plant-region and generator data...")
 
-    plant_region = load_plant_region_data()
-    generators = load_generator_data()
+    plant_region = load_plant_region_data(zone_set)
+    generators = load_generator_data()[["plant_id", "hydro_type"]].drop_duplicates()
 
     # Merge on plant_id
     merged = plant_region.merge(generators, on="plant_id", how="inner")
@@ -103,6 +118,8 @@ def merge_plant_region_hydro_data() -> pd.DataFrame:
 def query_pudl_monthly_capacity_factors(
     parquet_url: str = PUDL_PARQUET_URL,
     s3_settings: list[str] | None = None,
+    *,
+    zone_set: str = "z134",
 ) -> pd.DataFrame:
     """
     Query PUDL EIA monthly generators data to calculate regional monthly capacity factors.
@@ -113,6 +130,7 @@ def query_pudl_monthly_capacity_factors(
         s3_settings: DuckDB statements to run before the query (httpfs setup
             for S3). ``None`` uses ``PUDL_S3_SETTINGS``; an empty list skips
             them for local files.
+        zone_set: ReEDS plant-region mapping to aggregate into.
 
     Returns:
         DataFrame with columns: region, hydro_type, report_date, capacity_factor
@@ -122,7 +140,7 @@ def query_pudl_monthly_capacity_factors(
     logger.info(f"Querying PUDL parquet from {parquet_url} for {START_YEAR}-{END_YEAR}...")
 
     # Get plant-region mappings
-    plant_hydro_map = merge_plant_region_hydro_data()
+    plant_hydro_map = merge_plant_region_hydro_data(zone_set)
 
     # Use DuckDB to query parquet with filtering
     conn = duckdb.connect()
@@ -292,12 +310,49 @@ def extract_weather_years_and_time_indices(
     return weather_year, time_index
 
 
-def build_hydro_profiles():
+def z90_capacity_by_site() -> pd.Series:
+    """Sum transformed ReEDS generator capacity by hydro type and z90 region."""
+    generators = load_generator_data().merge(
+        load_plant_region_data("z90"), on="plant_id", validate="many_to_one"
+    )
+    return generators.groupby(["hydro_type", "region"])["capacity_mw"].sum()
+
+
+def write_z90_resource_group(
+    profile_path: Path, hydro_type: str, capacity_by_site: pd.Series, site_ids: pd.Index
+) -> None:
+    capacity = capacity_by_site.loc[hydro_type].reindex(site_ids)
+    if capacity.isna().any():
+        raise ValueError(f"Missing z90 ReEDS capacity for {hydro_type} profile sites")
+    metadata = pd.DataFrame(
+        {"region": site_ids, "capacity_mw": capacity.to_numpy(), "id": site_ids}
+    )
+    name = f"existing_hydro_{hydro_type}_z90_metadata.csv"
+    metadata_path = profile_path.with_name(name)
+    metadata.to_csv(metadata_path, index=False)
+
+    small = hydro_type == "run_of_river"
+    descriptor = {
+        "technology": "hydro",
+        "existing": True,
+        "metadata": metadata_path.name,
+        "profiles": profile_path.name,
+        "small": small,
+    }
+    descriptor_name = (
+        "regional_small_hydro_True.json" if small else "regional_hydro_True.json"
+    )
+    profile_path.with_name(descriptor_name).write_text(
+        json.dumps(descriptor, indent=4) + "\n"
+    )
+
+
+def build_hydro_profiles(zone_set: str = "z134") -> None:
     """Main function to build and save hydroelectric generation profiles."""
 
     try:
         # Query monthly capacity factors
-        monthly_cf = query_pudl_monthly_capacity_factors()
+        monthly_cf = query_pudl_monthly_capacity_factors(zone_set=zone_set)
 
         if len(monthly_cf) == 0:
             logger.warning(
@@ -311,6 +366,9 @@ def build_hydro_profiles():
 
         # Ensure output directory exists
         output_dir = Path("existing_resource_groups")
+        if zone_set == "z90":
+            output_dir = Path("existing_resource_groups_z90")
+            capacity_by_site = z90_capacity_by_site()
         output_dir.mkdir(exist_ok=True)
 
         # Build profiles for each hydro type
@@ -356,9 +414,30 @@ def build_hydro_profiles():
             if null_count > 0:
                 logger.warning(f"{hydro_type}: Found {null_count} null values")
 
+            if zone_set == "z90":
+                for site, rows in output_df.groupby("site_id"):
+                    counts = rows.groupby("weather_year").size()
+                    incomplete = [
+                        year
+                        for year in range(START_YEAR, END_YEAR + 1)
+                        if counts.get(year, 0) != 8760
+                    ]
+                    if incomplete:
+                        logger.warning(
+                            "%s/%s: incomplete or missing weather years: %s",
+                            site, hydro_type, incomplete,
+                        )
+
             # Save as parquet
             output_file = output_dir / f"hydro_{hydro_type}_2007_2013.parquet"
             output_df.to_parquet(output_file, compression="zstd")
+            if zone_set == "z90":
+                write_z90_resource_group(
+                    output_file,
+                    hydro_type,
+                    capacity_by_site,
+                    pd.Index(sorted(output_df["site_id"].unique())),
+                )
 
             logger.info(f"\nSaved {hydro_type} profiles to {output_file}")
             logger.info(f"  Rows: {len(output_df)}")
@@ -375,4 +454,8 @@ def build_hydro_profiles():
 
 
 if __name__ == "__main__":
-    build_hydro_profiles()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--zone-set", choices=ZONE_SETS, default="z134", help="ReEDS zone set (default: z134)"
+    )
+    build_hydro_profiles(parser.parse_args().zone_set)
