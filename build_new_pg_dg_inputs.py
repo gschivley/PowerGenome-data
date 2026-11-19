@@ -3,7 +3,7 @@ Build distributed generation inputs for PowerGenome.
 
 Creates two tables:
 1. distributed_capacity: region, capacity_mw, year
-2. distributed_profiles: region, weather_year, value
+2. distributed_profiles: time_index, region, weather_year, value, datetime_utc
 
 Supports inputs from either a local directory or directly from the
 ReEDS GitHub repository (raw URLs under inputs/). ReEDS now provides
@@ -27,6 +27,7 @@ https://github.com/NREL/ReEDS-2.0/discussions/227#discussioncomment-13069190
 import argparse
 import os
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Union
 
@@ -50,6 +51,8 @@ DISTPV_CF_FILENAME = "cf_distpv_county.h5"
 # A tiny capacity floor used when weighting profiles, matching ReEDS, so
 # counties/BAs with (near) zero capacity don't produce divide-by-zero NaNs.
 CAP_MIN = 0.0001
+HOURS_PER_WEATHER_YEAR = 8760
+SOURCE_UTC_OFFSET_HOURS = -6
 
 
 def is_url(path: Union[str, Path]) -> bool:
@@ -244,6 +247,35 @@ def _county_weights(
     return weights.astype("float64")
 
 
+def _county_source_index(labels: np.ndarray) -> pd.DatetimeIndex:
+    try:
+        timestamps = [datetime.fromisoformat(label.decode("utf-8")) for label in labels]
+    except ValueError as exc:
+        raise ValueError("Invalid timestamp in the county profile HDF5 index_0.") from exc
+    source_offset = timedelta(hours=SOURCE_UTC_OFFSET_HOURS)
+    if any(stamp.utcoffset() != source_offset for stamp in timestamps):
+        raise ValueError("County profile timestamps must use fixed UTC−06:00 (no DST).")
+    return pd.DatetimeIndex(timestamps)
+
+
+def _utc_profile_calendar(source_index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Validate retained weather years and label their cyclic UTC slots."""
+    if source_index.empty:
+        raise ValueError("No county profile hours match --max-weather-year.")
+    if not source_index.is_monotonic_increasing:
+        raise ValueError("County profile timestamps must be in chronological order.")
+
+    local_hours = source_index.tz_localize(None)
+    for year, hours in pd.Series(local_hours).groupby(local_hours.year, sort=False):
+        # 8,760 consecutive hours from Jan 1 include Feb 29 and omit Dec 31 in leap years.
+        expected = pd.date_range(f"{year}-01-01", periods=HOURS_PER_WEATHER_YEAR, freq="h")
+        if not expected.equals(pd.DatetimeIndex(hours)):
+            raise ValueError(
+                f"County profile year {year} does not match the 8,760-hour ReEDS calendar."
+            )
+    return local_hours.tz_localize("UTC")
+
+
 def build_distributed_profiles(
     generation_profiles_path: Union[str, Path],
     county_capacity_path: Union[str, Path],
@@ -255,11 +287,11 @@ def build_distributed_profiles(
     cache_dir: Union[str, Path, None] = None,
 ) -> pd.DataFrame:
     """
-    Build distributed profiles table with columns: time_index, region, weather_year, value.
+    Build hourly BA capacity-factor profiles with timezone-aware UTC labels.
 
     Reads county-level capacity factors, aggregates them to BA regions using
-    a capacity-weighted (or population-weighted) average, then reshapes to a
-    tidy frame. Profiles represent capacity factors (0-1) without conversion.
+    a capacity-weighted (or population-weighted) average, and cyclically shifts
+    each weather year from fixed UTC−06:00 to UTC. Values are not rescaled.
     """
     # Defer heavy imports so script can run without them if skipping profiles
     import h5py
@@ -274,13 +306,19 @@ def build_distributed_profiles(
         tmp_file = download_file(str(generation_profiles_path), cache_dir=cache_dir)
         h5_path = tmp_file
 
-    with h5py.File(str(h5_path), "r") as f:
-        county_cf = pd.DataFrame(
-            f["data"][:],
-            columns=[x.decode("utf-8") for x in f["columns"][:]],
-            index=pd.to_datetime([x.decode("utf-8") for x in f["index_0"][:]]),
-        )
-        county_cf = county_cf.loc[county_cf.index.year <= max_weather_year, :]
+    try:
+        with h5py.File(str(h5_path), "r") as f:
+            source_index = _county_source_index(f["index_0"][:])
+            retained = source_index.year <= max_weather_year
+            utc_index = _utc_profile_calendar(source_index[retained])
+            county_cf = pd.DataFrame(
+                f["data"][:],
+                columns=[x.decode("utf-8") for x in f["columns"][:]],
+                index=source_index,
+            ).loc[retained]
+    finally:
+        if tmp_file is not None and cache_dir is None:
+            Path(tmp_file).unlink(missing_ok=True)
 
     # Downselect profiles to counties present in the mapping (all of them in
     # practice) and align the weights to the same county set.
@@ -306,7 +344,6 @@ def build_distributed_profiles(
 
     # Capacity-weighted average capacity factor per BA, mirroring ReEDS'
     # calculate_regional_distpv_cf: regional generation / regional capacity.
-    # Drop the temporary (downloaded) file only after the CF frame is built.
     regional_cf = (
         county_cf.mul(county_weights, axis=1)
         .rename(columns=county2zone)
@@ -315,29 +352,21 @@ def build_distributed_profiles(
         .T.div(regional_weights, axis=1)
     )
 
-    # Clean up temporary file once we no longer need the downloaded data
-    if tmp_file is not None and cache_dir is None and os.path.exists(tmp_file):
-        try:
-            os.remove(tmp_file)
-        except OSError:
-            pass
+    # Rotate each validated year independently, including across the year boundary.
+    hours_by_year = np.arange(len(utc_index)).reshape(-1, HOURS_PER_WEATHER_YEAR)
+    source_rows = np.roll(hours_by_year, -SOURCE_UTC_OFFSET_HOURS, axis=1).ravel()
 
-    # ReEDS stores county distpv profiles in fixed CST (UTC-6), without DST.
-    # Shift the clock-forward sequence six hours so time_index is UTC.
-    utc_offset_hours = -6
-
-    # Build tidy dataframe
     df_list = []
     for region in tqdm(regional_cf.columns, desc="Processing regions"):
-        # Convert the fixed CST sequence to UTC.
-        gen_profile = np.roll(regional_cf[region].values, -utc_offset_hours)
+        gen_profile = regional_cf[region].to_numpy()[source_rows]
 
         _df = pd.DataFrame(
             {
                 "time_index": range(len(gen_profile)),
                 "region": region,
-                "weather_year": regional_cf.index.year,
+                "weather_year": utc_index.year,
                 "value": gen_profile,
+                "datetime_utc": utc_index,
             }
         )
         df_list.append(_df)
@@ -349,7 +378,9 @@ def build_distributed_profiles(
     )
     distributed_profiles["value"] = distributed_profiles["value"].astype("float32")
 
-    return distributed_profiles[["time_index", "region", "weather_year", "value"]]
+    return distributed_profiles[
+        ["time_index", "region", "weather_year", "value", "datetime_utc"]
+    ]
 
 
 def main():

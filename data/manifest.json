@@ -46,18 +46,31 @@
           "last_updated": "2026-08-11",
           "md5": "39a54bb4fc2bf42287d66ceadb90714f",
           "version": "2026-08-11"
+        },
+        {
+          "last_updated": "2026-11-19",
+          "md5": "f1b768dc3a404e651766a63ffbc33e79",
+          "version": "2026-11-19"
         }
       ],
       "last_updated": "2026-11-19",
       "license": "cc-by-4.0",
-      "md5": "f1b768dc3a404e651766a63ffbc33e79",
+      "md5": "691755f533e6195d72f77bd2740c6112",
       "scripts": [
         "build_new_pg_dg_inputs.py"
       ],
       "sources": [
         {
-          "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
-          "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
+          "source": "ReEDS hourly county distributed PV capacity factors (cf_distpv_county.h5), resolved via ReEDS inputs/remote_files.csv and aggregated to z134 balancing areas by build_new_pg_dg_inputs.py; fixed UTC\u221206:00 values shifted six hours later within each weather year and labeled on the cyclic 8,760-hour UTC calendar.",
+          "source_url": "https://zenodo.org/records/18636038/files/cf_distpv_county.h5"
+        },
+        {
+          "source": "ReEDS stscen2023_mid_case county PV capacity weights, using 2036 because 2035 is not available in the source table.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+        },
+        {
+          "source": "ReEDS county-to-zone mapping for z134 balancing areas.",
+          "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/5bdbb89b31727c7f6eb55b93a56d14f8c3132890/inputs/zones/z134/county2zone.csv"
         }
       ],
       "version": "2026-11-19"
@@ -400,6 +413,6 @@
       "version": "2026-11-19"
     }
   },
-  "generated_at_utc": "2026-11-19T12:42:08.113973+00:00",
+  "generated_at_utc": "2026-11-19T13:23:28.769929+00:00",
   "manifest_version": 1
 }
