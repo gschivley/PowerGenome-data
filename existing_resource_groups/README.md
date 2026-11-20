@@ -18,6 +18,33 @@ Because the profiles are built from the PUDL `nightly` parquet, the exact number
 
 All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
+## Rebuild hydro by zone set
+
+From the repository root, select a zone set or build all available sets:
+
+```bash
+uv run python scripts/build_hydro_profiles.py --zone-set z90
+uv run python scripts/build_hydro_profiles.py --all-zone-sets
+```
+
+Zone sets are discovered from `data/plant_region_map.csv`. To add a set, supply
+its plant assignments there. Use a lowercase name starting with a letter or
+digit, with optional underscores or hyphens. The default (`--zone-set z134`)
+still writes to `existing_resource_groups/`.
+
+Each build filters the plant map before aggregating monthly PUDL generation
+and capacity. For other sets, both profile Parquets, PowerGenome JSON descriptors,
+and metadata CSVs are written to `existing_resource_groups_<zone_set>/`.
+Point `RESOURCE_GROUPS` at the matching directory (e.g. `existing_resource_groups_z90/`).
+
+Each non-legacy descriptor references its own metadata CSV (`region,capacity_mw,id`).
+`id` and `region` both match the profile's `site_id`; `capacity_mw` is the sum
+of transformed ReEDS generator capacity for that hydro technology and zone,
+not historical PUDL capacity. Only sites with a profile are included. Missing
+PUDL months or years are logged, not filled; inspect coverage before selecting
+weather years for a model. Other zone sets do not write into the published z134
+resource group.
+
 ## Files
 
 **Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing renewable plant/resource metadata by ReEDS balancing area (e.g. capacity, plant identifiers), renamed to PowerGenome conventions (`region`, `capacity_mw`).

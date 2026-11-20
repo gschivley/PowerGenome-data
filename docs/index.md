@@ -123,8 +123,11 @@ plant_region_table:
     - - [zone_set, 'in', [z134]]
 ```
 
-The WECC and EI_PJM examples and the hydro profile builder use z134. For a z90
-model, use `[z90]` in the filter and use matching regions in the other inputs.
+The WECC and EI_PJM examples use z134. For a z90 model, use `[z90]` in the
+filter and use matching regions in the other inputs. The hydro profile builder
+defaults to z134. Pass `--zone-set z90` (or another zone set from the plant map)
+to build its separate hydro resource group, or `--all-zone-sets` to build all
+available zone sets. See `existing_resource_groups/README.md` for details.
 Regions are assigned from the plant's county FIPS independently for each zone
 set. To reproduce the checked-in map without rebuilding the generator table, run:
 
