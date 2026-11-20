@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 import pandas as pd
+import pytest
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "build_hydro_profiles.py"
 SPEC = importlib.util.spec_from_file_location("build_hydro_profiles", SCRIPT)
@@ -52,8 +53,9 @@ def test_hydro_uses_only_z134_plant_regions(tmp_path, monkeypatch):
     ]
 
 
-def test_build_z90_aggregates_plants_and_writes_matching_resource_groups(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize("zone_set", ["z90", "future-zones"])
+def test_build_aggregates_plants_and_writes_matching_resource_groups(
+    tmp_path, monkeypatch, zone_set
 ):
     monkeypatch.chdir(tmp_path)
     data = tmp_path / "data"
@@ -61,7 +63,7 @@ def test_build_z90_aggregates_plants_and_writes_matching_resource_groups(
     (data / "plant_region_map.csv").write_text(
         "plant_id,region,zone_set\n"
         "1,p1,z134\n2,p2,z134\n3,p2,z134\n"
-        "1,WA_W,z90\n2,WA_W,z90\n3,WA_W,z90\n"
+        f"1,WA_W,{zone_set}\n2,WA_W,{zone_set}\n3,WA_W,{zone_set}\n"
     )
     (data / "reeds_generators_transformed.csv").write_text(
         "plant_id,technology,capacity_mw\n"
@@ -86,29 +88,51 @@ def test_build_z90_aggregates_plants_and_writes_matching_resource_groups(
         lambda *, zone_set: query(str(source), [], zone_set=zone_set),
     )
 
-    MODULE.build_hydro_profiles()
+    MODULE.main([])
     legacy = tmp_path / "existing_resource_groups"
     original = {path.name: path.read_bytes() for path in legacy.iterdir()}
     z134 = pd.read_parquet(legacy / "hydro_conventional_2007_2013.parquet")
     assert set(z134["site_id"]) == {"p1", "p2"}
 
-    MODULE.build_hydro_profiles("z90")
+    MODULE.main(["--zone-set", zone_set])
     assert {path.name: path.read_bytes() for path in legacy.iterdir()} == original
-    z90 = tmp_path / "existing_resource_groups_z90"
+    output_dir = tmp_path / f"existing_resource_groups_{zone_set}"
     cases = [
         ("regional_hydro_True.json", False, 150, 0.5),
         ("regional_small_hydro_True.json", True, 200, 0.8),
     ]
     for filename, small, capacity, cf in cases:
-        descriptor = json.loads((z90 / filename).read_text())
+        descriptor = json.loads((output_dir / filename).read_text())
         assert descriptor["small"] is small
-        profiles = pd.read_parquet(z90 / descriptor["profiles"])
+        profiles = pd.read_parquet(output_dir / descriptor["profiles"])
         assert set(profiles["site_id"]) == {"WA_W"}
         assert profiles["value"].sub(cf).abs().max() < 1e-12
-        metadata = pd.read_csv(z90 / descriptor["metadata"])
+        metadata = pd.read_csv(output_dir / descriptor["metadata"])
         assert metadata.to_dict("records") == [
             {"region": "WA_W", "id": "WA_W", "capacity_mw": capacity}
         ]
+
+
+def test_cli_builds_all_discovered_sets_and_rejects_unknown_ones(
+    tmp_path, monkeypatch, capsys
+):
+    mapping = tmp_path / "plant_region_map.csv"
+    mapping.write_text(
+        "plant_id,region,zone_set\n1,NEW_A,future-zones\n2,NEW_B,future-zones\n1,WA_W,z90\n"
+    )
+    monkeypatch.setattr(MODULE, "PLANT_REGION_MAP", mapping)
+    build = mock.Mock()
+    monkeypatch.setattr(MODULE, "build_hydro_profiles", build)
+
+    MODULE.main(["--all-zone-sets"])
+    assert build.call_args_list == [mock.call("future-zones"), mock.call("z90")]
+
+    build.reset_mock()
+    with pytest.raises(SystemExit) as error:
+        MODULE.main(["--zone-set", "missing"])
+    assert error.value.code == 2
+    assert "available: future-zones, z90" in capsys.readouterr().err
+    build.assert_not_called()
 
 
 class TestHoursInMonth(unittest.TestCase):

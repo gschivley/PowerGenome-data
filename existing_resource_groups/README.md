@@ -18,28 +18,32 @@ Because the profiles are built from the PUDL `nightly` parquet, the exact number
 
 All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
-## Rebuild hydro for z90
+## Rebuild hydro by zone set
 
-From the repository root, run:
+From the repository root, select a zone set or build all available sets:
 
 ```bash
 uv run python scripts/build_hydro_profiles.py --zone-set z90
+uv run python scripts/build_hydro_profiles.py --all-zone-sets
 ```
 
-The default (`--zone-set z134`) still writes to `existing_resource_groups/`.
-The z90 build filters the plant map before aggregating monthly PUDL generation
-and capacity. It writes both profile Parquets and their PowerGenome resource-group
-JSON descriptors and metadata CSVs to the separate, locally generated
-`existing_resource_groups_z90/` directory. Point `RESOURCE_GROUPS` there for z90
-hydro, not at the z134 hydro descriptors.
+Zone sets are discovered from `data/plant_region_map.csv`. To add a set, supply
+its plant assignments there. Use a lowercase name starting with a letter or
+digit, with optional underscores or hyphens. The default (`--zone-set z134`)
+still writes to `existing_resource_groups/`.
 
-Each z90 descriptor references its own metadata CSV (`region,capacity_mw,id`).
+Each build filters the plant map before aggregating monthly PUDL generation
+and capacity. For other sets, both profile Parquets, PowerGenome JSON descriptors,
+and metadata CSVs are written to `existing_resource_groups_<zone_set>/`.
+Point `RESOURCE_GROUPS` at the matching directory (e.g. `existing_resource_groups_z90/`).
+
+Each non-legacy descriptor references its own metadata CSV (`region,capacity_mw,id`).
 `id` and `region` both match the profile's `site_id`; `capacity_mw` is the sum
 of transformed ReEDS generator capacity for that hydro technology and zone,
 not historical PUDL capacity. Only sites with a profile are included. Missing
 PUDL months or years are logged, not filled; inspect coverage before selecting
-weather years for a model. The z90 build does not add files to the published
-z134 resource group.
+weather years for a model. Other zone sets do not write into the published z134
+resource group.
 
 ## Files
 
