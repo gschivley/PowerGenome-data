@@ -22,6 +22,8 @@ All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing 
 
 **Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing renewable plant/resource metadata by ReEDS balancing area (e.g. capacity, plant identifiers), renamed to PowerGenome conventions (`region`, `capacity_mw`).
 
+**Hydro metadata (per hydro type)** — `existing_hydro_conventional_reeds_ba_metadata.csv` and `existing_hydro_run_of_river_reeds_ba_metadata.csv`: operating capacity of each hydro type by ReEDS balancing area, summed from `data/reeds_generators_transformed.csv` (technologies `Conventional Hydroelectric` and `Run of River Hydroelectric`) and mapped with `data/plant_region_map.csv` by `scripts/build_hydro_profiles.py`. Each file lists exactly the regions (`id`) that have a profile in the matching hydro profile parquet. These replace the earlier shared `existing_hydro_reeds_ba_metadata.csv`, which listed every hydro region for both groups with combined capacities that did not match either type.
+
 **Hourly generation profiles (per technology)** — `existing_<tech>_reeds_ba_profiles_20250513_tidy.parquet` and `existing_osw_profiles_tidy.parquet`: hourly generation profiles for existing renewables by ReEDS balancing area, generated as described in *Method* above.
 
 **Hydro profiles** — `hydro_conventional_2007_2013.parquet` and `hydro_run_of_river_2007_2013.parquet`: hourly conventional and run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007–2013.
