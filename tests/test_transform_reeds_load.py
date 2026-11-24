@@ -1,11 +1,15 @@
 """UTC calendar, annual shift, and lossless Parquet migration regressions."""
 
+import sys
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from transform_reeds_load import (
     DIAGNOSTIC_REGIONS,
