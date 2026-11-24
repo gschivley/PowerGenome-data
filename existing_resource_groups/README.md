@@ -16,17 +16,17 @@ Monthly capacity factors are derived from PUDL `out_eia__monthly_generators.parq
 
 Because the profiles are built from the PUDL `nightly` parquet, the exact numbers depend on the snapshot fetched at build time; the 2026.09.24 profiles were built from the nightly available on 2026-09-24.
 
-All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
+All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing resource capacity by ReEDS BA is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
 ## Files
 
-**Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing renewable plant/resource metadata by ReEDS balancing area (e.g. capacity, plant identifiers), renamed to PowerGenome conventions (`region`, `capacity_mw`).
+**Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing capacity by ReEDS balancing area, one row per site, with columns `region`, `capacity_mw` and `id` (the profile `site_id`; offshore wind also has `notes`).
 
 **Hourly generation profiles (per technology)** — `existing_<tech>_reeds_ba_profiles_20250513_tidy.parquet` and `existing_osw_profiles_tidy.parquet`: hourly generation profiles for existing renewables by ReEDS balancing area, generated as described in *Method* above.
 
 **Hydro profiles** — `hydro_conventional_2007_2013.parquet` and `hydro_run_of_river_2007_2013.parquet`: hourly conventional and run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007–2013.
 
-**Regional flags** — `regional_<tech>_True.json`: per-technology flags controlling regional (balancing-area-level) aggregation of the corresponding existing resource groups.
+**Resource group definitions** — `regional_<tech>_True.json`: PowerGenome resource group files. Each names the technology, its metadata CSV and its profile parquet; `regional_hydro_True.json` (conventional) and `regional_small_hydro_True.json` (run of river, `small: true`) share `existing_hydro_reeds_ba_metadata.csv` and point at the matching hydro profile parquet.
 
 ## Notes
 
