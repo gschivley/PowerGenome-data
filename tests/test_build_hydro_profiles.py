@@ -173,5 +173,70 @@ class TestInterpolateMonthlyToHourly(unittest.TestCase):
         self.assertTrue(any("2007-03" in msg for msg in ctx.output))
 
 
+class TestBuildHydroMetadata(unittest.TestCase):
+    """Conventional and run-of-river groups need separate metadata.
+
+    A shared file made the conventional group request run-of-river-only sites
+    (e.g. p133), which PowerGenome reports as missing profile coverage.
+    """
+
+    def test_capacity_split_by_hydro_type(self):
+        generators = pd.DataFrame(
+            {
+                "plant_id": [1, 1, 2, 3, 4, 5],
+                "technology": [
+                    "Conventional Hydroelectric",
+                    "Conventional Hydroelectric",
+                    "Run of River Hydroelectric",
+                    "Run of River Hydroelectric",
+                    "Hydroelectric Pumped Storage",
+                    "Conventional Hydroelectric",
+                ],
+                "capacity_mw": [100.0, 50.0, 20.0, 5.0, 900.0, 0.0],
+            }
+        )
+        plant_region = pd.DataFrame(
+            {"plant_id": [1, 2, 3, 4, 5], "region": ["p10", "p10", "p9", "p10", "p2"]}
+        )
+        meta = MODULE.build_hydro_metadata(generators, plant_region)
+
+        conv = meta["conventional"]
+        self.assertEqual(conv["region"].tolist(), ["p10"])
+        self.assertEqual(conv["capacity_mw"].tolist(), [150.0])
+        self.assertEqual(conv["id"].tolist(), conv["region"].tolist())
+
+        ror = meta["run_of_river"]
+        self.assertEqual(ror["region"].tolist(), ["p9", "p10"])
+        self.assertEqual(ror["capacity_mw"].tolist(), [5.0, 20.0])
+
+    def test_unmapped_plant_raises(self):
+        generators = pd.DataFrame(
+            {
+                "plant_id": [1],
+                "technology": ["Run of River Hydroelectric"],
+                "capacity_mw": [10.0],
+            }
+        )
+        plant_region = pd.DataFrame({"plant_id": [2], "region": ["p1"]})
+        with self.assertRaisesRegex(ValueError, "plant_region_map"):
+            MODULE.build_hydro_metadata(generators, plant_region)
+
+    def test_committed_metadata_matches_inputs(self):
+        root = Path(__file__).parents[1]
+        generators = pd.read_csv(root / "data" / "reeds_generators_transformed.csv")
+        plant_region = pd.read_csv(root / "data" / "plant_region_map.csv")
+        meta = MODULE.build_hydro_metadata(generators, plant_region)
+        for hydro_type, expected in meta.items():
+            name = MODULE.METADATA_FILENAME.format(hydro_type=hydro_type)
+            for folder in [
+                "existing_resource_groups",
+                "WECC/resource_groups/existing_resource_groups",
+                "EI_PJM/resource_groups/existing_resource_groups",
+            ]:
+                with self.subTest(folder=folder, hydro_type=hydro_type):
+                    committed = pd.read_csv(root / folder / name)
+                    pd.testing.assert_frame_equal(committed, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

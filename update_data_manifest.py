@@ -74,6 +74,28 @@ SOURCES: dict[str, list[dict[str, str]]] = {
             ),
         },
     ],
+    "existing_hydro_conventional_reeds_ba_metadata.csv": [
+        {
+            "source": (
+                "Existing conventional hydro capacity by ReEDS balancing area: sum of "
+                "'Conventional Hydroelectric' capacity_mw in reeds_generators_transformed.csv, "
+                "mapped to regions with plant_region_map.csv (built by "
+                "build_hydro_profiles.py). id matches the site_id in "
+                "hydro_conventional_2007_2013.parquet."
+            ),
+        },
+    ],
+    "existing_hydro_run_of_river_reeds_ba_metadata.csv": [
+        {
+            "source": (
+                "Existing run-of-river hydro capacity by ReEDS balancing area: sum of "
+                "'Run of River Hydroelectric' capacity_mw in reeds_generators_transformed.csv, "
+                "mapped to regions with plant_region_map.csv (built by "
+                "build_hydro_profiles.py). id matches the site_id in "
+                "hydro_run_of_river_2007_2013.parquet."
+            ),
+        },
+    ],
     "distributed_capacity.parquet": [
         {
             "source": (
@@ -368,6 +390,14 @@ SCRIPTS: dict[str, list[str]] = {
     "technology_heat_rates_nrelatb.csv": ["build_atb_data.py"],
     "transmission_capacity_reeds.csv": ["merge_transmission_capacity.py"],
     # Existing resource groups (existing_resource_groups/) ---------------------------
+    "existing_hydro_conventional_reeds_ba_metadata.csv": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
+    "existing_hydro_run_of_river_reeds_ba_metadata.csv": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py",
+    ],
     "hydro_conventional_2007_2013.parquet": [
         "build_hydro_profiles.py",
         "transform_reeds_generators.py",

@@ -6,8 +6,16 @@ This script:
 2. Queries PUDL monthly EIA data from S3 to calculate monthly capacity factors
 3. Interpolates to hourly values and applies 1-week moving average smoothing
 4. Outputs tidy parquet files with site_id, weather_year, time_index, value
+5. Writes one resource-group metadata CSV per hydro type (region, capacity_mw, id)
+
+Conventional and run-of-river hydro are separate PowerGenome resource groups, so
+each needs its own metadata. Sharing one file makes each group request sites that
+only exist in the other group's profiles, and overstates each group's capacity.
+
+Pass ``--metadata-only`` to rebuild just the metadata from local files (no PUDL).
 """
 
+import argparse
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -47,6 +55,9 @@ HYDRO_TYPES = {
 }
 
 
+METADATA_FILENAME = "existing_hydro_{hydro_type}_reeds_ba_metadata.csv"
+
+
 def hours_in_month(report_date) -> float:
     """Number of real calendar hours in the month of ``report_date``.
 
@@ -83,6 +94,59 @@ def load_generator_data() -> pd.DataFrame:
 
     logger.info(f"Found {len(generators)} hydroelectric generators")
     return generators[["plant_id", "hydro_type"]].drop_duplicates()
+
+
+def build_hydro_metadata(
+    generators: pd.DataFrame, plant_region: pd.DataFrame
+) -> dict[str, pd.DataFrame]:
+    """Operating hydro capacity by region for each hydro type.
+
+    Returns ``{hydro_type: DataFrame[region, capacity_mw, id]}`` where ``id`` is the
+    profile ``site_id`` (the region). Regions with no capacity of a type are left
+    out, matching the regions that get a profile for that type.
+    """
+    hydro = generators.loc[
+        generators["technology"].isin(HYDRO_TYPES.values()),
+        ["plant_id", "technology", "capacity_mw"],
+    ].merge(plant_region[["plant_id", "region"]], on="plant_id", how="left")
+    unmapped = hydro["region"].isna()
+    if unmapped.any():
+        raise ValueError(
+            "Hydro plants missing from plant_region_map: "
+            f"{sorted(hydro.loc[unmapped, 'plant_id'].unique())}"
+        )
+
+    metadata = {}
+    for hydro_type, technology in HYDRO_TYPES.items():
+        cap = (
+            hydro.loc[hydro["technology"] == technology]
+            .groupby("region", as_index=False)["capacity_mw"]
+            .sum()
+        )
+        cap = cap.loc[cap["capacity_mw"] > 0].copy()
+        cap["capacity_mw"] = cap["capacity_mw"].round(1)
+        cap["id"] = cap["region"]
+        cap["_n"] = cap["region"].str.extract(r"(\d+)$", expand=False).astype(float)
+        metadata[hydro_type] = (
+            cap.sort_values(["_n", "region"])
+            .drop(columns="_n")
+            .reset_index(drop=True)
+        )
+    return metadata
+
+
+def write_hydro_metadata(output_dir: Path = Path("existing_resource_groups")) -> None:
+    """Build and save one metadata CSV per hydro type from local inputs."""
+    output_dir.mkdir(exist_ok=True)
+    generators = pd.read_csv("data/reeds_generators_transformed.csv")
+    metadata = build_hydro_metadata(generators, load_plant_region_data())
+    for hydro_type, df in metadata.items():
+        output_file = output_dir / METADATA_FILENAME.format(hydro_type=hydro_type)
+        df.to_csv(output_file, index=False)
+        logger.info(
+            f"Saved {hydro_type} metadata to {output_file} "
+            f"({len(df)} regions, {df['capacity_mw'].sum():,.1f} MW)"
+        )
 
 
 def merge_plant_region_hydro_data() -> pd.DataFrame:
@@ -374,4 +438,13 @@ def build_hydro_profiles():
 
 
 if __name__ == "__main__":
-    build_hydro_profiles()
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Only rebuild the per-type metadata CSVs from local files.",
+    )
+    args = parser.parse_args()
+    if not args.metadata_only:
+        build_hydro_profiles()
+    write_hydro_metadata()

@@ -1,17 +1,37 @@
 {
-  "data_version": "2026.09.24",
+  "data_version": "2026.11.24",
   "files": {
-    "existing_hydro_reeds_ba_metadata.csv": {
+    "existing_hydro_conventional_reeds_ba_metadata.csv": {
       "history": [],
-      "last_updated": "2026-08-31",
+      "last_updated": "2026-11-24",
       "license": "cc-by-4.0",
-      "md5": "b1a20e05842fda1981a09c4b6c6b6ef9",
+      "md5": "5f55d56f89a880c6507fc7d674efe2ec",
+      "scripts": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py"
+      ],
       "sources": [
         {
-          "source": "Existing hydro resource metadata by ReEDS balancing area (capacity, id, etc.)."
+          "source": "Existing conventional hydro capacity by ReEDS balancing area: sum of 'Conventional Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_conventional_2007_2013.parquet."
         }
       ],
-      "version": "2026-08-31"
+      "version": "2026-11-24"
+    },
+    "existing_hydro_run_of_river_reeds_ba_metadata.csv": {
+      "history": [],
+      "last_updated": "2026-11-24",
+      "license": "cc-by-4.0",
+      "md5": "18c78e9c0a757cdb4ba06ffa005d4407",
+      "scripts": [
+        "build_hydro_profiles.py",
+        "transform_reeds_generators.py"
+      ],
+      "sources": [
+        {
+          "source": "Existing run-of-river hydro capacity by ReEDS balancing area: sum of 'Run of River Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_run_of_river_2007_2013.parquet."
+        }
+      ],
+      "version": "2026-11-24"
     },
     "existing_offshorewind_reeds_ba_metadata.csv": {
       "history": [],
@@ -130,16 +150,22 @@
       "version": "2026-09-24"
     },
     "regional_hydro_True.json": {
-      "history": [],
-      "last_updated": "2026-08-31",
+      "history": [
+        {
+          "last_updated": "2026-08-31",
+          "md5": "931c086cec1d314c2c58fed9ad758833",
+          "version": "2026-08-31"
+        }
+      ],
+      "last_updated": "2026-11-24",
       "license": "cc-zero",
-      "md5": "931c086cec1d314c2c58fed9ad758833",
+      "md5": "a0824d4f3cf01f37f1156adeb9e8a79d",
       "sources": [
         {
           "source": "Regional aggregation flag for existing hydro resource groups."
         }
       ],
-      "version": "2026-08-31"
+      "version": "2026-11-24"
     },
     "regional_offshorewind_True.json": {
       "history": [],
@@ -154,16 +180,22 @@
       "version": "2026-08-31"
     },
     "regional_small_hydro_True.json": {
-      "history": [],
-      "last_updated": "2026-08-31",
+      "history": [
+        {
+          "last_updated": "2026-08-31",
+          "md5": "6dd235fd40cba22e9b21fa9aa5c79fd4",
+          "version": "2026-08-31"
+        }
+      ],
+      "last_updated": "2026-11-24",
       "license": "cc-zero",
-      "md5": "6dd235fd40cba22e9b21fa9aa5c79fd4",
+      "md5": "02dca3f967c00cea271b7799c52565b6",
       "sources": [
         {
           "source": "Regional aggregation flag for existing small hydro resource groups."
         }
       ],
-      "version": "2026-08-31"
+      "version": "2026-11-24"
     },
     "regional_solar_photovoltaic_True.json": {
       "history": [],
@@ -190,6 +222,6 @@
       "version": "2026-08-31"
     }
   },
-  "generated_at_utc": "2026-09-24T18:20:58.146072+00:00",
+  "generated_at_utc": "2026-11-24T19:32:29.348729+00:00",
   "manifest_version": 1
 }

@@ -1304,7 +1304,7 @@ class ManifestEntryTests(unittest.TestCase):
             self.assertIn("source", entry["sources"][0])
             self.assertEqual(entry["license"], "cc-by-4.0")
 
-    def test_real_existing_resource_groups_manifest_has_fourteen_files(self):
+    def test_real_existing_resource_groups_manifest_has_fifteen_files(self):
         import json as _json
 
         real = _json.loads(
@@ -1313,7 +1313,8 @@ class ManifestEntryTests(unittest.TestCase):
             ).read_text()
         )
         self.assertIn("data_version", real)
-        self.assertEqual(len(real["files"]), 14)
+        self.assertEqual(len(real["files"]), 15)
+        self.assertNotIn("existing_hydro_reeds_ba_metadata.csv", real["files"])
         self.assertNotIn("existing_osw_profiles.csv", real["files"])
         for name, entry in real["files"].items():
             self.assertIn("md5", entry)
