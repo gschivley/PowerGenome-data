@@ -14,7 +14,15 @@ Generation profiles for existing wind and solar resources were generated with NR
 
 Monthly capacity factors are derived from PUDL `out_eia__monthly_generators.parquet`. Only generators with `prime_mover_code = 'HY'` are used (pumped-storage `'PS'` and co-located thermal generators are excluded, since they report negative or non-hydro net generation that would corrupt the hydro profile). The hours-in-month divisor is computed as the true calendar-month length, so December (and every month) gets a valid non-zero capacity factor.
 
-Because the profiles are built from the PUDL `nightly` parquet, the exact numbers depend on the snapshot fetched at build time; the 2026.09.24 profiles were built from the nightly available on 2026-09-24.
+Generators with no reported generation in a month (NULL in PUDL) are left out of that month's capacity factor, instead of counting their capacity as zero output. Every site gets all 84 months of 2007–2013:
+
+- **Reported** (most sites): the site's own 2007–2013 data. If at least 75% of months are reported, a missing month uses the site's mean for that calendar month.
+- **Later years**: if a site's plants came online or started reporting after 2007–2013, each calendar month uses the same plants' mean capacity factor for 2014–2025, repeated in every weather year. These sites have no year-to-year variation. Run-of-river **p32** and **p108** use this method.
+- **Donor**: if a site has no usable data at all, it uses the capacity-weighted monthly capacity factor of same-type sites in the same state (or nationally if there are none). No current site needs this.
+
+The build fails if any site in the metadata is missing a full, non-zero 8,760-hour series for each weather year. PowerGenome runs the same coverage check.
+
+Because the profiles are built from the PUDL `nightly` parquet, the exact numbers depend on the snapshot fetched at build time; the 2026.11.24 profiles were built from the nightly available on 2026-11-24.
 
 All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
