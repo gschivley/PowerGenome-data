@@ -413,6 +413,19 @@ class EnvironmentPersistenceTests(unittest.TestCase):
         self.session.request.assert_not_called()
         return self.read_state()
 
+    def test_removal_notes_reach_description_but_not_zenodo_metadata(self):
+        metadata = deepcopy(NEW_STATE["metadata"])
+        metadata.setdefault("sections", {}).setdefault("core", {})["removal_notes"] = {
+            "old.csv": "Replaced by example.csv."
+        }
+        original = self.payload("production")
+        original.pop("removal_notes")
+        self.write_state({"metadata": metadata, "releases": {"core": original}})
+        self.run_release("production", publish=False, save=False)
+        sent = self.remote["set_metadata"].call_args.args[3]
+        self.assertNotIn("removal_notes", sent)
+        self.assertIn("Replaced by example.csv.", sent["description"])
+
     def test_alternating_environments_preserve_lineage_and_independent_histories(self):
         for original_env, target_env in (
             ("production", "sandbox"),
@@ -607,6 +620,33 @@ class DescriptionTests(unittest.TestCase):
         self.assertIn("wind.parquet", description)
         self.assertIn("2026.08.14", description)
         self.assertNotIn("core_a.csv", description)
+
+    def test_updated_file_shows_last_released_version(self):
+        info = {
+            "version": "2026-11-24",
+            "md5": "new",
+            "history": [
+                {"version": "2026-08-31", "md5": "released"},
+                {"version": "2026-09-24", "md5": "never-released"},
+            ],
+        }
+        self.assertEqual(
+            MODULE.previous_released_version(info, "released"), "2026-08-31"
+        )
+        # Unknown released md5 falls back to the latest history entry.
+        self.assertEqual(MODULE.previous_released_version(info, None), "2026-09-24")
+        manifest = {"data_version": "2026.11.24", "files": {"a.parquet": info}}
+        description = MODULE.build_description(
+            manifest,
+            "core",
+            manifest["files"],
+            [],
+            ["a.parquet"],
+            [],
+            False,
+            released_files={"a.parquet": {"md5": "released"}},
+        )
+        self.assertIn("2026-08-31 &rarr; 2026-11-24", description)
 
     def test_description_lists_changes(self):
         files = MANIFEST["files"]

@@ -164,7 +164,7 @@
       "md5": "931c086cec1d314c2c58fed9ad758833",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing hydro resource groups."
+          "source": "PowerGenome resource group definition for existing conventional hydro (technology 'hydro', small=false): links existing_hydro_reeds_ba_metadata.csv to hydro_conventional_2007_2013.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -176,7 +176,7 @@
       "md5": "79dd0b7c09fa92a36218270adb21ea9a",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing offshore wind resource groups."
+          "source": "PowerGenome resource group definition for existing offshore wind (technology 'offshorewind'): links existing_offshorewind_reeds_ba_metadata.csv to existing_osw_profiles_tidy.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -188,7 +188,7 @@
       "md5": "6dd235fd40cba22e9b21fa9aa5c79fd4",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing small hydro resource groups."
+          "source": "PowerGenome resource group definition for existing run-of-river hydro (technology 'hydro', small=true): links existing_hydro_reeds_ba_metadata.csv to hydro_run_of_river_2007_2013.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -200,7 +200,7 @@
       "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing solar photovoltaic resource groups."
+          "source": "PowerGenome resource group definition for existing utility-scale solar PV (technology 'utilitypv'): links existing_solar_reeds_ba_metadata.csv to existing_solar_reeds_ba_profiles_20250513_tidy.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -212,7 +212,7 @@
       "md5": "8ef3157cd915e12f3f0e75a149105d54",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing wind resource groups."
+          "source": "PowerGenome resource group definition for existing onshore wind (technology 'landbasedwind'): links existing_onshorewind_reeds_ba_metadata.csv to existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet."
         }
       ],
       "version": "2026-08-31"
