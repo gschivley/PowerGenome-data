@@ -23,10 +23,10 @@
             "orcid": "0000-0002-7707-0221"
           }
         ],
-        "title": "PowerGenome Existing Renewable Resource Groups",
         "removal_notes": {
           "existing_hydro_reeds_ba_metadata.csv": "Replaced by existing_hydro_conventional_reeds_ba_metadata.csv and existing_hydro_run_of_river_reeds_ba_metadata.csv. The shared file listed every hydro region for both the conventional and run-of-river groups, with combined capacities that matched neither type, so each group requested sites that had no profile of that type."
-        }
+        },
+        "title": "PowerGenome Existing Renewable Resource Groups"
       },
       "profiles": {
         "creators": [
@@ -46,78 +46,835 @@
   },
   "releases": {
     "core": {
-      "data_version": "2026.08.14",
-      "deposition_id": "22233228",
-      "doi": "10.5281/zenodo.22233228",
-      "environment": "production",
-      "files": {
-        "cpi_data.csv": "0dcf40c82a204b361f9da0fdc7070550",
-        "distributed_capacity.parquet": "d8c206063044ea93edb80e8cae100357",
-        "distributed_profiles.parquet": "39a54bb4fc2bf42287d66ceadb90714f",
-        "dollar_year_adjustment.csv": "2e819d4d7f465d8d273b2da57f0a2fd1",
-        "fuel_prices.parquet": "a5393175e8eabda1134e849ceeb6f5e1",
-        "nerc_reserve_margins.csv": "b8ac4f0a59127c9e483d9b59aaad78b4",
-        "operational_constraints_reeds.csv": "75b7e22488de8048e56c1e1f81c359f9",
-        "plant_region_map.csv": "0d8a6f43695c230a418827820f071dd8",
-        "reeds_generators_transformed.csv": "1dfff9c035410c487687ee9da9c85395",
-        "reeds_load_transformed.parquet": "2a6c49b1cd3ea175b776ce853f06485e",
-        "regional_cost_multipliers.csv": "6c46df3480cbecd82ac1d724f4255658",
-        "reserve_margins.csv": "597fc25a77553b29217ea35037258d73",
-        "technology_costs_atb.parquet": "4c65c88129c4db3d0df180c3eb28a3ec",
-        "technology_heat_rates_nrelatb.csv": "356c16b73d98fd6ac2dcf95510701630",
-        "transmission_capacity_reeds.csv": "afed76f028868aae1d68c095bca01f24"
-      },
-      "published": true,
-      "release_version": "2026.08.14.v1",
-      "versions": [
-        "2026.08.14.v1"
-      ]
+      "environments": {
+        "production": {
+          "data_version": "2026.11.24",
+          "deposition_id": "24514132",
+          "doi": "10.5281/zenodo.24514132",
+          "environment": "production",
+          "files": {
+            "cpi_data.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "0dcf40c82a204b361f9da0fdc7070550",
+              "sources": [
+                {
+                  "source": "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv).",
+                  "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "distributed_capacity.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "d8c206063044ea93edb80e8cae100357",
+              "sources": [
+                {
+                  "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+                },
+                {
+                  "source": "ReEDS county-to-zone mapping used to aggregate capacity to balancing areas.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "distributed_profiles.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+              "sources": [
+                {
+                  "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
+                  "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "dollar_year_adjustment.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "2e819d4d7f465d8d273b2da57f0a2fd1",
+              "sources": [
+                {
+                  "source": "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index 2017=100), annual, from FRED with BEA NIPA API fallback.",
+                  "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "fuel_prices.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+              "sources": [
+                {
+                  "source": "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.",
+                  "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "nerc_reserve_margins.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "b8ac4f0a59127c9e483d9b59aaad78b4",
+              "sources": [
+                {
+                  "source": "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.",
+                  "source_url": "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "operational_constraints_reeds.csv": {
+              "last_updated": "2026-08-14",
+              "license": "cc-by-4.0",
+              "md5": "75b7e22488de8048e56c1e1f81c359f9",
+              "sources": [
+                {
+                  "source": "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), transformed by build_operational_constraints_reeds.py into PowerGenome operational constraints.",
+                  "source_url": "https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json"
+                }
+              ],
+              "version": "2026-08-14"
+            },
+            "plant_region_map.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "0d8a6f43695c230a418827820f071dd8",
+              "sources": [
+                {
+                  "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) as the plant list, joined to ReEDS zones by transform_reeds_generators.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+                },
+                {
+                  "source": "ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant to a model region.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reeds_generators_transformed.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "1dfff9c035410c487687ee9da9c85395",
+              "sources": [
+                {
+                  "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+                },
+                {
+                  "source": "PUDL/EIA yearly generators parquet, used for retirement info on existing units.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reeds_load_transformed.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "283d3eeea526cfa21bfbac3866cb96e5",
+              "sources": [
+                {
+                  "source": "ReEDS v2025.7.0 hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS SHA256 5af50c3cf48b4262a0a376698178fec55852af3d7c6c0faf735296cac62477b8), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py. Fixed UTC-06:00 values cyclically rolled +6 hours per annual region/scenario group to UTC; timezone-aware datetime_utc alongside 1-based time_index. 8760-hour calendar retains Feb 29 and omits Dec 31 in leap years. Parquet ZSTD level 3.",
+                  "source_url": "https://github.com/NatLabRockies/ReEDS-2.0/blob/v2025.7.0/inputs/load/EER_IRAlow_load_hourly.h5"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_cost_multipliers.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "6c46df3480cbecd82ac1d724f4255658",
+              "sources": [
+                {
+                  "source": "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.",
+                  "source_url": "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reserve_margins.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "597fc25a77553b29217ea35037258d73",
+              "sources": [
+                {
+                  "source": "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.",
+                  "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "technology_costs_atb.parquet": {
+              "last_updated": "2026-11-17",
+              "license": "cc-by-4.0",
+              "md5": "90a2d8cee3f9a7cc55a160868d5d394a",
+              "sources": [
+                {
+                  "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+                  "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+                },
+                {
+                  "source": "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs). The 2025 utility-scale battery costs still come from the v1 workbook because NREL has not published a v2 workbook (as of 2026-11-17); the v2 tidy data leaves battery values unchanged.",
+                  "source_url": "https://atb.nrel.gov/electricity/2025/data"
+                }
+              ],
+              "version": "2026-11-17"
+            },
+            "technology_heat_rates_nrelatb.csv": {
+              "last_updated": "2026-09-03",
+              "license": "cc-by-4.0",
+              "md5": "743945e8a7fd1bb69d682c3c5f289153",
+              "sources": [
+                {
+                  "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+                  "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+                }
+              ],
+              "version": "2026-09-03"
+            },
+            "transmission_capacity_reeds.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "afed76f028868aae1d68c095bca01f24",
+              "sources": [
+                {
+                  "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            }
+          },
+          "manifest_meta_hash": "cd2c96a61d029e45b8cc5aa06c65c9f9692429f2c856fff2dec4fc55304bcf80",
+          "published": true,
+          "release_version": "2026.11.24.v1",
+          "removal_notes": {},
+          "versions": [
+            "2026.08.14.v1",
+            "2026.11.24.v1"
+          ]
+        },
+        "sandbox": {
+          "data_version": "2026.11.24",
+          "deposition_id": "648321",
+          "doi": "10.5072/zenodo.648321",
+          "environment": "sandbox",
+          "files": {
+            "cpi_data.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "0dcf40c82a204b361f9da0fdc7070550",
+              "sources": [
+                {
+                  "source": "U.S. CPI-U (All Urban Consumers, All Items, NSA), annual averages via FRED with BLS public API fallback (superseded by dollar_year_adjustment.csv).",
+                  "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "distributed_capacity.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "d8c206063044ea93edb80e8cae100357",
+              "sources": [
+                {
+                  "source": "ReEDS distributed PV capacity by county (stscen2023_mid_case scenario), aggregated county -> BA and converted DC to AC (ILR 1.1) by build_new_pg_dg_inputs.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/dgen_model_inputs/stscen2023_mid_case/distpvcap_stscen2023_mid_case.csv"
+                },
+                {
+                  "source": "ReEDS county-to-zone mapping used to aggregate capacity to balancing areas.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/county2zone.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "distributed_profiles.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "39a54bb4fc2bf42287d66ceadb90714f",
+              "sources": [
+                {
+                  "source": "ReEDS distributed PV generation profiles (multi-year distpv-reference_ba.h5), processed by build_new_pg_dg_inputs.py.",
+                  "source_url": "https://github.com/NREL/ReEDS-2.0/raw/main/inputs/variability/multi_year/distpv-reference_ba.h5"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "dollar_year_adjustment.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "2e819d4d7f465d8d273b2da57f0a2fd1",
+              "sources": [
+                {
+                  "source": "U.S. Implicit Price Deflator for Gross Domestic Product (GDP-IPD, index 2017=100), annual, from FRED with BEA NIPA API fallback.",
+                  "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RD3A086NBEA"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "fuel_prices.parquet": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "a5393175e8eabda1134e849ceeb6f5e1",
+              "sources": [
+                {
+                  "source": "EIA Annual Energy Outlook (AEO) bulk data: 'Energy Prices : Electric Power' series by census division / scenario / fuel, mapped to ReEDS Balancing Areas by .github/skills/eia-fuel-prices.",
+                  "source_url": "https://www.eia.gov/opendata/bulk/AEO2026.zip"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "nerc_reserve_margins.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "b8ac4f0a59127c9e483d9b59aaad78b4",
+              "sources": [
+                {
+                  "source": "NERC Long-Term Reliability Assessment (LTRA) 'Reference Margin Level (%)' by assessment area, extracted by .github/skills/nerc-reserve-margins and carried forward through 2050.",
+                  "source_url": "https://www.nerc.com/globalassets/our-work/assessments/nerc_ltra_2025.pdf"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "operational_constraints_reeds.csv": {
+              "last_updated": "2026-08-14",
+              "license": "cc-by-4.0",
+              "md5": "75b7e22488de8048e56c1e1f81c359f9",
+              "sources": [
+                {
+                  "source": "ReEDS plant characterization module (PCM) defaults (pcm_defaults.json), transformed by build_operational_constraints_reeds.py into PowerGenome operational constraints.",
+                  "source_url": "https://github.com/ReEDS-Model/ReEDS/blob/main/inputs/plant_characteristics/pcm_defaults.json"
+                }
+              ],
+              "version": "2026-08-14"
+            },
+            "plant_region_map.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "0d8a6f43695c230a418827820f071dd8",
+              "sources": [
+                {
+                  "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) as the plant list, joined to ReEDS zones by transform_reeds_generators.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+                },
+                {
+                  "source": "ReEDS county-to-zone mapping (county2zone.csv) used to assign each plant to a model region.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/county2zone.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reeds_generators_transformed.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "1dfff9c035410c487687ee9da9c85395",
+              "sources": [
+                {
+                  "source": "ReEDS generator database (ReEDS_generator_database_final_EIA-NEMS.csv) cleaned and transformed by transform_reeds_generators.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/refs/heads/main/inputs/capacity_exogenous/ReEDS_generator_database_final_EIA-NEMS.csv"
+                },
+                {
+                  "source": "PUDL/EIA yearly generators parquet, used for retirement info on existing units.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__yearly_generators.parquet"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reeds_load_transformed.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "283d3eeea526cfa21bfbac3866cb96e5",
+              "sources": [
+                {
+                  "source": "ReEDS v2025.7.0 hourly load HDF5 (EER_IRAlow_load_hourly.h5, LFS SHA256 5af50c3cf48b4262a0a376698178fec55852af3d7c6c0faf735296cac62477b8), filtered to weather years 2007-2013 and model years 2020-2050 by transform_reeds_load.py. Fixed UTC-06:00 values cyclically rolled +6 hours per annual region/scenario group to UTC; timezone-aware datetime_utc alongside 1-based time_index. 8760-hour calendar retains Feb 29 and omits Dec 31 in leap years. Parquet ZSTD level 3.",
+                  "source_url": "https://github.com/NatLabRockies/ReEDS-2.0/blob/v2025.7.0/inputs/load/EER_IRAlow_load_hourly.h5"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_cost_multipliers.csv": {
+              "last_updated": "2026-08-11",
+              "license": "public-domain",
+              "md5": "6c46df3480cbecd82ac1d724f4255658",
+              "sources": [
+                {
+                  "source": "EIA capital cost AEO2025 PDF tables mapped to PowerGenome technologies/regions by extract_location_variation.py.",
+                  "source_url": "https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "reserve_margins.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "597fc25a77553b29217ea35037258d73",
+              "sources": [
+                {
+                  "source": "ReEDS planning reserve margins (prm_annual.csv) joined to NERC regions via the ReEDS hierarchy by build_reserve_margins.py.",
+                  "source_url": "https://raw.githubusercontent.com/ReEDS-Model/ReEDS/main/inputs/reserves/prm_annual.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            },
+            "technology_costs_atb.parquet": {
+              "last_updated": "2026-11-17",
+              "license": "cc-by-4.0",
+              "md5": "90a2d8cee3f9a7cc55a160868d5d394a",
+              "sources": [
+                {
+                  "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+                  "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+                },
+                {
+                  "source": "NREL ATB Excel workbooks (utility-scale battery power and energy capital costs). The 2025 utility-scale battery costs still come from the v1 workbook because NREL has not published a v2 workbook (as of 2026-11-17); the v2 tidy data leaves battery values unchanged.",
+                  "source_url": "https://atb.nrel.gov/electricity/2025/data"
+                }
+              ],
+              "version": "2026-11-17"
+            },
+            "technology_heat_rates_nrelatb.csv": {
+              "last_updated": "2026-09-03",
+              "license": "cc-by-4.0",
+              "md5": "743945e8a7fd1bb69d682c3c5f289153",
+              "sources": [
+                {
+                  "source": "NREL ATB electricity tidy data for 2023, 2024 (v4.0.0), and 2025 (v2.0.0), OEDI data lake (rebuilt by build_atb_data.py)",
+                  "source_url": "https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2Felectricity%2Fparquet%2F&limit=50"
+                }
+              ],
+              "version": "2026-09-03"
+            },
+            "transmission_capacity_reeds.csv": {
+              "last_updated": "2026-08-11",
+              "license": "cc-by-4.0",
+              "md5": "afed76f028868aae1d68c095bca01f24",
+              "sources": [
+                {
+                  "source": "ReEDS AC and non-AC transmission capacity files merged by merge_transmission_capacity.py.",
+                  "source_url": "https://raw.githubusercontent.com/NREL/ReEDS-2.0/main/inputs/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+                }
+              ],
+              "version": "2026-08-11"
+            }
+          },
+          "manifest_meta_hash": "cd2c96a61d029e45b8cc5aa06c65c9f9692429f2c856fff2dec4fc55304bcf80",
+          "published": true,
+          "release_version": "2026.11.24.v1",
+          "removal_notes": {},
+          "versions": [
+            "2026.11.24.v1"
+          ]
+        }
+      }
     },
     "existing_resource_groups": {
-      "data_version": "2026.08.31",
-      "deposition_id": "22235662",
-      "doi": "10.5281/zenodo.22235662",
-      "environment": "production",
-      "files": {
-        "existing_hydro_reeds_ba_metadata.csv": "b1a20e05842fda1981a09c4b6c6b6ef9",
-        "existing_offshorewind_reeds_ba_metadata.csv": "b0999fa2d364df9fcaf4b66faa65b5d3",
-        "existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet": "a7a027f6b129ccf7b6515d6bc122dbd3",
-        "existing_onshorewind_reeds_ba_metadata.csv": "463324ce80672d53403b88c4d4280822",
-        "existing_osw_profiles_tidy.parquet": "8fdd420cca0818afe38d978ee8fb12f7",
-        "existing_solar_reeds_ba_metadata.csv": "becd05df8595259008ad19fb2e95ce33",
-        "existing_solar_reeds_ba_profiles_20250513_tidy.parquet": "e379a8228a779290122285276a8b760b",
-        "hydro_conventional_2007_2013.parquet": "a1a3d2ce5507293f8f7d0917e7d07877",
-        "hydro_run_of_river_2007_2013.parquet": "31afc0f401c76b47ba02a994fc9f24ec",
-        "regional_hydro_True.json": "931c086cec1d314c2c58fed9ad758833",
-        "regional_offshorewind_True.json": "79dd0b7c09fa92a36218270adb21ea9a",
-        "regional_small_hydro_True.json": "6dd235fd40cba22e9b21fa9aa5c79fd4",
-        "regional_solar_photovoltaic_True.json": "ac2ec864509fb2b7211ec0dcf3f53a3b",
-        "regional_wind_True.json": "8ef3157cd915e12f3f0e75a149105d54"
-      },
-      "published": true,
-      "release_version": "2026.08.31.v1",
-      "versions": [
-        "2026.08.31.v1"
-      ]
+      "environments": {
+        "production": {
+          "data_version": "2026.11.24",
+          "deposition_id": "24514140",
+          "doi": "10.5281/zenodo.24514140",
+          "environment": "production",
+          "files": {
+            "existing_hydro_conventional_reeds_ba_metadata.csv": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "5f55d56f89a880c6507fc7d674efe2ec",
+              "sources": [
+                {
+                  "source": "Existing conventional hydro capacity by ReEDS balancing area: sum of 'Conventional Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_conventional_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "existing_hydro_run_of_river_reeds_ba_metadata.csv": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "18c78e9c0a757cdb4ba06ffa005d4407",
+              "sources": [
+                {
+                  "source": "Existing run-of-river hydro capacity by ReEDS balancing area: sum of 'Run of River Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_run_of_river_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "existing_offshorewind_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "b0999fa2d364df9fcaf4b66faa65b5d3",
+              "sources": [
+                {
+                  "source": "Existing offshore wind resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "a7a027f6b129ccf7b6515d6bc122dbd3",
+              "sources": [
+                {
+                  "source": "Hourly generation profiles for existing onshore wind by ReEDS balancing area, generated with NREL reV/SAM from WTK weather data and aggregated to balancing areas."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_onshorewind_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "463324ce80672d53403b88c4d4280822",
+              "sources": [
+                {
+                  "source": "Existing onshore wind resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_osw_profiles_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "8fdd420cca0818afe38d978ee8fb12f7",
+              "sources": [
+                {
+                  "source": "Offshore wind generation profiles by ReEDS balancing area (tidy parquet form)."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_solar_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "becd05df8595259008ad19fb2e95ce33",
+              "sources": [
+                {
+                  "source": "Existing solar resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_solar_reeds_ba_profiles_20250513_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "e379a8228a779290122285276a8b760b",
+              "sources": [
+                {
+                  "source": "Hourly generation profiles for existing solar by ReEDS balancing area, generated with NREL reV/SAM from NSRDB weather data and aggregated to balancing areas."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "hydro_conventional_2007_2013.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "3ede953d6d9bc1f215c578a31c30e487",
+              "sources": [
+                {
+                  "source": "Hourly conventional hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Conventional Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year. Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+                },
+                {
+                  "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "hydro_run_of_river_2007_2013.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "33ce4f24c5a9eba29accd5372a6c134d",
+              "sources": [
+                {
+                  "source": "Hourly run-of-river hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Run of River Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year (p32 and p108). Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+                },
+                {
+                  "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_hydro_True.json": {
+              "last_updated": "2026-11-24",
+              "license": "cc-zero",
+              "md5": "a0824d4f3cf01f37f1156adeb9e8a79d",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing conventional hydro (technology 'hydro', small=false): links existing_hydro_conventional_reeds_ba_metadata.csv to hydro_conventional_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_offshorewind_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "79dd0b7c09fa92a36218270adb21ea9a",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing offshore wind (technology 'offshorewind'): links existing_offshorewind_reeds_ba_metadata.csv to existing_osw_profiles_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "regional_small_hydro_True.json": {
+              "last_updated": "2026-11-24",
+              "license": "cc-zero",
+              "md5": "02dca3f967c00cea271b7799c52565b6",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing run-of-river hydro (technology 'hydro', small=true): links existing_hydro_run_of_river_reeds_ba_metadata.csv to hydro_run_of_river_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_solar_photovoltaic_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing utility-scale solar PV (technology 'utilitypv'): links existing_solar_reeds_ba_metadata.csv to existing_solar_reeds_ba_profiles_20250513_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "regional_wind_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "8ef3157cd915e12f3f0e75a149105d54",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing onshore wind: links existing_onshorewind_reeds_ba_metadata.csv to existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            }
+          },
+          "manifest_meta_hash": "2273c1478fc8a575f6068be628125035524d44033356895858507dbdac01b83c",
+          "published": true,
+          "release_version": "2026.11.24.v1",
+          "removal_notes": {},
+          "versions": [
+            "2026.08.31.v1",
+            "2026.11.24.v1"
+          ]
+        },
+        "sandbox": {
+          "data_version": "2026.11.24",
+          "deposition_id": "648323",
+          "doi": "10.5072/zenodo.648323",
+          "environment": "sandbox",
+          "files": {
+            "existing_hydro_conventional_reeds_ba_metadata.csv": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "5f55d56f89a880c6507fc7d674efe2ec",
+              "sources": [
+                {
+                  "source": "Existing conventional hydro capacity by ReEDS balancing area: sum of 'Conventional Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_conventional_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "existing_hydro_run_of_river_reeds_ba_metadata.csv": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "18c78e9c0a757cdb4ba06ffa005d4407",
+              "sources": [
+                {
+                  "source": "Existing run-of-river hydro capacity by ReEDS balancing area: sum of 'Run of River Hydroelectric' capacity_mw in reeds_generators_transformed.csv, mapped to regions with plant_region_map.csv (built by build_hydro_profiles.py). id matches the site_id in hydro_run_of_river_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "existing_offshorewind_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "b0999fa2d364df9fcaf4b66faa65b5d3",
+              "sources": [
+                {
+                  "source": "Existing offshore wind resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "a7a027f6b129ccf7b6515d6bc122dbd3",
+              "sources": [
+                {
+                  "source": "Hourly generation profiles for existing onshore wind by ReEDS balancing area, generated with NREL reV/SAM from WTK weather data and aggregated to balancing areas."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_onshorewind_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "463324ce80672d53403b88c4d4280822",
+              "sources": [
+                {
+                  "source": "Existing onshore wind resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_osw_profiles_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "8fdd420cca0818afe38d978ee8fb12f7",
+              "sources": [
+                {
+                  "source": "Offshore wind generation profiles by ReEDS balancing area (tidy parquet form)."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_solar_reeds_ba_metadata.csv": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "becd05df8595259008ad19fb2e95ce33",
+              "sources": [
+                {
+                  "source": "Existing solar resource metadata by ReEDS balancing area."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "existing_solar_reeds_ba_profiles_20250513_tidy.parquet": {
+              "last_updated": "2026-08-31",
+              "license": "cc-by-4.0",
+              "md5": "e379a8228a779290122285276a8b760b",
+              "sources": [
+                {
+                  "source": "Hourly generation profiles for existing solar by ReEDS balancing area, generated with NREL reV/SAM from NSRDB weather data and aggregated to balancing areas."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "hydro_conventional_2007_2013.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "3ede953d6d9bc1f215c578a31c30e487",
+              "sources": [
+                {
+                  "source": "Hourly conventional hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Conventional Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year. Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+                },
+                {
+                  "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "hydro_run_of_river_2007_2013.parquet": {
+              "last_updated": "2026-11-24",
+              "license": "cc-by-4.0",
+              "md5": "33ce4f24c5a9eba29accd5372a6c134d",
+              "sources": [
+                {
+                  "source": "Hourly run-of-river hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Run of River Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year (p32 and p108). Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+                },
+                {
+                  "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+                  "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_hydro_True.json": {
+              "last_updated": "2026-11-24",
+              "license": "cc-zero",
+              "md5": "a0824d4f3cf01f37f1156adeb9e8a79d",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing conventional hydro (technology 'hydro', small=false): links existing_hydro_conventional_reeds_ba_metadata.csv to hydro_conventional_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_offshorewind_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "79dd0b7c09fa92a36218270adb21ea9a",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing offshore wind (technology 'offshorewind'): links existing_offshorewind_reeds_ba_metadata.csv to existing_osw_profiles_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "regional_small_hydro_True.json": {
+              "last_updated": "2026-11-24",
+              "license": "cc-zero",
+              "md5": "02dca3f967c00cea271b7799c52565b6",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing run-of-river hydro (technology 'hydro', small=true): links existing_hydro_run_of_river_reeds_ba_metadata.csv to hydro_run_of_river_2007_2013.parquet."
+                }
+              ],
+              "version": "2026-11-24"
+            },
+            "regional_solar_photovoltaic_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing utility-scale solar PV (technology 'utilitypv'): links existing_solar_reeds_ba_metadata.csv to existing_solar_reeds_ba_profiles_20250513_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            },
+            "regional_wind_True.json": {
+              "last_updated": "2026-08-31",
+              "license": "cc-zero",
+              "md5": "8ef3157cd915e12f3f0e75a149105d54",
+              "sources": [
+                {
+                  "source": "PowerGenome resource group definition for existing onshore wind: links existing_onshorewind_reeds_ba_metadata.csv to existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet."
+                }
+              ],
+              "version": "2026-08-31"
+            }
+          },
+          "manifest_meta_hash": "2273c1478fc8a575f6068be628125035524d44033356895858507dbdac01b83c",
+          "published": true,
+          "release_version": "2026.11.24.v1",
+          "removal_notes": {},
+          "versions": [
+            "2026.11.24.v1"
+          ]
+        }
+      }
     },
     "profiles": {
-      "data_version": "2026.08.31",
-      "deposition_id": "22235855",
-      "doi": "10.5281/zenodo.22235855",
-      "environment": "production",
-      "files": {
-        "offshorewind_rev_profiles_20240801_tidy.parquet": "145cc41943fae1e31a4c80b0ef262d87",
-        "offshorewind_site_mapping_20240801.parquet": "bd38633e490fe647ab78ed4fa6d08e5b",
-        "onshorewind_rev_profiles_20240801_tidy.parquet": "84129006615a73d2a119ef386f179d6a",
-        "onshorewind_site_mapping_20240801.parquet": "a66a01d5226e1bead37b4419f455a3d2",
-        "solar_rev_profiles_20240801_tidy.parquet": "84bdffd609890bb6a936e1826d537fc4",
-        "solar_site_mapping_20240801.parquet": "bf83512fc11f4ee8409fd6791643f03f"
-      },
-      "published": true,
-      "release_version": "2026.08.31.v1",
-      "versions": [
-        "2026.08.31.v1"
-      ]
+      "environments": {
+        "production": {
+          "data_version": "2026.08.31",
+          "deposition_id": "22235855",
+          "doi": "10.5281/zenodo.22235855",
+          "environment": "production",
+          "files": {
+            "offshorewind_rev_profiles_20240801_tidy.parquet": "145cc41943fae1e31a4c80b0ef262d87",
+            "offshorewind_site_mapping_20240801.parquet": "bd38633e490fe647ab78ed4fa6d08e5b",
+            "onshorewind_rev_profiles_20240801_tidy.parquet": "84129006615a73d2a119ef386f179d6a",
+            "onshorewind_site_mapping_20240801.parquet": "a66a01d5226e1bead37b4419f455a3d2",
+            "solar_rev_profiles_20240801_tidy.parquet": "84bdffd609890bb6a936e1826d537fc4",
+            "solar_site_mapping_20240801.parquet": "bf83512fc11f4ee8409fd6791643f03f"
+          },
+          "published": true,
+          "release_version": "2026.08.31.v1",
+          "versions": [
+            "2026.08.31.v1"
+          ]
+        }
+      }
     }
   }
 }
