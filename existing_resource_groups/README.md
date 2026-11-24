@@ -24,11 +24,11 @@ The build fails if any site in the metadata is missing a full, non-zero 8,760-ho
 
 Because the profiles are built from the PUDL `nightly` parquet, the exact numbers depend on the snapshot fetched at build time; the 2026.11.24 profiles were built from the nightly available on 2026-11-24.
 
-All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing hydro/onshore wind/offshore wind/solar metadata (capacity, plant identifiers, ReEDS BA assignment) is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
+All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing resource capacity by ReEDS BA is carried in the `existing_<tech>_reeds_ba_metadata.csv` files.
 
 ## Files
 
-**Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing renewable plant/resource metadata by ReEDS balancing area (e.g. capacity, plant identifiers), renamed to PowerGenome conventions (`region`, `capacity_mw`).
+**Resource metadata (per technology)** — `existing_<tech>_reeds_ba_metadata.csv`: existing capacity by ReEDS balancing area, one row per site, with columns `region`, `capacity_mw` and `id` (the profile `site_id`; offshore wind also has `notes`).
 
 **Hydro metadata (per hydro type)** — `existing_hydro_conventional_reeds_ba_metadata.csv` and `existing_hydro_run_of_river_reeds_ba_metadata.csv`: operating capacity of each hydro type by ReEDS balancing area, summed from `data/reeds_generators_transformed.csv` (technologies `Conventional Hydroelectric` and `Run of River Hydroelectric`) and mapped with `data/plant_region_map.csv` by `build_hydro_profiles.py`. Each file lists exactly the regions (`id`) that have a profile in the matching hydro profile parquet. These replace the earlier shared `existing_hydro_reeds_ba_metadata.csv`, which listed every hydro region for both groups with combined capacities that did not match either type.
 
@@ -36,7 +36,7 @@ All resulting hourly profiles are aggregated to ReEDS balancing areas. Existing 
 
 **Hydro profiles** — `hydro_conventional_2007_2013.parquet` and `hydro_run_of_river_2007_2013.parquet`: hourly conventional and run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007–2013.
 
-**Regional flags** — `regional_<tech>_True.json`: per-technology flags controlling regional (balancing-area-level) aggregation of the corresponding existing resource groups.
+**Resource group definitions** — `regional_<tech>_True.json`: PowerGenome resource group files. Each names the technology, its metadata CSV and its profile parquet; `regional_hydro_True.json` (conventional) and `regional_small_hydro_True.json` (run of river, `small: true`) point at the matching per-type hydro files.
 
 ## Notes
 

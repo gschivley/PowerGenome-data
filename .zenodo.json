@@ -23,7 +23,10 @@
             "orcid": "0000-0002-7707-0221"
           }
         ],
-        "title": "PowerGenome Existing Renewable Resource Groups"
+        "title": "PowerGenome Existing Renewable Resource Groups",
+        "removal_notes": {
+          "existing_hydro_reeds_ba_metadata.csv": "Replaced by existing_hydro_conventional_reeds_ba_metadata.csv and existing_hydro_run_of_river_reeds_ba_metadata.csv. The shared file listed every hydro region for both the conventional and run-of-river groups, with combined capacities that matched neither type, so each group requested sites that had no profile of that type."
+        }
       },
       "profiles": {
         "creators": [

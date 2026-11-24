@@ -127,7 +127,11 @@
       ],
       "sources": [
         {
-          "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
+          "source": "Hourly conventional hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Conventional Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year. Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+        },
+        {
+          "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+          "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
         }
       ],
       "version": "2026-11-24"
@@ -154,7 +158,11 @@
       ],
       "sources": [
         {
-          "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
+          "source": "Hourly run-of-river hydro capacity-factor profiles by ReEDS balancing area for weather years 2007-2013, built by build_hydro_profiles.py. Monthly capacity factor = net generation / (capacity x calendar-month hours) over generators that reported generation that month (unreported months are excluded rather than counted as zero output), with plants assigned to 'Run of River Hydroelectric' by ReEDS technology (transform_reeds_generators.py). Sites reporting at least 75% of 2007-2013 months fill gaps with their calendar-month mean; sites without usable 2007-2013 data use the same plants' 2014-2025 calendar-month means in every weather year (p32 and p108). Monthly values are expanded to hourly and smoothed with a 1-week centered window. Every site in the matching metadata file has a complete, nonzero 8760-hour series for each weather year."
+        },
+        {
+          "source": "PUDL EIA-923/860 monthly generators (out_eia__monthly_generators.parquet, nightly build fetched 2026-11-24), hydro generators with prime_mover_code='HY' only.",
+          "source_url": "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop/nightly/out_eia__monthly_generators.parquet"
         }
       ],
       "version": "2026-11-24"
@@ -172,7 +180,7 @@
       "md5": "a0824d4f3cf01f37f1156adeb9e8a79d",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing hydro resource groups."
+          "source": "PowerGenome resource group definition for existing conventional hydro (technology 'hydro', small=false): links existing_hydro_conventional_reeds_ba_metadata.csv to hydro_conventional_2007_2013.parquet."
         }
       ],
       "version": "2026-11-24"
@@ -184,7 +192,7 @@
       "md5": "79dd0b7c09fa92a36218270adb21ea9a",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing offshore wind resource groups."
+          "source": "PowerGenome resource group definition for existing offshore wind (technology 'offshorewind'): links existing_offshorewind_reeds_ba_metadata.csv to existing_osw_profiles_tidy.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -202,7 +210,7 @@
       "md5": "02dca3f967c00cea271b7799c52565b6",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing small hydro resource groups."
+          "source": "PowerGenome resource group definition for existing run-of-river hydro (technology 'hydro', small=true): links existing_hydro_run_of_river_reeds_ba_metadata.csv to hydro_run_of_river_2007_2013.parquet."
         }
       ],
       "version": "2026-11-24"
@@ -214,7 +222,7 @@
       "md5": "ac2ec864509fb2b7211ec0dcf3f53a3b",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing solar photovoltaic resource groups."
+          "source": "PowerGenome resource group definition for existing utility-scale solar PV (technology 'utilitypv'): links existing_solar_reeds_ba_metadata.csv to existing_solar_reeds_ba_profiles_20250513_tidy.parquet."
         }
       ],
       "version": "2026-08-31"
@@ -226,7 +234,7 @@
       "md5": "8ef3157cd915e12f3f0e75a149105d54",
       "sources": [
         {
-          "source": "Regional aggregation flag for existing wind resource groups."
+          "source": "PowerGenome resource group definition for existing onshore wind: links existing_onshorewind_reeds_ba_metadata.csv to existing_onshore_wind_reeds_ba_profiles_20250513_tidy.parquet."
         }
       ],
       "version": "2026-08-31"

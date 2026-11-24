@@ -579,6 +579,22 @@ def licensing_paragraph(files: dict) -> str:
     )
 
 
+def previous_released_version(info: dict, released_md5: str | None) -> str | None:
+    """Version of a manifest file that was last released.
+
+    The manifest history can hold versions that were never published, so
+    prefer the history entry whose md5 matches the released file. Fall back
+    to the most recent history entry when the released md5 is unknown or not
+    in the history.
+    """
+    history = info.get("history") or []
+    if released_md5:
+        for entry in reversed(history):
+            if entry.get("md5") == released_md5:
+                return entry.get("version")
+    return history[-1].get("version") if history else None
+
+
 def build_description(
     manifest: dict,
     section: str,
@@ -591,6 +607,7 @@ def build_description(
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
     provenance: dict | None = None,
+    released_files: dict[str, dict] | None = None,
 ) -> str:
     data_version = manifest["data_version"]
     title = COLLECTIONS[section]["title"]
@@ -623,8 +640,9 @@ def build_description(
             updated_items = []
             for name in updated:
                 info = files[name]
-                history = info.get("history") or []
-                previous = history[-1].get("version") if history else None
+                previous = previous_released_version(
+                    info, (released_files or {}).get(name, {}).get("md5")
+                )
                 suffix = (
                     f" ({esc(previous)} &rarr; {esc(info.get('version') or 'Unknown')})"
                     if previous
@@ -1359,6 +1377,7 @@ def build_release_description(
     removed_details: dict[str, dict] | None = None,
     removal_notes: dict[str, str] | None = None,
     provenance: dict | None = None,
+    released_files: dict[str, dict] | None = None,
 ) -> str:
     """Full Zenodo description for a deposit.
 
@@ -1380,6 +1399,7 @@ def build_release_description(
         removed_details,
         removal_notes,
         provenance,
+        released_files,
     )
     custom_description = base_metadata.get("description")
     if custom_description:
@@ -1640,9 +1660,12 @@ def release_section(
         removal_notes=released.get("removal_notes")
         or base_metadata.get("removal_notes"),
         provenance=provenance,
+        released_files=released_files,
     )
     creators = base_metadata.get("creators") or default_creators()
     metadata = dict(base_metadata)
+    # removal_notes feed the description only; Zenodo does not accept the key.
+    metadata.pop("removal_notes", None)
     # Core keeps its long-standing title unless explicitly overridden.
     metadata.update(
         {
