@@ -134,11 +134,16 @@
           "last_updated": "2026-09-24",
           "md5": "b14d026d1b4ec6cd51eec21c009cabd7",
           "version": "2026-09-24"
+        },
+        {
+          "last_updated": "2026-11-19",
+          "md5": "36780b764b9282cca8ade50e2cf1e1a6",
+          "version": "2026-11-19"
         }
       ],
-      "last_updated": "2026-11-19",
+      "last_updated": "2026-11-24",
       "license": "cc-by-4.0",
-      "md5": "36780b764b9282cca8ade50e2cf1e1a6",
+      "md5": "9b64c8108980ed5439df143d4c0df0f1",
       "scripts": [
         "scripts/build_hydro_profiles.py",
         "scripts/transform_reeds_generators.py"
@@ -148,7 +153,7 @@
           "source": "Hourly conventional hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
         }
       ],
-      "version": "2026-11-19"
+      "version": "2026-11-24"
     },
     "hydro_run_of_river_2007_2013.parquet": {
       "history": [
@@ -161,11 +166,16 @@
           "last_updated": "2026-09-24",
           "md5": "bfb8dac7611c08666be6afa136619641",
           "version": "2026-09-24"
+        },
+        {
+          "last_updated": "2026-11-19",
+          "md5": "c882a5172e36079c15456227fb47de21",
+          "version": "2026-11-19"
         }
       ],
-      "last_updated": "2026-11-19",
+      "last_updated": "2026-11-24",
       "license": "cc-by-4.0",
-      "md5": "c882a5172e36079c15456227fb47de21",
+      "md5": "aab59e8ab59419e8371644048e198655",
       "scripts": [
         "scripts/build_hydro_profiles.py",
         "scripts/transform_reeds_generators.py"
@@ -175,7 +185,7 @@
           "source": "Hourly run-of-river hydro generation profiles by ReEDS balancing area for weather years 2007-2013, derived from PUDL monthly net generation of hydro generators (prime_mover_code='HY' only) within each balancing area, categorized by ReEDS hydro technology (see build_hydro_profiles.py and transform_reeds_generators.py), interpolated to hourly and smoothed with a 1-week window."
         }
       ],
-      "version": "2026-11-19"
+      "version": "2026-11-24"
     },
     "regional_hydro_True.json": {
       "history": [
@@ -250,6 +260,6 @@
       "version": "2026-08-31"
     }
   },
-  "generated_at_utc": "2026-11-24T19:12:36.084176+00:00",
+  "generated_at_utc": "2026-11-24T19:21:49.255147+00:00",
   "manifest_version": 1
 }

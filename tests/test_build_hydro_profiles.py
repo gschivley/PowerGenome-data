@@ -50,7 +50,9 @@ class TestHoursInMonth(unittest.TestCase):
         }
         for date_str, expected in cases.items():
             with self.subTest(date_str):
-                self.assertEqual(MODULE.hours_in_month(pd.Timestamp(date_str)), expected)
+                self.assertEqual(
+                    MODULE.hours_in_month(pd.Timestamp(date_str)), expected
+                )
 
     def test_december_cf_is_not_zeroed(self):
         pudl = pd.DataFrame(
@@ -121,6 +123,34 @@ class TestPrimeMoverFilter(unittest.TestCase):
         self.assertAlmostEqual(cf["capacity_factor"].iloc[0], expected)
         self.assertEqual(len(cf), 1)
 
+    def test_unreported_generation_is_not_zero_output(self):
+        # Plant 2 has capacity but no reported generation (NULL). Counting it
+        # as zero output would halve the capacity factor.
+        pudl = pd.DataFrame(
+            {
+                "plant_id_eia": [1, 2],
+                "report_date": pd.to_datetime(["2012-06-01", "2012-06-01"]),
+                "prime_mover_code": ["HY", "HY"],
+                "net_generation_mwh": [36000.0, None],
+                "capacity_mw": [100.0, 100.0],
+            }
+        )
+        region_map = pd.DataFrame(
+            {
+                "plant_id": [1, 2],
+                "region": ["p3", "p3"],
+                "hydro_type": ["conventional"] * 2,
+            }
+        )
+        with mock.patch.object(
+            MODULE, "merge_plant_region_hydro_data", return_value=region_map
+        ):
+            cf = MODULE.query_pudl_monthly_capacity_factors(
+                parquet_url=TestHoursInMonth._write(pudl), s3_settings=[]
+            )
+        self.assertAlmostEqual(cf["capacity_factor"].iloc[0], 36000.0 / (100 * 720))
+        self.assertEqual(cf["capacity_mw"].iloc[0], 100.0)
+
 
 class TestInterpolateMonthlyToHourly(unittest.TestCase):
     def _monthly(self, rows):
@@ -171,6 +201,117 @@ class TestInterpolateMonthlyToHourly(unittest.TestCase):
                 self._monthly(rows), "p3", "conventional"
             )
         self.assertTrue(any("2007-03" in msg for msg in ctx.output))
+
+
+class TestCompleteWeatherYearMonths(unittest.TestCase):
+    """Every site gets all 84 weather-year months, even without 2007-13 data."""
+
+    WEATHER = pd.date_range("2007-01-01", "2013-12-01", freq="MS")
+    LATER = pd.date_range("2014-01-01", "2025-12-01", freq="MS")
+
+    @staticmethod
+    def _cf(region, dates, values, capacity=100.0, hydro_type="run_of_river"):
+        return pd.DataFrame(
+            {
+                "region": region,
+                "hydro_type": hydro_type,
+                "report_date": dates,
+                "capacity_factor": values,
+                "capacity_mw": capacity,
+            }
+        )
+
+    def _sites(self, *regions):
+        return pd.DataFrame({"region": list(regions), "hydro_type": "run_of_river"})
+
+    def test_reported_gaps_filled_with_calendar_month_mean(self):
+        values = [0.1 * d.month / 12 + 0.01 * (d.year - 2007) for d in self.WEATHER]
+        cf = self._cf("p1", self.WEATHER, values)
+        cf = cf.loc[cf["report_date"] != "2010-03-01"]
+        out, methods = MODULE.complete_weather_year_months(cf, self._sites("p1"))
+        self.assertEqual(len(out), 84)
+        self.assertEqual(methods["method"].tolist(), ["reported"])
+        march = cf.loc[cf["report_date"].dt.month == 3, "capacity_factor"].mean()
+        filled = out.loc[out["report_date"] == "2010-03-01", "capacity_factor"].iloc[0]
+        self.assertAlmostEqual(filled, march)
+
+    def test_late_reporting_site_uses_later_years(self):
+        # Like p108: one zero month per weather year, real data from 2016 on.
+        jan = self.WEATHER[self.WEATHER.month == 1][3:]
+        later = self.LATER[self.LATER.year >= 2016]
+        cf = pd.concat(
+            [
+                self._cf("p108", jan, 0.0),
+                self._cf("p108", later, [0.3 + 0.02 * d.month for d in later]),
+            ]
+        )
+        out, methods = MODULE.complete_weather_year_months(cf, self._sites("p108"))
+        self.assertEqual(methods["method"].tolist(), ["later_years"])
+        self.assertEqual(len(out), 84)
+        july = out.loc[out["report_date"].dt.month == 7, "capacity_factor"]
+        self.assertTrue((july - 0.44).abs().lt(1e-9).all())
+
+    def test_site_without_data_uses_capacity_weighted_state_donor(self):
+        cf = pd.concat(
+            [
+                self._cf("p1", self.WEATHER, 0.2, capacity=100.0),
+                self._cf("p2", self.WEATHER, 0.5, capacity=300.0),
+                self._cf("p9", self.WEATHER, 0.9, capacity=100.0),
+            ]
+        )
+        state = {"p1": "WA", "p2": "WA", "p3": "WA", "p9": "TX"}
+        out, methods = MODULE.complete_weather_year_months(cf, self._sites("p3"), state)
+        self.assertEqual(methods["method"].tolist(), ["donor_state"])
+        self.assertTrue((out["capacity_factor"] - 0.425).abs().lt(1e-9).all())
+
+    def test_site_without_data_or_state_donor_uses_national(self):
+        cf = self._cf("p9", self.WEATHER, 0.9)
+        out, methods = MODULE.complete_weather_year_months(
+            cf, self._sites("p3"), {"p3": "WA", "p9": "TX"}
+        )
+        self.assertEqual(methods["method"].tolist(), ["donor_national"])
+        self.assertTrue((out["capacity_factor"] - 0.9).abs().lt(1e-9).all())
+
+
+class TestCheckProfileCoverage(unittest.TestCase):
+    @staticmethod
+    def _profile(site, years, value=0.5, hours=8760):
+        return pd.concat(
+            pd.DataFrame(
+                {
+                    "site_id": site,
+                    "weather_year": y,
+                    "time_index": range(1, hours + 1),
+                    "value": value,
+                }
+            )
+            for y in years
+        )
+
+    def test_complete_profile_passes(self):
+        MODULE.check_profile_coverage(self._profile("p1", range(2007, 2014)), ["p1"])
+
+    def test_missing_years_short_years_zero_and_missing_sites_fail(self):
+        cases = {
+            "missing years": (self._profile("p32", [2012, 2013]), "p32/2007"),
+            "short years": (
+                self._profile("p108", range(2007, 2014), hours=744),
+                "p108/2007: 744",
+            ),
+            "all zero": (
+                self._profile("p1", range(2007, 2014), value=0.0),
+                "all-zero",
+            ),
+            "missing site": (self._profile("p1", range(2007, 2014)), "p2: no profile"),
+        }
+        for name, (profile, message) in cases.items():
+            with self.subTest(name), self.assertRaisesRegex(ValueError, message):
+                MODULE.check_profile_coverage(
+                    profile,
+                    ["p1", "p2"]
+                    if name == "missing site"
+                    else profile["site_id"].unique(),
+                )
 
 
 class TestBuildHydroMetadata(unittest.TestCase):
